@@ -121,7 +121,7 @@ O sistema usa o arquivo:
 templates_zpl/etiqueta_base.zpl
 ```
 
-O template incluido esta ajustado para etiqueta 80x40 mm em Zebra 203 dpi:
+O template incluido esta ajustado para etiqueta 80x40 mm em Zebra 203 dpi e foi baseado no export do ZebraDesigner:
 
 ```text
 Largura: 640 dots
@@ -137,12 +137,13 @@ Ele aceita estes placeholders:
 {{DATA}}
 ```
 
-Para usar sua etiqueta criada no ZebraDesigner:
+Para usar uma etiqueta criada no ZebraDesigner:
 
-1. Exporte ou copie o ZPL da etiqueta.
+1. Exporte a etiqueta do ZebraDesigner em texto/ZPL.
 2. Substitua os campos variaveis pelos placeholders acima.
-3. Salve o arquivo como `templates_zpl/etiqueta_base.zpl`.
-4. Faca um teste pelo botao `Salvar ZPL` antes de imprimir.
+3. Salve o conteudo em `templates_zpl/etiqueta_base.zpl`.
+4. Para este template, a quantidade e enviada no ZPL com `^PQ{{QTD}}`.
+5. Faca um teste pelo botao `Salvar ZPL` antes de imprimir.
 
 A descricao impressa usa `{{DESCRICAO_58}}`, limitada automaticamente a 58 caracteres.
 
