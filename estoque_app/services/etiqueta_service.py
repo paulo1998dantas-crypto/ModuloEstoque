@@ -124,18 +124,11 @@ def _resolve_zpl_printer(win32print, printer_name=None):
         raise RuntimeError("Nenhuma impressora Zebra configurada.")
 
     available = _printer_names(win32print)
-    if "(EPL)" in target_printer.upper():
-        preferred = target_printer.replace(" (EPL)", "").replace("(EPL)", "").strip()
+    if explicit_printer:
         for name in available:
-            if name.lower() == preferred.lower():
+            if name.lower() == explicit_printer.lower():
                 return name
-        zpl_candidate = next((name for name in _zpl_candidates(available)), None)
-        if zpl_candidate:
-            return zpl_candidate
-        raise RuntimeError(
-            f"A impressora configurada '{target_printer}' usa driver EPL. "
-            "Configure a fila ZPL, por exemplo 'ZDesigner GC420t', sem '(EPL)'."
-        )
+        return explicit_printer
 
     if "zebra" in target_printer.lower() or "zdesigner" in target_printer.lower():
         return target_printer

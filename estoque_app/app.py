@@ -192,6 +192,10 @@ def add_bridge_cors_headers(response):
     return response
 
 
+def configured_printer_name(database):
+    return get_setting(database, "default_printer_name", Config.DEFAULT_PRINTER_NAME) or Config.DEFAULT_PRINTER_NAME
+
+
 def user_can_export(database, user):
     if not user:
         return False
@@ -340,7 +344,7 @@ def settings():
         "allow_negative_stock": get_setting_bool(database, "allow_negative_stock", False),
         "operator_can_export": get_setting_bool(database, "operator_can_export", True),
         "admin_can_print_inactive_sku": get_setting_bool(database, "admin_can_print_inactive_sku", False),
-        "default_printer_name": get_setting(database, "default_printer_name", ""),
+        "default_printer_name": configured_printer_name(database),
     }
     return render_template("settings.html", values=values)
 
@@ -605,7 +609,7 @@ def print_label():
                     database.commit()
                     flash(direct_print_unavailable_message(), "warning")
                     return send_file(path, as_attachment=True)
-                print_label_job(database, job, printer_name=get_setting(database, "default_printer_name", ""))
+                print_label_job(database, job, printer_name=configured_printer_name(database))
                 flash(f"{quantidade} etiqueta(s) enviada(s) para impressao.", "success")
             else:
                 return send_file(path, as_attachment=True)
@@ -912,7 +916,7 @@ def api_local_print_zpl():
 
     database = db()
     try:
-        printer_name = (payload.get("printer_name") or "").strip() or get_setting(database, "default_printer_name", "")
+        printer_name = (payload.get("printer_name") or "").strip() or configured_printer_name(database)
         target_printer = print_zpl(zpl, printer_name=printer_name)
         response = jsonify({"ok": True, "printer": target_printer})
         return add_bridge_cors_headers(response)
@@ -977,7 +981,7 @@ def api_print_label_job(job_id):
         database.commit()
         return jsonify({"ok": False, "status": "ERRO", "error": direct_print_unavailable_message()}), 400
     try:
-        print_label_job(database, job, printer_name=get_setting(database, "default_printer_name", ""))
+        print_label_job(database, job, printer_name=configured_printer_name(database))
         return jsonify({"ok": True, "status": job.status, "printed_at": job.printed_at.strftime("%d/%m/%Y %H:%M:%S")})
     except Exception as exc:
         return jsonify({"ok": False, "status": "ERRO", "error": str(exc)}), 500
