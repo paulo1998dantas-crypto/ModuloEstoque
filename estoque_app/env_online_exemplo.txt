@@ -1,0 +1,13 @@
+# Copie este arquivo para ".env" na mesma pasta do app.py ou do EstoqueJIMontadora.exe.
+# Preencha com a mesma DATABASE_URL usada no Render para o app local conversar com o Supabase.
+
+DATABASE_URL=postgresql://postgres.PROJECT_REF:SUA_SENHA@aws-1-us-west-2.pooler.supabase.com:5432/postgres
+ESTOQUE_SECRET_KEY=use-a-mesma-chave-do-render
+ESTOQUE_ADMIN_USER=admin
+ESTOQUE_ADMIN_PASSWORD=admin123
+
+# Opcional. Se ficar vazio, o sistema tenta usar a Zebra padrao do Windows.
+ZEBRA_PRINTER_NAME=ZDesigner GC420t
+
+# Opcional. Use apenas se o Render estiver em dominio proprio fora de .onrender.com.
+# ESTOQUE_PRINT_BRIDGE_ORIGINS=https://seu-app.onrender.com

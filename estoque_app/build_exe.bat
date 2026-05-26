@@ -27,6 +27,7 @@ if exist "dist\EstoqueJIMontadora.zip" del /q "dist\EstoqueJIMontadora.zip"
   --add-data "template_importacao_skus.xlsx;." ^
   --add-data "template_etiquetas_lote.xlsx;." ^
   --add-data "dados_exemplo.xlsx;." ^
+  --add-data "env_online_exemplo.txt;." ^
   desktop_launcher.py
 
 if errorlevel 1 (
@@ -35,6 +36,7 @@ if errorlevel 1 (
 )
 
 copy /Y README.md "dist\EstoqueJIMontadora\README.md" > nul
+copy /Y "env_online_exemplo.txt" "dist\EstoqueJIMontadora\env_online_exemplo.txt" > nul
 if not exist "dist\EstoqueJIMontadora\data" mkdir "dist\EstoqueJIMontadora\data"
 if not exist "dist\EstoqueJIMontadora\exports" mkdir "dist\EstoqueJIMontadora\exports"
 if not exist "dist\EstoqueJIMontadora\backups" mkdir "dist\EstoqueJIMontadora\backups"

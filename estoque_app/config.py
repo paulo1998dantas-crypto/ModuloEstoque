@@ -23,6 +23,24 @@ if not LABEL_TEMPLATE_PATH.exists() and BUNDLED_LABEL_TEMPLATE_PATH.exists():
     shutil.copy2(BUNDLED_LABEL_TEMPLATE_PATH, LABEL_TEMPLATE_PATH)
 
 
+def load_env_file(path):
+    if not path.exists():
+        return
+    for raw_line in path.read_text(encoding="utf-8").splitlines():
+        line = raw_line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, value = line.split("=", 1)
+        key = key.strip()
+        value = value.strip().strip('"').strip("'")
+        if key and key not in os.environ:
+            os.environ[key] = value
+
+
+for env_path in (BASE_DIR / ".env", BASE_DIR.parent / ".env"):
+    load_env_file(env_path)
+
+
 def build_database_url():
     database_url = os.environ.get("DATABASE_URL", "").strip()
     if not database_url:

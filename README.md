@@ -47,3 +47,15 @@ Arquivos importantes:
 - `runtime.txt`: versao Python usada no deploy
 
 Quando `DATABASE_URL` estiver configurado, o app usa Supabase/Postgres. Sem `DATABASE_URL`, continua usando SQLite local.
+
+## App local usando Supabase
+
+Para usar um atalho local no Windows conversando com a base online:
+
+1. Gere o release com `cd estoque_app && build_exe.bat`.
+2. Extraia `estoque_app/dist/EstoqueJIMontadora.zip`.
+3. Copie `env_online_exemplo.txt` para `.env` na mesma pasta do `EstoqueJIMontadora.exe`.
+4. Preencha `DATABASE_URL` com a string do Supabase/Render.
+5. Abra o exe pelo atalho.
+
+Nesse modo, os dados ficam no Supabase e a impressao Zebra continua local no computador conectado por USB.

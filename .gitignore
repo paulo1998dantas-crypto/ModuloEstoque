@@ -1,7 +1,9 @@
 .idea/
+.env
 __pycache__/
 *.pyc
 
+estoque_app/.env
 estoque_app/.venv/
 estoque_app/build/
 estoque_app/dist/
