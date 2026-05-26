@@ -6,7 +6,7 @@
     <title>{% block title %}Estoque J.I Montadora{% endblock %}</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='css/app.css') }}">
 </head>
-<body>
+<body data-print-mode="{{ print_mode }}" data-local-print-bridge="http://127.0.0.1:5000">
     {% if current_user %}
     <div class="app-shell">
         <aside class="sidebar" data-nav>

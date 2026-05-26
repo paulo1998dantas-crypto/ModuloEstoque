@@ -149,7 +149,18 @@ A descricao impressa usa `{{DESCRICAO_58}}`, limitada automaticamente a 58 carac
 4. Se deixar em branco, o sistema tenta usar a impressora padrao do Windows.
 
 A impressao direta usa RAW/ZPL via `pywin32` (`win32print`) e funciona somente no Windows local ou no `.exe`.
-No Render/Linux, o sistema nao acessa a Zebra instalada no computador do usuario; use a opcao `Baixar ZPL` e imprima esse arquivo em um computador Windows conectado a impressora.
+No Render/Linux, o servidor nao acessa a Zebra instalada no computador do usuario.
+
+Para imprimir usando o Render em um desktop Windows:
+
+1. Abra o app local ou o `.exe` no computador conectado a Zebra.
+2. Deixe esse app local rodando em `http://127.0.0.1:5000`.
+3. Acesse o sistema online do Render pelo mesmo desktop.
+4. Use o botao `Imprimir neste desktop`.
+
+No celular, a impressao direta fica bloqueada. Use um desktop conectado a Zebra ou baixe o ZPL.
+
+Se o Render estiver em dominio proprio, configure no app local a variavel `ESTOQUE_PRINT_BRIDGE_ORIGINS` com a URL do site online para liberar a ponte local.
 
 ## Importacao de SKUs por Excel
 

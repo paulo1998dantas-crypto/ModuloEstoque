@@ -1,7 +1,9 @@
 import logging
+import os
 import sys
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
+from urllib.parse import urlsplit
 
 from flask import (
     Flask,
@@ -32,6 +34,7 @@ from services.etiqueta_service import (
     create_label_job,
     prepare_label_job_file,
     print_label_job,
+    print_zpl,
     render_label_zpl,
     save_zpl_file,
     zpl_for_quantity,
@@ -103,6 +106,7 @@ def inject_globals():
         "fmt_qty": decimal_to_str,
         "fmt_min": optional_decimal_to_str,
         "direct_print_available": direct_print_available(),
+        "print_mode": request_print_mode(),
         "database_label": "SQLite local" if Config.SQLALCHEMY_DATABASE_URI.startswith("sqlite") else "Supabase Postgres",
         "deployment_label": "Sistema local" if Config.SQLALCHEMY_DATABASE_URI.startswith("sqlite") else "Sistema online mobile",
     }
@@ -137,11 +141,55 @@ def direct_print_available():
     return sys.platform.startswith("win")
 
 
+def is_mobile_request():
+    user_agent = request.headers.get("User-Agent", "").lower()
+    mobile_tokens = ("android", "iphone", "ipad", "ipod", "mobile", "windows phone")
+    return any(token in user_agent for token in mobile_tokens)
+
+
+def request_print_mode():
+    if is_mobile_request():
+        return "none"
+    if direct_print_available():
+        return "server"
+    return "bridge"
+
+
 def direct_print_unavailable_message():
     return (
         "Impressao direta Zebra so funciona no Windows local com a impressora instalada. "
-        "No Render, salve ou baixe o ZPL e imprima pelo computador conectado a Zebra."
+        "No Render pelo desktop, mantenha o app local aberto para usar a ponte de impressao."
     )
+
+
+def local_bridge_unavailable_message():
+    return (
+        "Ponte local nao encontrada. Abra o app local ou o .exe no computador conectado a Zebra "
+        "e tente imprimir novamente pelo desktop."
+    )
+
+
+def bridge_origin_allowed(origin):
+    if not origin:
+        return True
+    parsed = urlsplit(origin)
+    host = (parsed.hostname or "").lower()
+    if host in {"127.0.0.1", "localhost"}:
+        return True
+    if host.endswith(".onrender.com"):
+        return True
+    configured = [item.strip().lower().rstrip("/") for item in os.environ.get("ESTOQUE_PRINT_BRIDGE_ORIGINS", "").split(",") if item.strip()]
+    return origin.lower().rstrip("/") in configured
+
+
+def add_bridge_cors_headers(response):
+    origin = request.headers.get("Origin", "")
+    if bridge_origin_allowed(origin):
+        response.headers["Access-Control-Allow-Origin"] = origin or "*"
+        response.headers["Access-Control-Allow-Methods"] = "GET, POST, OPTIONS"
+        response.headers["Access-Control-Allow-Headers"] = "Content-Type, X-Requested-With"
+        response.headers["Access-Control-Max-Age"] = "600"
+    return response
 
 
 def user_can_export(database, user):
@@ -154,6 +202,15 @@ def can_print_sku(database, sku, user):
     if sku.active:
         return True
     return bool(user and user.role == "ADM" and get_setting_bool(database, "admin_can_print_inactive_sku", False))
+
+
+def can_access_label_job(job, user):
+    return bool(user and (user.role == "ADM" or job.usuario_id == user.id))
+
+
+def is_loopback_request():
+    remote_addr = request.remote_addr or ""
+    return remote_addr in {"127.0.0.1", "::1", "localhost"}
 
 
 def stock_rows(database, filters):
@@ -542,7 +599,7 @@ def print_label():
             database.commit()
             action = request.form.get("action")
             if action == "print":
-                if not direct_print_available():
+                if request_print_mode() != "server":
                     job.status = "ERRO"
                     job.erro = direct_print_unavailable_message()
                     database.commit()
@@ -557,6 +614,32 @@ def print_label():
             database.rollback()
             flash(str(exc), "danger")
     return render_template("print_label.html", sku=sku, sku_code=sku_code)
+
+
+@app.route("/api/labels/zpl", methods=["POST"])
+@login_required
+def api_label_zpl():
+    database = db()
+    user = current_user()
+    payload = request.get_json(silent=True) or request.form
+    sku = get_sku_by_code(database, payload.get("sku"))
+    if not sku:
+        return jsonify({"ok": False, "error": "SKU nao cadastrado."}), 404
+    if not can_print_sku(database, sku, user):
+        return jsonify({"ok": False, "error": "SKU inativo. Impressao bloqueada."}), 400
+    try:
+        quantidade = int(payload.get("quantidade") or 1)
+        if quantidade <= 0:
+            raise ValueError("Quantidade de etiquetas deve ser maior que zero.")
+        job = create_label_job(database, sku, quantidade, "MANUAL", user.id)
+        zpl = zpl_for_quantity(sku.sku, sku.descricao, quantidade)
+        path = save_zpl_file(zpl, prefix=f"etiqueta_{sku.sku}")
+        job.zpl_path = str(path)
+        database.commit()
+        return jsonify({"ok": True, "job_id": job.id, "zpl": zpl, "path": str(path)})
+    except Exception as exc:
+        database.rollback()
+        return jsonify({"ok": False, "error": str(exc)}), 400
 
 
 @app.route("/movimentacoes")
@@ -797,6 +880,87 @@ def export_inventory_preview_route():
     return send_file(path, as_attachment=True)
 
 
+@app.route("/api/local-print-status", methods=["GET", "OPTIONS"])
+def api_local_print_status():
+    if request.method == "OPTIONS":
+        return add_bridge_cors_headers(jsonify({"ok": True}))
+    if not bridge_origin_allowed(request.headers.get("Origin", "")):
+        return jsonify({"ok": False, "error": "Origem nao autorizada para a ponte local."}), 403
+    response = jsonify({"ok": direct_print_available() and is_loopback_request(), "windows": direct_print_available()})
+    return add_bridge_cors_headers(response)
+
+
+@app.route("/api/local-print-zpl", methods=["POST", "OPTIONS"])
+def api_local_print_zpl():
+    if request.method == "OPTIONS":
+        return add_bridge_cors_headers(jsonify({"ok": True}))
+    if not is_loopback_request():
+        response = jsonify({"ok": False, "error": "Ponte local aceita apenas chamadas do proprio computador."})
+        return add_bridge_cors_headers(response), 403
+    if not bridge_origin_allowed(request.headers.get("Origin", "")):
+        response = jsonify({"ok": False, "error": "Origem nao autorizada para a ponte local."})
+        return add_bridge_cors_headers(response), 403
+    if not direct_print_available():
+        response = jsonify({"ok": False, "error": "Esta ponte local precisa rodar no Windows conectado a Zebra."})
+        return add_bridge_cors_headers(response), 400
+
+    payload = request.get_json(silent=True) or {}
+    zpl = payload.get("zpl")
+    if not zpl:
+        response = jsonify({"ok": False, "error": "ZPL nao informado."})
+        return add_bridge_cors_headers(response), 400
+
+    database = db()
+    try:
+        printer_name = (payload.get("printer_name") or "").strip() or get_setting(database, "default_printer_name", "")
+        target_printer = print_zpl(zpl, printer_name=printer_name)
+        response = jsonify({"ok": True, "printer": target_printer})
+        return add_bridge_cors_headers(response)
+    except Exception as exc:
+        response = jsonify({"ok": False, "error": str(exc)})
+        return add_bridge_cors_headers(response), 500
+
+
+@app.route("/api/label-jobs/<int:job_id>/zpl", methods=["POST"])
+@login_required
+def api_label_job_zpl(job_id):
+    database = db()
+    user = current_user()
+    job = database.get(LabelPrintJob, job_id)
+    if not job:
+        return jsonify({"ok": False, "error": "Job nao encontrado."}), 404
+    if not can_access_label_job(job, user):
+        return jsonify({"ok": False, "error": "Acesso restrito para este job."}), 403
+    if not can_print_sku(database, job.sku, user):
+        return jsonify({"ok": False, "error": "SKU inativo. Impressao bloqueada."}), 400
+    path = prepare_label_job_file(database, job)
+    zpl = Path(path).read_text(encoding="utf-8")
+    return jsonify({"ok": True, "job_id": job.id, "zpl": zpl, "path": str(path)})
+
+
+@app.route("/api/label-jobs/<int:job_id>/local-result", methods=["POST"])
+@login_required
+def api_label_job_local_result(job_id):
+    database = db()
+    user = current_user()
+    job = database.get(LabelPrintJob, job_id)
+    if not job:
+        return jsonify({"ok": False, "error": "Job nao encontrado."}), 404
+    if not can_access_label_job(job, user):
+        return jsonify({"ok": False, "error": "Acesso restrito para este job."}), 403
+
+    payload = request.get_json(silent=True) or {}
+    if payload.get("ok"):
+        job.status = "IMPRESSO"
+        job.erro = None
+        job.printed_at = now_utc()
+    else:
+        job.status = "ERRO"
+        job.erro = payload.get("error") or local_bridge_unavailable_message()
+    database.commit()
+    return jsonify({"ok": True, "status": job.status, "printed_at": job.printed_at.strftime("%d/%m/%Y %H:%M:%S") if job.printed_at else ""})
+
+
 @app.route("/api/label-jobs/<int:job_id>/print", methods=["POST"])
 @login_required
 @roles_required("ADM")
@@ -807,7 +971,7 @@ def api_print_label_job(job_id):
         return jsonify({"ok": False, "error": "Job nao encontrado."}), 404
     if not can_print_sku(database, job.sku, current_user()):
         return jsonify({"ok": False, "error": "SKU inativo. Impressao bloqueada."}), 400
-    if not direct_print_available():
+    if request_print_mode() != "server":
         job.status = "ERRO"
         job.erro = direct_print_unavailable_message()
         database.commit()

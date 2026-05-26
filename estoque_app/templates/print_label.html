@@ -8,9 +8,13 @@
     </div>
 </section>
 
-{% if not direct_print_available %}
+{% if print_mode == "bridge" %}
 <section class="flash warning">
-    Ambiente online: o Render nao acessa a Zebra instalada no Windows. Use <strong>Baixar ZPL</strong> e imprima pelo computador conectado a impressora.
+    Ambiente online no desktop: mantenha o app local ou o .exe aberto neste computador para usar a ponte de impressao Zebra.
+</section>
+{% elif print_mode == "none" %}
+<section class="flash warning">
+    Impressao bloqueada no mobile. Use um desktop conectado a Zebra ou baixe o ZPL.
 </section>
 {% endif %}
 
@@ -35,10 +39,13 @@
         </label>
         <div class="button-row">
             <button class="btn secondary large" name="action" value="save" type="submit">Baixar ZPL</button>
-            {% if direct_print_available %}
+            {% if print_mode == "server" %}
             <button class="btn primary large" name="action" value="print" type="submit">Imprimir</button>
+            {% elif print_mode == "bridge" %}
+            <button class="btn primary large" type="button" data-local-print-label data-sku="{{ sku.sku }}">Imprimir neste desktop</button>
             {% endif %}
         </div>
+        <div class="note" data-local-print-progress></div>
         {% else %}
         <div class="empty-state">
             <strong>Aguardando SKU</strong>
