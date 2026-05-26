@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+{% block title %}Relatorios - Estoque{% endblock %}
+{% block content %}
+<section class="page-head">
+    <div>
+        <h1>Relatorios Excel</h1>
+        <p>Arquivos gerados em /exports com data, usuario e filtros.</p>
+    </div>
+</section>
+
+{% if can_export %}
+<section class="report-grid">
+    <a class="report-card" href="{{ url_for('export_report', tipo='estoque') }}">
+        <strong>Estoque atual</strong>
+        <span>Saldo, minimo, status e cadastro.</span>
+    </a>
+    <a class="report-card" href="{{ url_for('export_report', tipo='entradas') }}">
+        <strong>Entradas</strong>
+        <span>Historico de recebimentos.</span>
+    </a>
+    <a class="report-card" href="{{ url_for('export_report', tipo='saidas') }}">
+        <strong>Saidas</strong>
+        <span>Retiradas para producao.</span>
+    </a>
+    <a class="report-card" href="{{ url_for('export_report', tipo='movimentacoes') }}">
+        <strong>Movimentacoes completas</strong>
+        <span>Auditoria completa do saldo.</span>
+    </a>
+    <a class="report-card" href="{{ url_for('export_report', tipo='inventario') }}">
+        <strong>Inventario</strong>
+        <span>Contagens e divergencias.</span>
+    </a>
+</section>
+{% else %}
+<section class="panel empty-state">
+    <strong>Exportacao bloqueada para seu perfil.</strong>
+    <p>Peça ao ADM para liberar nas configuracoes.</p>
+</section>
+{% endif %}
+{% endblock %}

@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="pt-br">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>{% block title %}Estoque J.I Montadora{% endblock %}</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/app.css') }}">
+</head>
+<body>
+    {% if current_user %}
+    <div class="app-shell">
+        <aside class="sidebar" data-nav>
+            <a class="brand" href="{{ url_for('dashboard') }}">
+                <span class="brand-mark">JI</span>
+                <span>
+                    <strong>Estoque J.I</strong>
+                    <small>Montadora</small>
+                </span>
+            </a>
+
+            <nav class="nav">
+                <span class="nav-section">Operacao</span>
+                <a href="{{ url_for('dashboard') }}" class="{% if request.endpoint == 'dashboard' %}active{% endif %}">Dashboard</a>
+                <a href="{{ url_for('entrada') }}" class="{% if request.endpoint == 'entrada' %}active{% endif %}">Entrada</a>
+                <a href="{{ url_for('saida') }}" class="{% if request.endpoint == 'saida' %}active{% endif %}">Saida</a>
+                <a href="{{ url_for('print_label') }}" class="{% if request.endpoint == 'print_label' %}active{% endif %}">Etiqueta</a>
+                <a href="{{ url_for('stock') }}" class="{% if request.endpoint == 'stock' %}active{% endif %}">Estoque</a>
+                <a href="{{ url_for('movements') }}" class="{% if request.endpoint == 'movements' %}active{% endif %}">Movimentacoes</a>
+                <a href="{{ url_for('reports') }}" class="{% if request.endpoint == 'reports' %}active{% endif %}">Relatorios</a>
+
+                {% if current_user.role == 'ADM' %}
+                <span class="nav-section">Administracao</span>
+                <a href="{{ url_for('inventory_labels') }}" class="{% if request.endpoint == 'inventory_labels' %}active{% endif %}">Inventario ADM</a>
+                <a href="{{ url_for('skus') }}" class="{% if request.endpoint in ['skus', 'sku_form', 'import_skus'] %}active{% endif %}">SKUs</a>
+                <a href="{{ url_for('users') }}" class="{% if request.endpoint in ['users', 'toggle_user'] %}active{% endif %}">Usuarios</a>
+                <a href="{{ url_for('settings') }}" class="{% if request.endpoint == 'settings' %}active{% endif %}">Configuracoes</a>
+                {% endif %}
+            </nav>
+
+            <div class="sidebar-user">
+                <strong>{{ current_user.username }}</strong>
+                <span>{{ current_user.role }}</span>
+                <a href="{{ url_for('logout') }}">Sair</a>
+            </div>
+        </aside>
+
+        <section class="workspace">
+            <header class="desktop-titlebar">
+                <button class="nav-toggle" type="button" data-nav-toggle>Menu</button>
+                <div>
+                    <strong>Estoque J.I Montadora</strong>
+                    <span>Sistema local offline</span>
+                </div>
+                <div class="desktop-status">SQLite local</div>
+            </header>
+    {% endif %}
+
+            <main class="{% if not current_user %}login-shell{% else %}page{% endif %}">
+                {% with messages = get_flashed_messages(with_categories=true) %}
+                    {% if messages %}
+                    <section class="flash-stack" aria-live="polite">
+                        {% for category, message in messages %}
+                        <div class="flash {{ category }}">{{ message }}</div>
+                        {% endfor %}
+                    </section>
+                    {% endif %}
+                {% endwith %}
+                {% block content %}{% endblock %}
+            </main>
+
+    {% if current_user %}
+        </section>
+    </div>
+    {% endif %}
+
+    <script src="{{ url_for('static', filename='js/app.js') }}"></script>
+    {% block scripts %}{% endblock %}
+</body>
+</html>

@@ -1,0 +1,67 @@
+{% extends "base.html" %}
+{% block title %}Movimentacoes - Estoque{% endblock %}
+{% block content %}
+<section class="page-head">
+    <div>
+        <h1>Movimentacoes</h1>
+        <p>Historico auditavel de entradas, saidas, inventario e ajustes.</p>
+    </div>
+    {% if can_export %}
+    <a class="btn secondary" href="{{ url_for('export_report', tipo='movimentacoes') }}">Exportar completo</a>
+    {% endif %}
+</section>
+
+<form class="filter-bar" method="get">
+    <select name="tipo">
+        <option value="" {% if not tipo %}selected{% endif %}>Todos os tipos</option>
+        <option value="ENTRADA" {% if tipo == 'ENTRADA' %}selected{% endif %}>Entrada</option>
+        <option value="SAIDA" {% if tipo == 'SAIDA' %}selected{% endif %}>Saida</option>
+        {% if current_user.role == 'ADM' %}
+        <option value="INVENTARIO" {% if tipo == 'INVENTARIO' %}selected{% endif %}>Inventario</option>
+        <option value="AJUSTE" {% if tipo == 'AJUSTE' %}selected{% endif %}>Ajuste</option>
+        {% endif %}
+    </select>
+    <button class="btn" type="submit">Filtrar</button>
+</form>
+
+<section class="panel">
+    <div class="table-wrap">
+        <table>
+            <thead>
+                <tr>
+                    <th>ID</th>
+                    <th>Data</th>
+                    <th>Usuario</th>
+                    <th>SKU</th>
+                    <th>Descricao</th>
+                    <th>Tipo</th>
+                    <th>Qtd</th>
+                    <th>Anterior</th>
+                    <th>Posterior</th>
+                    <th>Documento</th>
+                    <th>Observacao</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for mv in movements %}
+                <tr>
+                    <td>{{ mv.id }}</td>
+                    <td>{{ mv.created_at|dt }}</td>
+                    <td>{{ mv.usuario.username }}</td>
+                    <td>{{ mv.sku.sku }}</td>
+                    <td>{{ mv.sku.descricao }}</td>
+                    <td><span class="badge {{ mv.tipo|lower }}">{{ mv.tipo }}</span></td>
+                    <td class="num">{{ mv.quantidade|qty }}</td>
+                    <td class="num">{{ mv.saldo_anterior|qty }}</td>
+                    <td class="num">{{ mv.saldo_posterior|qty }}</td>
+                    <td>{{ mv.documento or "" }}</td>
+                    <td>{{ mv.observacao or "" }}</td>
+                </tr>
+                {% else %}
+                <tr><td colspan="11" class="empty">Nenhuma movimentacao registrada.</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</section>
+{% endblock %}

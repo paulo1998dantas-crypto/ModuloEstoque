@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+{% block title %}Importar SKUs - Estoque{% endblock %}
+{% block content %}
+<section class="page-head">
+    <div>
+        <h1>Importar base de SKUs</h1>
+        <p>Cria novos SKUs e atualiza os existentes sem apagar ausentes.</p>
+    </div>
+    <div class="actions">
+        <a class="btn secondary" href="{{ url_for('download_template', name='skus') }}">Template</a>
+        <a class="btn secondary" href="{{ url_for('download_template', name='exemplo') }}">Dados exemplo</a>
+    </div>
+</section>
+
+<form method="post" enctype="multipart/form-data" class="panel form-grid">
+    <label>Arquivo .xlsx
+        <input type="file" name="file" accept=".xlsx" required>
+    </label>
+    <div class="note">
+        Colunas obrigatorias: SKU, DESCRICAO, UNIDADE, CATEGORIA, LOCALIZACAO, ESTOQUE_MINIMO.
+    </div>
+    <button class="btn primary" type="submit">Importar planilha</button>
+</form>
+{% endblock %}

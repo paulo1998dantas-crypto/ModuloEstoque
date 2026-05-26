@@ -1,0 +1,70 @@
+{% extends "base.html" %}
+{% block title %}Dashboard - Estoque{% endblock %}
+{% block content %}
+<section class="page-head">
+    <div>
+        <h1>Dashboard</h1>
+        <p>Operacao rapida para entrada, saida, etiquetas e consulta.</p>
+    </div>
+    <div class="user-pill">{{ current_user.username }} · {{ current_user.role }}</div>
+</section>
+
+<section class="metric-grid">
+    <article class="metric">
+        <span>SKUs ativos</span>
+        <strong>{{ total_active }}</strong>
+    </article>
+    <article class="metric danger-soft">
+        <span>Saldo baixo</span>
+        <strong>{{ low_stock }}</strong>
+    </article>
+</section>
+
+<section class="shortcut-grid">
+    <a class="shortcut" href="{{ url_for('entrada') }}">Entrada</a>
+    <a class="shortcut" href="{{ url_for('saida') }}">Saida</a>
+    <a class="shortcut" href="{{ url_for('print_label') }}">Imprimir Etiqueta</a>
+    <a class="shortcut" href="{{ url_for('stock') }}">Estoque</a>
+    <a class="shortcut" href="{{ url_for('reports') }}">Relatorios</a>
+    {% if current_user.role == 'ADM' %}
+    <a class="shortcut accent" href="{{ url_for('inventory_labels') }}">Inventario / Etiquetas em Massa</a>
+    {% endif %}
+</section>
+
+<section class="panel">
+    <div class="panel-head">
+        <h2>Ultimas movimentacoes</h2>
+        <a href="{{ url_for('movements') }}">Ver todas</a>
+    </div>
+    <div class="table-wrap">
+        <table>
+            <thead>
+                <tr>
+                    <th>Data</th>
+                    <th>Tipo</th>
+                    <th>SKU</th>
+                    <th>Descricao</th>
+                    <th>Qtd</th>
+                    <th>Saldo</th>
+                    <th>Usuario</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for mv in last_movements %}
+                <tr>
+                    <td>{{ mv.created_at|dt }}</td>
+                    <td><span class="badge {{ mv.tipo|lower }}">{{ mv.tipo }}</span></td>
+                    <td>{{ mv.sku.sku }}</td>
+                    <td>{{ mv.sku.descricao }}</td>
+                    <td>{{ mv.quantidade|qty }}</td>
+                    <td>{{ mv.saldo_posterior|qty }}</td>
+                    <td>{{ mv.usuario.username }}</td>
+                </tr>
+                {% else %}
+                <tr><td colspan="7" class="empty">Nenhuma movimentacao registrada.</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</section>
+{% endblock %}

@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+{% block title %}Imprimir Etiqueta - Estoque{% endblock %}
+{% block content %}
+<section class="page-head">
+    <div>
+        <h1>Imprimir Etiqueta Zebra</h1>
+        <p>Busca por SKU, gera ZPL e imprime uma ou varias etiquetas.</p>
+    </div>
+</section>
+
+<section class="scan-layout">
+    <form method="get" class="panel scan-panel">
+        <label class="scan-label">SKU
+            <input class="scan-input" name="sku" value="{{ sku_code }}" data-autofocus autocomplete="off" placeholder="Bipe ou digite o SKU">
+        </label>
+        <button class="btn primary large" type="submit">Buscar SKU</button>
+    </form>
+
+    <form method="post" class="panel form-grid">
+        {% if sku %}
+        <input type="hidden" name="sku" value="{{ sku.sku }}">
+        <div class="item-summary">
+            <span>{{ sku.sku }}</span>
+            <strong>{{ sku.descricao }}</strong>
+            <small>Descricao na etiqueta: {{ sku.descricao[:58] }}</small>
+        </div>
+        <label>Quantidade de etiquetas
+            <input name="quantidade" type="number" min="1" value="1" required autofocus>
+        </label>
+        <div class="button-row">
+            <button class="btn secondary large" name="action" value="save" type="submit">Salvar ZPL</button>
+            <button class="btn primary large" name="action" value="print" type="submit">Imprimir</button>
+        </div>
+        {% else %}
+        <div class="empty-state">
+            <strong>Aguardando SKU</strong>
+            <p>A impressao e bloqueada para SKU inexistente ou inativo.</p>
+        </div>
+        {% endif %}
+    </form>
+</section>
+{% endblock %}

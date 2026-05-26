@@ -1,0 +1,33 @@
+{% extends "base.html" %}
+{% block title %}Configuracoes - Estoque{% endblock %}
+{% block content %}
+<section class="page-head">
+    <div>
+        <h1>Configuracoes</h1>
+        <p>Parametros locais do modulo.</p>
+    </div>
+    <form method="post" action="{{ url_for('backup') }}">
+        <button class="btn secondary" type="submit">Gerar backup</button>
+    </form>
+</section>
+
+<form method="post" class="panel form-grid">
+    <label class="check-row">
+        <input type="checkbox" name="allow_negative_stock" {% if values.allow_negative_stock %}checked{% endif %}>
+        Permitir saldo negativo em saidas
+    </label>
+    <label class="check-row">
+        <input type="checkbox" name="operator_can_export" {% if values.operator_can_export %}checked{% endif %}>
+        Permitir exportacao Excel para OPERADOR
+    </label>
+    <label class="check-row">
+        <input type="checkbox" name="admin_can_print_inactive_sku" {% if values.admin_can_print_inactive_sku %}checked{% endif %}>
+        ADM pode imprimir etiqueta de SKU inativo
+    </label>
+    <label>
+        Nome da impressora Zebra no Windows
+        <input name="default_printer_name" value="{{ values.default_printer_name }}">
+    </label>
+    <button class="btn primary" type="submit">Salvar configuracoes</button>
+</form>
+{% endblock %}

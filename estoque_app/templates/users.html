@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+{% block title %}Usuarios - Estoque{% endblock %}
+{% block content %}
+<section class="page-head">
+    <div>
+        <h1>Usuarios</h1>
+        <p>Perfis ADM e OPERADOR.</p>
+    </div>
+</section>
+
+<section class="split">
+    <form method="post" class="panel form-grid">
+        <h2>Novo usuario</h2>
+        <label>Usuario <input name="username" required></label>
+        <label>Senha <input name="password" type="password" required></label>
+        <label>Perfil
+            <select name="role">
+                <option value="OPERADOR">OPERADOR</option>
+                <option value="ADM">ADM</option>
+            </select>
+        </label>
+        <button class="btn primary" type="submit">Criar usuario</button>
+    </form>
+
+    <section class="panel">
+        <h2>Usuarios cadastrados</h2>
+        <div class="table-wrap">
+            <table>
+                <thead><tr><th>Usuario</th><th>Perfil</th><th>Status</th><th></th></tr></thead>
+                <tbody>
+                    {% for user in users %}
+                    <tr>
+                        <td>{{ user.username }}</td>
+                        <td>{{ user.role }}</td>
+                        <td>{{ "Ativo" if user.active else "Inativo" }}</td>
+                        <td>
+                            {% if user.id != current_user.id %}
+                            <form method="post" action="{{ url_for('toggle_user', user_id=user.id) }}">
+                                <button class="btn small" type="submit">{{ "Inativar" if user.active else "Ativar" }}</button>
+                            </form>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </section>
+</section>
+{% endblock %}

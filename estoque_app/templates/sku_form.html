@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+{% block title %}SKU - Estoque{% endblock %}
+{% block content %}
+<section class="page-head">
+    <div>
+        <h1>{{ "Editar SKU" if sku else "Novo SKU" }}</h1>
+        <p>A descricao usada na etiqueta sera limitada a 58 caracteres.</p>
+    </div>
+</section>
+
+<form method="post" class="panel form-grid two">
+    <label>SKU
+        <input name="sku" value="{{ sku.sku if sku else '' }}" maxlength="80" required autofocus>
+    </label>
+    <label>Descricao
+        <input name="descricao" value="{{ sku.descricao if sku else '' }}" maxlength="255" required>
+    </label>
+    <label>Unidade
+        <input name="unidade" value="{{ sku.unidade if sku else '' }}">
+    </label>
+    <label>Categoria
+        <input name="categoria" value="{{ sku.categoria if sku else '' }}">
+    </label>
+    <label>Localizacao
+        <input name="localizacao" value="{{ sku.localizacao if sku else '' }}">
+    </label>
+    <label>Estoque minimo
+        <input name="estoque_minimo" value="{{ sku.estoque_minimo|qty if sku else '0' }}" inputmode="decimal">
+    </label>
+    <label class="check-row">
+        <input type="checkbox" name="active" {% if not sku or sku.active %}checked{% endif %}>
+        SKU ativo
+    </label>
+    <div class="form-actions">
+        <a class="btn secondary" href="{{ url_for('skus') }}">Voltar</a>
+        <button class="btn primary" type="submit">Salvar SKU</button>
+    </div>
+</form>
+{% endblock %}
