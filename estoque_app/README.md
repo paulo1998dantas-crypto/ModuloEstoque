@@ -96,14 +96,8 @@ Acesse:
 http://127.0.0.1:5000
 ```
 
-Primeiro acesso:
-
-```text
-Usuario: admin
-Senha: admin123
-```
-
-Troque/crie os usuarios reais assim que entrar.
+O usuario administrador e criado automaticamente no primeiro deploy.
+Troque a senha inicial assim que entrar.
 
 ## Estrutura de pastas
 

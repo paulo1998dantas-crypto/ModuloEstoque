@@ -96,7 +96,7 @@ def inject_globals():
         "current_user": current_user(),
         "fmt_qty": decimal_to_str,
         "database_label": "SQLite local" if Config.SQLALCHEMY_DATABASE_URI.startswith("sqlite") else "Supabase Postgres",
-        "deployment_label": "Sistema local offline" if Config.SQLALCHEMY_DATABASE_URI.startswith("sqlite") else "Sistema online mobile",
+        "deployment_label": "Sistema local" if Config.SQLALCHEMY_DATABASE_URI.startswith("sqlite") else "Sistema online mobile",
     }
 
 

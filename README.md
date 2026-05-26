@@ -1,6 +1,6 @@
 # ModuloEstoque
 
-Sistema local/offline de controle de estoque para almoxarifado industrial da J.I Montadora.
+Sistema de controle de estoque para almoxarifado industrial da J.I Montadora.
 
 O projeto principal fica em [`estoque_app`](./estoque_app).
 

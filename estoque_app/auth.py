@@ -15,6 +15,8 @@ DEFAULT_SETTINGS = {
     "admin_can_print_inactive_sku": "false",
 }
 
+ADMIN_BOOTSTRAP_FLAG = "admin_default_password_seeded"
+
 
 def hash_password(password):
     return generate_password_hash(password)
@@ -60,7 +62,8 @@ def roles_required(*roles):
 def ensure_initial_data():
     db = SessionLocal()
     try:
-        if db.query(User).count() == 0:
+        admin = db.query(User).filter_by(username=Config.DEFAULT_ADMIN_USERNAME).one_or_none()
+        if admin is None:
             admin = User(
                 username=Config.DEFAULT_ADMIN_USERNAME,
                 password_hash=hash_password(Config.DEFAULT_ADMIN_PASSWORD),
@@ -68,6 +71,14 @@ def ensure_initial_data():
                 active=True,
             )
             db.add(admin)
+        else:
+            admin.role = "ADM"
+            admin.active = True
+
+        bootstrap_flag = db.query(AppSetting).filter_by(key=ADMIN_BOOTSTRAP_FLAG).one_or_none()
+        if bootstrap_flag is None:
+            admin.password_hash = hash_password(Config.DEFAULT_ADMIN_PASSWORD)
+            db.add(AppSetting(key=ADMIN_BOOTSTRAP_FLAG, value="true"))
 
         for key, value in DEFAULT_SETTINGS.items():
             existing = db.query(AppSetting).filter_by(key=key).one_or_none()
