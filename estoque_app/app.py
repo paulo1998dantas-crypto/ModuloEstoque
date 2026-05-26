@@ -95,6 +95,8 @@ def inject_globals():
     return {
         "current_user": current_user(),
         "fmt_qty": decimal_to_str,
+        "database_label": "SQLite local" if Config.SQLALCHEMY_DATABASE_URI.startswith("sqlite") else "Supabase Postgres",
+        "deployment_label": "Sistema local offline" if Config.SQLALCHEMY_DATABASE_URI.startswith("sqlite") else "Sistema online mobile",
     }
 
 
@@ -159,6 +161,11 @@ def index():
     if session.get("user_id"):
         return redirect(url_for("dashboard"))
     return redirect(url_for("login"))
+
+
+@app.route("/healthz")
+def healthz():
+    return jsonify({"ok": True})
 
 
 @app.route("/login", methods=["GET", "POST"])
@@ -425,6 +432,55 @@ def saida():
         if not sku:
             flash("SKU nao cadastrado ou inativo. Saida bloqueada.", "danger")
     return render_template("movement_form.html", mode="saida", sku=sku, sku_code=sku_code)
+
+
+@app.route("/inventario-mobile", methods=["GET", "POST"])
+@login_required
+def inventory_mobile():
+    database = db()
+    user = current_user()
+    active_session = get_active_inventory_session(database)
+
+    if request.method == "POST":
+        try:
+            if not active_session:
+                raise ValueError("Nao ha sessao de inventario aberta. Solicite abertura ao ADM.")
+            sku = get_sku_by_code(database, request.form.get("sku"), active_only=True)
+            if not sku:
+                raise ValueError("SKU nao cadastrado ou inativo.")
+            count = save_inventory_count(
+                database,
+                active_session.id,
+                sku,
+                request.form.get("quantidade_contada"),
+                user.id,
+            )
+            flash(
+                f"Contagem salva: {sku.sku}. Diferenca {decimal_to_str(count.diferenca)}.",
+                "success" if count.diferenca == 0 else "warning",
+            )
+            return redirect(url_for("inventory_mobile"))
+        except Exception as exc:
+            database.rollback()
+            flash(str(exc), "danger")
+
+    last_counts = []
+    stats = inventory_stats(database, active_session)
+    if active_session:
+        last_counts = (
+            database.query(InventoryCount)
+            .filter_by(session_id=active_session.id, counted_by=user.id)
+            .order_by(InventoryCount.counted_at.desc())
+            .limit(12)
+            .all()
+        )
+
+    return render_template(
+        "inventory_mobile.html",
+        active_session=active_session,
+        stats=stats,
+        last_counts=last_counts,
+    )
 
 
 @app.route("/imprimir-etiqueta", methods=["GET", "POST"])

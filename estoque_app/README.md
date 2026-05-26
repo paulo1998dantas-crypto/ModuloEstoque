@@ -8,6 +8,33 @@ Sistema local em Python/Flask com SQLite para cadastro de SKUs, etiquetas Zebra 
 - Python 3.11 ou superior
 - Impressora Zebra instalada no Windows quando for imprimir de verdade
 
+## Uso online com Render + Supabase
+
+O sistema tambem roda online para inventario via celular. Quando a variavel `DATABASE_URL` existe, o banco usado passa a ser Supabase/Postgres. Quando ela nao existe, o app continua usando SQLite local.
+
+Variaveis usadas no Render:
+
+```text
+DATABASE_URL
+ESTOQUE_SECRET_KEY
+ESTOQUE_ADMIN_USER
+ESTOQUE_ADMIN_PASSWORD
+```
+
+Comando de build:
+
+```text
+pip install -r estoque_app/requirements.txt
+```
+
+Comando de start:
+
+```text
+cd estoque_app && gunicorn app:app --bind 0.0.0.0:$PORT --workers 2 --threads 4 --timeout 120
+```
+
+Depois do deploy, use `/inventario-mobile` no celular para contar itens. O ADM abre e finaliza a sessao em `/inventario-etiquetas`.
+
 ## Instalacao
 
 Abra o PowerShell dentro da pasta `estoque_app`:

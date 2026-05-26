@@ -6,11 +6,20 @@ from sqlalchemy.orm import declarative_base, scoped_session, sessionmaker
 from config import Config
 
 
-engine = create_engine(
-    Config.SQLALCHEMY_DATABASE_URI,
-    connect_args={"check_same_thread": False},
-    future=True,
-)
+engine_kwargs = {
+    "future": True,
+    "pool_pre_ping": True,
+}
+
+if Config.SQLALCHEMY_DATABASE_URI.startswith("sqlite"):
+    engine_kwargs["connect_args"] = {"check_same_thread": False}
+else:
+    engine_kwargs["pool_size"] = 5
+    engine_kwargs["max_overflow"] = 5
+    engine_kwargs["pool_recycle"] = 1800
+    engine_kwargs["connect_args"] = {"prepare_threshold": None}
+
+engine = create_engine(Config.SQLALCHEMY_DATABASE_URI, **engine_kwargs)
 SessionLocal = scoped_session(
     sessionmaker(bind=engine, autoflush=False, autocommit=False, future=True)
 )

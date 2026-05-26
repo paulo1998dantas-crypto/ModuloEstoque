@@ -1,0 +1,72 @@
+{% extends "base.html" %}
+{% block title %}Inventario Mobile - Estoque{% endblock %}
+{% block content %}
+<section class="mobile-inventory">
+    <section class="mobile-hero">
+        <div>
+            <span>Inventario online</span>
+            <h1>Contagem via celular</h1>
+            {% if active_session %}
+            <p>Sessao {{ active_session.id }} aberta em {{ active_session.opened_at|dt }}</p>
+            {% else %}
+            <p>Nenhuma sessao aberta. Solicite ao ADM.</p>
+            {% endif %}
+        </div>
+        <strong>{{ stats.counted }}/{{ stats.total_skus }}</strong>
+    </section>
+
+    <section class="mobile-stats">
+        <article>
+            <span>Pendentes</span>
+            <strong>{{ stats.pending }}</strong>
+        </article>
+        <article>
+            <span>Divergencias</span>
+            <strong>{{ stats.divergences }}</strong>
+        </article>
+        <article>
+            <span>Positivas</span>
+            <strong>{{ stats.positive_diff }}</strong>
+        </article>
+        <article>
+            <span>Negativas</span>
+            <strong>{{ stats.negative_diff }}</strong>
+        </article>
+    </section>
+
+    <form method="post" class="panel mobile-count-form">
+        <label>SKU
+            <input class="scan-input" name="sku" data-autofocus autocomplete="off" placeholder="Bipe ou digite o SKU" {% if not active_session %}disabled{% endif %}>
+        </label>
+        <label>Quantidade contada
+            <input name="quantidade_contada" inputmode="decimal" placeholder="0" required {% if not active_session %}disabled{% endif %}>
+        </label>
+        <button class="btn primary large" type="submit" {% if not active_session %}disabled{% endif %}>Salvar contagem</button>
+    </form>
+
+    <section class="panel">
+        <div class="panel-head">
+            <h2>Minhas ultimas contagens</h2>
+        </div>
+        <div class="mobile-count-list">
+            {% for count in last_counts %}
+            <article class="mobile-count-item">
+                <div>
+                    <strong>{{ count.sku.sku }}</strong>
+                    <span>{{ count.sku.descricao }}</span>
+                </div>
+                <div>
+                    <strong>{{ count.quantidade_contada|qty }}</strong>
+                    <span>Dif. {{ count.diferenca|qty }}</span>
+                </div>
+            </article>
+            {% else %}
+            <div class="empty-state">
+                <strong>Nenhuma contagem sua nesta sessao.</strong>
+                <p>Leia um SKU para comecar.</p>
+            </div>
+            {% endfor %}
+        </div>
+    </section>
+</section>
+{% endblock %}

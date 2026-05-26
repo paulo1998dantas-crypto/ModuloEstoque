@@ -749,6 +749,110 @@ textarea:focus {
     max-width: 260px;
 }
 
+.mobile-inventory {
+    max-width: 760px;
+    margin: 0 auto;
+}
+
+.mobile-hero {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    align-items: center;
+    padding: 16px;
+    margin-bottom: 10px;
+    border: 1px solid #9fc9d6;
+    border-radius: 8px;
+    background: #eef8fb;
+}
+
+.mobile-hero span,
+.mobile-hero p,
+.mobile-count-item span {
+    color: var(--muted);
+}
+
+.mobile-hero h1 {
+    margin: 3px 0;
+    font-size: 24px;
+}
+
+.mobile-hero p {
+    margin: 0;
+}
+
+.mobile-hero > strong {
+    min-width: 92px;
+    padding: 10px;
+    border-radius: 6px;
+    background: #ffffff;
+    border: 1px solid #b8d9e3;
+    text-align: center;
+    font-size: 22px;
+}
+
+.mobile-stats {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 8px;
+    margin-bottom: 10px;
+}
+
+.mobile-stats article {
+    padding: 10px;
+    background: #ffffff;
+    border: 1px solid var(--line);
+    border-radius: 6px;
+}
+
+.mobile-stats span,
+.mobile-stats strong {
+    display: block;
+}
+
+.mobile-stats span {
+    color: var(--muted);
+    font-size: 12px;
+    font-weight: 800;
+}
+
+.mobile-stats strong {
+    margin-top: 3px;
+    font-size: 22px;
+}
+
+.mobile-count-form {
+    position: sticky;
+    top: 52px;
+    z-index: 4;
+}
+
+.mobile-count-list {
+    display: grid;
+    gap: 8px;
+}
+
+.mobile-count-item {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 10px;
+    padding: 10px;
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    background: #fbfcfd;
+}
+
+.mobile-count-item strong,
+.mobile-count-item span {
+    display: block;
+}
+
+.mobile-count-item span {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
 @media (max-width: 980px) {
     .app-shell {
         grid-template-columns: 1fr;
@@ -823,5 +927,22 @@ textarea:focus {
 
     .scan-input {
         font-size: 19px;
+    }
+
+    .mobile-hero {
+        align-items: stretch;
+        flex-direction: column;
+    }
+
+    .mobile-hero > strong {
+        width: 100%;
+    }
+
+    .mobile-stats {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .mobile-count-form {
+        top: 44px;
     }
 }

@@ -1,4 +1,4 @@
-{% extends "base.html" %}
+﻿{% extends "base.html" %}
 {% block title %}Dashboard - Estoque{% endblock %}
 {% block content %}
 <section class="page-head">
@@ -6,7 +6,7 @@
         <h1>Dashboard</h1>
         <p>Operacao rapida para entrada, saida, etiquetas e consulta.</p>
     </div>
-    <div class="user-pill">{{ current_user.username }} · {{ current_user.role }}</div>
+    <div class="user-pill">{{ current_user.username }} - {{ current_user.role }}</div>
 </section>
 
 <section class="metric-grid">
@@ -23,6 +23,7 @@
 <section class="shortcut-grid">
     <a class="shortcut" href="{{ url_for('entrada') }}">Entrada</a>
     <a class="shortcut" href="{{ url_for('saida') }}">Saida</a>
+    <a class="shortcut accent" href="{{ url_for('inventory_mobile') }}">Inventario Mobile</a>
     <a class="shortcut" href="{{ url_for('print_label') }}">Imprimir Etiqueta</a>
     <a class="shortcut" href="{{ url_for('stock') }}">Estoque</a>
     <a class="shortcut" href="{{ url_for('reports') }}">Relatorios</a>
@@ -68,3 +69,4 @@
     </div>
 </section>
 {% endblock %}
+

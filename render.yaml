@@ -1,0 +1,19 @@
+services:
+  - type: web
+    name: moduloestoque
+    runtime: python
+    plan: free
+    buildCommand: pip install -r estoque_app/requirements.txt
+    startCommand: cd estoque_app && gunicorn app:app --bind 0.0.0.0:$PORT --workers 2 --threads 4 --timeout 120
+    healthCheckPath: /healthz
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.12.8
+      - key: ESTOQUE_SECRET_KEY
+        generateValue: true
+      - key: ESTOQUE_ADMIN_USER
+        value: admin
+      - key: ESTOQUE_ADMIN_PASSWORD
+        sync: false
+      - key: DATABASE_URL
+        sync: false
