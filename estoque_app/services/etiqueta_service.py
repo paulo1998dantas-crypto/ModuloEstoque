@@ -1,9 +1,13 @@
 from datetime import datetime
+import logging
 from pathlib import Path
 import sys
 
 from config import Config, EXPORTS_DIR
 from models import LabelPrintJob, now_utc
+
+
+logger = logging.getLogger(__name__)
 
 
 def _safe_zpl_text(value):
@@ -167,6 +171,7 @@ def print_zpl(zpl, printer_name=None):
     if not _printer_is_ready(win32print, target_printer):
         raise RuntimeError(f"A fila da impressora '{target_printer}' esta em erro/offline no Windows. Limpe a fila ou reconecte a Zebra.")
 
+    logger.info("Enviando ZPL para a fila '%s'.", target_printer)
     handle = win32print.OpenPrinter(target_printer)
     try:
         job = win32print.StartDocPrinter(handle, 1, ("Etiqueta ZPL", None, "RAW"))
@@ -181,6 +186,7 @@ def print_zpl(zpl, printer_name=None):
             win32print.EndDocPrinter(handle)
     finally:
         win32print.ClosePrinter(handle)
+    logger.info("ZPL enviado com sucesso para a fila '%s'.", target_printer)
     return target_printer
 
 

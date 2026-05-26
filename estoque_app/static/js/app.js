@@ -191,9 +191,12 @@ function initSingleLocalPrint() {
                     sku: button.dataset.sku,
                     quantidade: qty ? qty.value : 1
                 });
-                await localPrintZpl(data.zpl);
+                const printed = await localPrintZpl(data.zpl);
                 await postJsonData(`/api/label-jobs/${data.job_id}/local-result`, {ok: true});
-                if (progress) progress.textContent = "Etiqueta enviada para a Zebra neste desktop.";
+                if (progress) {
+                    const printer = printed?.printer ? ` Fila: ${printed.printer}.` : "";
+                    progress.textContent = `Etiqueta enviada para a Zebra neste desktop.${printer}`;
+                }
             } catch (error) {
                 if (progress) progress.textContent = error.message;
             } finally {
