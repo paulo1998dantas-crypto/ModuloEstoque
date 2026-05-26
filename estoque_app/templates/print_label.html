@@ -8,6 +8,12 @@
     </div>
 </section>
 
+{% if not direct_print_available %}
+<section class="flash warning">
+    Ambiente online: o Render nao acessa a Zebra instalada no Windows. Use <strong>Baixar ZPL</strong> e imprima pelo computador conectado a impressora.
+</section>
+{% endif %}
+
 <section class="scan-layout">
     <form method="get" class="panel scan-panel">
         <label class="scan-label">SKU
@@ -28,8 +34,10 @@
             <input name="quantidade" type="number" min="1" value="1" required autofocus>
         </label>
         <div class="button-row">
-            <button class="btn secondary large" name="action" value="save" type="submit">Salvar ZPL</button>
+            <button class="btn secondary large" name="action" value="save" type="submit">Baixar ZPL</button>
+            {% if direct_print_available %}
             <button class="btn primary large" name="action" value="print" type="submit">Imprimir</button>
+            {% endif %}
         </div>
         {% else %}
         <div class="empty-state">

@@ -148,7 +148,8 @@ A descricao impressa usa `{{DESCRICAO_58}}`, limitada automaticamente a 58 carac
 3. No sistema, acesse `Config` e preencha `Nome da impressora Zebra no Windows`.
 4. Se deixar em branco, o sistema tenta usar a impressora padrao do Windows.
 
-A impressao usa RAW/ZPL via `pywin32` (`win32print`).
+A impressao direta usa RAW/ZPL via `pywin32` (`win32print`) e funciona somente no Windows local ou no `.exe`.
+No Render/Linux, o sistema nao acessa a Zebra instalada no computador do usuario; use a opcao `Baixar ZPL` e imprima esse arquivo em um computador Windows conectado a impressora.
 
 ## Importacao de SKUs por Excel
 
@@ -159,10 +160,16 @@ Colunas obrigatorias:
 ```text
 SKU
 DESCRICAO
+```
+
+Colunas opcionais aceitas:
+
+```text
+SALDO_ATUAL ou ESTOQUE
+ESTOQUE_MINIMO
 UNIDADE
 CATEGORIA
 LOCALIZACAO
-ESTOQUE_MINIMO
 ```
 
 Regras:

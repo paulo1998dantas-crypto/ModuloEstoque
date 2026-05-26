@@ -1,4 +1,5 @@
 import logging
+import sys
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
 
@@ -101,6 +102,7 @@ def inject_globals():
         "current_user": current_user(),
         "fmt_qty": decimal_to_str,
         "fmt_min": optional_decimal_to_str,
+        "direct_print_available": direct_print_available(),
         "database_label": "SQLite local" if Config.SQLALCHEMY_DATABASE_URI.startswith("sqlite") else "Supabase Postgres",
         "deployment_label": "Sistema local" if Config.SQLALCHEMY_DATABASE_URI.startswith("sqlite") else "Sistema online mobile",
     }
@@ -129,6 +131,17 @@ def handle_exception(exc):
 
 def db():
     return SessionLocal()
+
+
+def direct_print_available():
+    return sys.platform.startswith("win")
+
+
+def direct_print_unavailable_message():
+    return (
+        "Impressao direta Zebra so funciona no Windows local com a impressora instalada. "
+        "No Render, salve ou baixe o ZPL e imprima pelo computador conectado a Zebra."
+    )
 
 
 def user_can_export(database, user):
@@ -529,10 +542,16 @@ def print_label():
             database.commit()
             action = request.form.get("action")
             if action == "print":
+                if not direct_print_available():
+                    job.status = "ERRO"
+                    job.erro = direct_print_unavailable_message()
+                    database.commit()
+                    flash(direct_print_unavailable_message(), "warning")
+                    return send_file(path, as_attachment=True)
                 print_label_job(database, job, printer_name=get_setting(database, "default_printer_name", ""))
                 flash(f"{quantidade} etiqueta(s) enviada(s) para impressao.", "success")
             else:
-                flash(f"ZPL salvo para conferencia: {path}", "success")
+                return send_file(path, as_attachment=True)
             return redirect(url_for("print_label"))
         except Exception as exc:
             database.rollback()
@@ -705,7 +724,7 @@ def inventory_labels():
                     chunks.append(Path(path).read_text(encoding="utf-8"))
                 combined = "\n".join(chunks)
                 saved = save_zpl_file(combined, prefix="fila_etiquetas")
-                flash(f"Arquivo ZPL consolidado salvo: {saved}", "success")
+                return send_file(saved, as_attachment=True)
 
             elif action == "count_sku":
                 if not active_session:
@@ -788,6 +807,11 @@ def api_print_label_job(job_id):
         return jsonify({"ok": False, "error": "Job nao encontrado."}), 404
     if not can_print_sku(database, job.sku, current_user()):
         return jsonify({"ok": False, "error": "SKU inativo. Impressao bloqueada."}), 400
+    if not direct_print_available():
+        job.status = "ERRO"
+        job.erro = direct_print_unavailable_message()
+        database.commit()
+        return jsonify({"ok": False, "status": "ERRO", "error": direct_print_unavailable_message()}), 400
     try:
         print_label_job(database, job, printer_name=get_setting(database, "default_printer_name", ""))
         return jsonify({"ok": True, "status": job.status, "printed_at": job.printed_at.strftime("%d/%m/%Y %H:%M:%S")})
@@ -804,7 +828,20 @@ def api_save_label_job(job_id):
     if not job:
         return jsonify({"ok": False, "error": "Job nao encontrado."}), 404
     path = prepare_label_job_file(database, job)
-    return jsonify({"ok": True, "path": str(path)})
+    return jsonify({"ok": True, "path": str(path), "download_url": url_for("download_label_job_zpl", job_id=job.id)})
+
+
+@app.route("/api/label-jobs/<int:job_id>/download-zpl")
+@login_required
+@roles_required("ADM")
+def download_label_job_zpl(job_id):
+    database = db()
+    job = database.get(LabelPrintJob, job_id)
+    if not job:
+        flash("Job nao encontrado.", "danger")
+        return redirect(url_for("inventory_labels"))
+    path = prepare_label_job_file(database, job)
+    return send_file(path, as_attachment=True)
 
 
 @app.route("/api/label-jobs/<int:job_id>/mark-printed", methods=["POST"])

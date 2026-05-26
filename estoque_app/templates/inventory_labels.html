@@ -14,6 +14,12 @@
     </div>
 </section>
 
+{% if not direct_print_available %}
+<section class="flash warning">
+    Ambiente online: a impressao direta na Zebra so funciona no Windows local. Gere a fila, baixe os ZPLs e imprima no computador conectado a Zebra.
+</section>
+{% endif %}
+
 <section class="metric-grid inventory">
     <article class="metric"><span>Sessao</span><strong>{{ active_session.id if active_session else "Sem sessao" }}</strong></article>
     <article class="metric"><span>SKUs previstos</span><strong>{{ stats.total_skus }}</strong></article>
@@ -101,7 +107,7 @@
         </label>
         <button class="btn secondary" name="action" value="generate_active" type="submit">Todos os SKUs ativos</button>
         <button class="btn secondary" name="action" value="generate_positive" type="submit">Somente saldo maior que zero</button>
-        <button class="btn secondary" name="action" value="save_all_zpl" type="submit">Salvar todos os ZPLs</button>
+        <button class="btn secondary" name="action" value="save_all_zpl" type="submit">Baixar todos os ZPLs</button>
         <button class="btn danger" name="action" value="cancel_pending" type="submit">Cancelar pendentes</button>
     </form>
 </section>
@@ -131,7 +137,9 @@
     <div class="panel-head">
         <h2>Fila de impressao</h2>
         <div class="actions">
+            {% if direct_print_available %}
             <button class="btn primary" type="button" data-print-all>Imprimir tudo de uma vez</button>
+            {% endif %}
             <span class="muted" data-print-progress></span>
         </div>
     </div>
@@ -165,8 +173,10 @@
                     <td class="error-cell" data-job-error>{{ job.erro or "" }}</td>
                     <td>
                         <div class="button-row compact">
+                            {% if direct_print_available %}
                             <button class="btn small" type="button" data-print-job="{{ job.id }}">Imprimir</button>
-                            <button class="btn small" type="button" data-save-job="{{ job.id }}">Salvar ZPL</button>
+                            {% endif %}
+                            <button class="btn small" type="button" data-save-job="{{ job.id }}">Baixar ZPL</button>
                             <button class="btn small" type="button" data-mark-job="{{ job.id }}">Marcar impresso</button>
                             <button class="btn small danger" type="button" data-cancel-job="{{ job.id }}">Cancelar</button>
                         </div>

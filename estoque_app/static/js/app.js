@@ -57,6 +57,7 @@ function initPrintQueue() {
             try {
                 const data = await postJson(`/api/label-jobs/${id}/save-zpl`);
                 if (progress) progress.textContent = `ZPL salvo: ${data.path}`;
+                if (data.download_url) window.location.href = data.download_url;
             } catch (error) {
                 if (progress) progress.textContent = error.message;
             }

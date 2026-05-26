@@ -1,5 +1,6 @@
 from datetime import datetime
 from pathlib import Path
+import sys
 
 from config import Config, EXPORTS_DIR
 from models import LabelPrintJob, now_utc
@@ -133,6 +134,12 @@ def _resolve_zpl_printer(win32print, printer_name=None):
 
 
 def print_zpl(zpl, printer_name=None):
+    if not sys.platform.startswith("win"):
+        raise RuntimeError(
+            "Impressao direta Zebra via RAW/ZPL esta disponivel apenas no Windows. "
+            "No Render, salve o ZPL e imprima em um computador conectado a Zebra."
+        )
+
     try:
         import win32print
     except ImportError as exc:
