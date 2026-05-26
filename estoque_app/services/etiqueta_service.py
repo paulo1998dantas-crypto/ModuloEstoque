@@ -10,6 +10,17 @@ def _safe_zpl_text(value):
     return str(value or "").replace("^", " ").replace("~", " ").replace("\r", " ").replace("\n", " ").strip()
 
 
+def _sanitize_zpl_for_raw(zpl):
+    text = str(zpl or "").lstrip("\ufeff")
+    if text.startswith("\x10CT"):
+        text = "^" + text[1:]
+    text = "".join(char for char in text if char in "\r\n\t" or ord(char) >= 32)
+    text = text.replace("\r\n", "\n").replace("\r", "\n").replace("\n", "\r\n")
+    if not text.endswith("\r\n"):
+        text += "\r\n"
+    return text
+
+
 def descricao_58(descricao):
     return _safe_zpl_text(descricao)[:58]
 
@@ -51,7 +62,7 @@ def render_label_zpl(sku, descricao, quantidade=1):
     }
     for placeholder, value in replacements.items():
         zpl = zpl.replace(placeholder, value)
-    return zpl.lstrip("\ufeff")
+    return _sanitize_zpl_for_raw(zpl)
 
 
 def zpl_for_quantity(sku, descricao, quantidade):
@@ -90,10 +101,13 @@ def _zebra_candidates(printer_names):
     return [name for name in printer_names if "zebra" in name.lower() or "zdesigner" in name.lower()]
 
 
+def _zpl_candidates(printer_names):
+    return [name for name in _zebra_candidates(printer_names) if "(EPL)" not in name.upper()]
+
+
 def _first_ready_zebra(win32print, printer_names):
-    candidates = _zebra_candidates(printer_names)
-    ordered = [name for name in candidates if "(EPL)" not in name.upper()]
-    ordered.extend(name for name in candidates if name not in ordered)
+    ordered = _zpl_candidates(printer_names)
+    ordered.extend(name for name in _zebra_candidates(printer_names) if name not in ordered)
     for name in ordered:
         try:
             if _printer_is_ready(win32print, name):
@@ -113,8 +127,17 @@ def _resolve_zpl_printer(win32print, printer_name=None):
     if "(EPL)" in target_printer.upper():
         preferred = target_printer.replace(" (EPL)", "").replace("(EPL)", "").strip()
         for name in available:
-            if name.lower() == preferred.lower() and _printer_is_ready(win32print, name):
+            if name.lower() == preferred.lower():
                 return name
+        zpl_candidate = next((name for name in _zpl_candidates(available)), None)
+        if zpl_candidate:
+            return zpl_candidate
+        raise RuntimeError(
+            f"A impressora configurada '{target_printer}' usa driver EPL. "
+            "Configure a fila ZPL, por exemplo 'ZDesigner GC420t', sem '(EPL)'."
+        )
+
+    if "zebra" in target_printer.lower() or "zdesigner" in target_printer.lower():
         return target_printer
 
     try:
@@ -125,10 +148,10 @@ def _resolve_zpl_printer(win32print, printer_name=None):
     except Exception:
         pass
 
-    if not explicit_printer and "zebra" not in target_printer.lower() and "zdesigner" not in target_printer.lower():
-        ready_zebra = _first_ready_zebra(win32print, available)
-        if ready_zebra:
-            return ready_zebra
+    if not explicit_printer and ("zebra" not in target_printer.lower() and "zdesigner" not in target_printer.lower()):
+        zpl_candidate = _first_ready_zebra(win32print, available) or next((name for name in _zpl_candidates(available)), None)
+        if zpl_candidate:
+            return zpl_candidate
 
     return target_printer
 
@@ -156,8 +179,7 @@ def print_zpl(zpl, printer_name=None):
         job = win32print.StartDocPrinter(handle, 1, ("Etiqueta ZPL", None, "RAW"))
         try:
             win32print.StartPagePrinter(handle)
-            zpl = zpl.replace("\r\n", "\n").replace("\r", "\n").replace("\n", "\r\n")
-            payload = zpl.encode("cp1252", errors="replace")
+            payload = _sanitize_zpl_for_raw(zpl).encode("cp1252", errors="replace")
             written = win32print.WritePrinter(handle, payload)
             if written is not None and written != len(payload):
                 raise RuntimeError(f"Falha no envio RAW para a Zebra: {written} de {len(payload)} bytes enviados.")
