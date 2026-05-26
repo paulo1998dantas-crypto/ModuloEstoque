@@ -56,6 +56,7 @@ Para usar um atalho local no Windows conversando com a base online:
 2. Extraia `estoque_app/dist/EstoqueJIMontadora.zip`.
 3. Copie `env_online_exemplo.txt` para `.env` na mesma pasta do `EstoqueJIMontadora.exe`.
 4. Preencha `DATABASE_URL` com a string do Supabase/Render.
-5. Abra o exe pelo atalho.
+5. Preencha `ZEBRA_PRINTER_NAME` com o nome exato da fila Zebra do Windows. Neste computador, use `ZDesigner GC420t (EPL)`.
+6. Abra o exe pelo atalho.
 
 Nesse modo, os dados ficam no Supabase e a impressao Zebra continua local no computador conectado por USB.

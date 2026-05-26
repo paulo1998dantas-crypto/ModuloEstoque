@@ -1,6 +1,7 @@
 from datetime import datetime
 import logging
 from pathlib import Path
+import re
 import sys
 
 from config import Config, EXPORTS_DIR
@@ -23,6 +24,10 @@ def _sanitize_zpl_for_raw(zpl):
     if not text.endswith("\r\n"):
         text += "\r\n"
     return text
+
+
+def _safe_epl_text(value):
+    return _safe_zpl_text(value).replace('"', "'").replace("\\", "/")
 
 
 def descricao_58(descricao):
@@ -72,6 +77,82 @@ def render_label_zpl(sku, descricao, quantidade=1):
 def zpl_for_quantity(sku, descricao, quantidade):
     quantidade = max(int(quantidade or 1), 1)
     return render_label_zpl(sku, descricao, quantidade=quantidade)
+
+
+def _extract_zpl_label_data(zpl):
+    text = _sanitize_zpl_for_raw(zpl)
+
+    barcode_match = re.search(r"\^BC.*?\^FD(?:>;)?([^^\r\n]+)\^FS", text, flags=re.S)
+    sku = barcode_match.group(1).strip() if barcode_match else ""
+    if not sku:
+        sku_candidates = re.findall(r"\^FD([0-9A-Za-z_.-]+)\^FS", text)
+        sku = sku_candidates[-1] if sku_candidates else ""
+
+    desc_match = re.search(r"\^FO28,\d+.*?\^FD([^^\r\n]*)\^FS", text, flags=re.S)
+    descricao = desc_match.group(1).strip() if desc_match else ""
+
+    date_match = re.search(r"DATA EMISSAO:\s*([0-9/.-]+)", text)
+    data_text = date_match.group(1).strip() if date_match else datetime.now().strftime("%d/%m/%Y")
+
+    qty_match = re.search(r"\^PQ(\d+)", text)
+    quantidade = max(int(qty_match.group(1)) if qty_match else 1, 1)
+
+    return {
+        "sku": _safe_epl_text(sku),
+        "descricao": _safe_epl_text(descricao),
+        "data": _safe_epl_text(data_text),
+        "quantidade": quantidade,
+    }
+
+
+def _center_x(text, area_left, area_width, char_width, max_left=None):
+    width = min(len(text) * char_width, area_width)
+    left = area_left + max((area_width - width) // 2, 0)
+    if max_left is not None:
+        left = min(left, max_left)
+    return max(area_left, left)
+
+
+def render_label_epl_from_zpl(zpl):
+    data = _extract_zpl_label_data(zpl)
+    sku = data["sku"]
+    descricao = data["descricao"]
+    quantidade = data["quantidade"]
+
+    if len(descricao) <= 24:
+        desc_font = "5,1,1"
+        desc_y = 28
+        desc_char_width = 32
+    elif len(descricao) <= 42:
+        desc_font = "4,2,2"
+        desc_y = 28
+        desc_char_width = 28
+    else:
+        desc_font = "3,2,2"
+        desc_y = 26
+        desc_char_width = 24
+
+    desc_x = _center_x(descricao, 28, 584, desc_char_width)
+    sku_x = _center_x(sku, 37, 390, 32)
+
+    lines = [
+        "N",
+        "q640",
+        "Q320,24",
+        "S2",
+        "D10",
+        "ZT",
+        "LO28,10,584,2",
+        f'A{desc_x},{desc_y},0,{desc_font},N,"{descricao}"',
+        "LO28,101,475,7",
+        'A37,130,0,4,1,1,N,"SKU"',
+        f'A{sku_x},166,0,5,1,2,N,"{sku}"',
+        f'A37,268,0,3,1,1,N,"DATA EMISSAO: {data["data"]}"',
+        f'B455,112,0,1,2,4,150,N,"{sku}"',
+        f"P{quantidade}",
+        "",
+    ]
+    return "\r\n".join(lines)
 
 
 def save_zpl_file(zpl, prefix="etiqueta"):
@@ -153,6 +234,10 @@ def _resolve_zpl_printer(win32print, printer_name=None):
     return target_printer
 
 
+def _printer_prefers_epl(printer_name):
+    return "(EPL)" in str(printer_name or "").upper()
+
+
 def print_zpl(zpl, printer_name=None):
     if not sys.platform.startswith("win"):
         raise RuntimeError(
@@ -171,13 +256,19 @@ def print_zpl(zpl, printer_name=None):
     if not _printer_is_ready(win32print, target_printer):
         raise RuntimeError(f"A fila da impressora '{target_printer}' esta em erro/offline no Windows. Limpe a fila ou reconecte a Zebra.")
 
-    logger.info("Enviando ZPL para a fila '%s'.", target_printer)
+    payload_text = _sanitize_zpl_for_raw(zpl)
+    command_language = "ZPL"
+    if _printer_prefers_epl(target_printer):
+        payload_text = render_label_epl_from_zpl(payload_text)
+        command_language = "EPL"
+
+    logger.info("Enviando %s para a fila '%s'.", command_language, target_printer)
     handle = win32print.OpenPrinter(target_printer)
     try:
-        job = win32print.StartDocPrinter(handle, 1, ("Etiqueta ZPL", None, "RAW"))
+        job = win32print.StartDocPrinter(handle, 1, (f"Etiqueta {command_language}", None, "RAW"))
         try:
             win32print.StartPagePrinter(handle)
-            payload = _sanitize_zpl_for_raw(zpl).encode("cp1252", errors="replace")
+            payload = payload_text.encode("cp1252", errors="replace")
             written = win32print.WritePrinter(handle, payload)
             if written is not None and written != len(payload):
                 raise RuntimeError(f"Falha no envio RAW para a Zebra: {written} de {len(payload)} bytes enviados.")
@@ -186,7 +277,7 @@ def print_zpl(zpl, printer_name=None):
             win32print.EndDocPrinter(handle)
     finally:
         win32print.ClosePrinter(handle)
-    logger.info("ZPL enviado com sucesso para a fila '%s'.", target_printer)
+    logger.info("%s enviado com sucesso para a fila '%s'.", command_language, target_printer)
     return target_printer
 
 

@@ -44,10 +44,12 @@ Fluxo recomendado:
 1. Gere ou extraia o pacote `dist/EstoqueJIMontadora.zip`.
 2. Na pasta `EstoqueJIMontadora`, copie `env_online_exemplo.txt` para um novo arquivo chamado `.env`.
 3. No `.env`, preencha `DATABASE_URL` com a mesma string usada no Render.
-4. Preencha `ZEBRA_PRINTER_NAME=ZDesigner GC420t` ou deixe vazio para usar a impressora padrao do Windows.
+4. Preencha `ZEBRA_PRINTER_NAME=ZDesigner GC420t (EPL)` neste computador, pois essa e a fila conectada a Zebra fisica pela USB correta. Em outro computador, use exatamente o nome da fila Zebra exibido no Windows.
 5. Abra `EstoqueJIMontadora.exe`.
 
 Quando o `.env` tiver `DATABASE_URL`, o exe nao usa o SQLite local para os dados principais; ele conversa direto com o Supabase. As pastas locais continuam sendo usadas para logs, exports, ZPLs gerados e template da etiqueta.
+
+Se a fila escolhida tiver `(EPL)` no nome, o sistema converte a etiqueta para EPL antes de enviar para a impressora. Em filas ZPL, o envio continua em ZPL.
 
 Para rodar pelo PyCharm ou por `app.py`, coloque o mesmo `.env` dentro da pasta `estoque_app`.
 
