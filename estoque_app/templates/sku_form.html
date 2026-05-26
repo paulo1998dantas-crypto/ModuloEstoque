@@ -25,7 +25,7 @@
         <input name="localizacao" value="{{ sku.localizacao if sku else '' }}">
     </label>
     <label>Estoque minimo
-        <input name="estoque_minimo" value="{{ sku.estoque_minimo|qty if sku else '0' }}" inputmode="decimal">
+        <input name="estoque_minimo" value="{{ fmt_min(sku.estoque_minimo) if sku else '' }}" inputmode="decimal" placeholder="Opcional">
     </label>
     <label class="check-row">
         <input type="checkbox" name="active" {% if not sku or sku.active %}checked{% endif %}>

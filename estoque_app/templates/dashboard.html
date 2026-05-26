@@ -23,7 +23,7 @@
 <section class="shortcut-grid">
     <a class="shortcut" href="{{ url_for('entrada') }}">Entrada</a>
     <a class="shortcut" href="{{ url_for('saida') }}">Saida</a>
-    <a class="shortcut accent" href="{{ url_for('inventory_mobile') }}">Inventario Mobile</a>
+    <a class="shortcut accent" href="{{ url_for('inventory_mobile') }}">Inventario</a>
     <a class="shortcut" href="{{ url_for('print_label') }}">Imprimir Etiqueta</a>
     <a class="shortcut" href="{{ url_for('stock') }}">Estoque</a>
     <a class="shortcut" href="{{ url_for('reports') }}">Relatorios</a>
@@ -55,11 +55,11 @@
                 <tr>
                     <td>{{ mv.created_at|dt }}</td>
                     <td><span class="badge {{ mv.tipo|lower }}">{{ mv.tipo }}</span></td>
-                    <td>{{ mv.sku.sku }}</td>
-                    <td>{{ mv.sku.descricao }}</td>
+                    <td>{{ mv.sku_codigo }}</td>
+                    <td>{{ mv.descricao }}</td>
                     <td>{{ mv.quantidade|qty }}</td>
                     <td>{{ mv.saldo_posterior|qty }}</td>
-                    <td>{{ mv.usuario.username }}</td>
+                    <td>{{ mv.usuario_nome }}</td>
                 </tr>
                 {% else %}
                 <tr><td colspan="7" class="empty">Nenhuma movimentacao registrada.</td></tr>

@@ -1,68 +1,71 @@
 {% extends "base.html" %}
-{% block title %}Inventario Mobile - Estoque{% endblock %}
+{% block title %}Inventario - Estoque{% endblock %}
 {% block content %}
-<section class="mobile-inventory">
+<section class="mobile-inventory inventory-adjust">
     <section class="mobile-hero">
         <div>
-            <span>Inventario online</span>
-            <h1>Contagem via celular</h1>
-            {% if active_session %}
-            <p>Sessao {{ active_session.id }} aberta em {{ active_session.opened_at|dt }}</p>
-            {% else %}
-            <p>Nenhuma sessao aberta. Solicite ao ADM.</p>
-            {% endif %}
+            <span>Ajuste de saldo</span>
+            <h1>Inventario</h1>
+            <p>Confira o SKU, informe o saldo fisico e registre o ajuste.</p>
         </div>
-        <strong>{{ stats.counted }}/{{ stats.total_skus }}</strong>
+        <strong>INV</strong>
     </section>
 
-    <section class="mobile-stats">
-        <article>
-            <span>Pendentes</span>
-            <strong>{{ stats.pending }}</strong>
-        </article>
-        <article>
-            <span>Divergencias</span>
-            <strong>{{ stats.divergences }}</strong>
-        </article>
-        <article>
-            <span>Positivas</span>
-            <strong>{{ stats.positive_diff }}</strong>
-        </article>
-        <article>
-            <span>Negativas</span>
-            <strong>{{ stats.negative_diff }}</strong>
-        </article>
-    </section>
-
-    <form method="post" class="panel mobile-count-form">
+    <form method="get" class="panel mobile-count-form">
         <label>SKU
-            <input class="scan-input" name="sku" data-autofocus autocomplete="off" placeholder="Bipe ou digite o SKU" {% if not active_session %}disabled{% endif %}>
+            <input class="scan-input" name="sku" value="{{ sku_code }}" data-autofocus autocomplete="off" placeholder="Bipe ou digite o SKU">
         </label>
-        <label>Quantidade contada
-            <input name="quantidade_contada" inputmode="decimal" placeholder="0" required {% if not active_session %}disabled{% endif %}>
+        <button class="btn primary large" type="submit">Buscar SKU</button>
+    </form>
+
+    <form method="post" class="panel form-grid inventory-count-card">
+        {% if sku %}
+        {% set saldo_atual = sku.balance.saldo_atual if sku.balance else 0 %}
+        <div class="item-summary">
+            <span>{{ sku.sku }}</span>
+            <strong>{{ sku.descricao }}</strong>
+            <small>Saldo atual: <b data-current-stock>{{ saldo_atual|qty }}</b> {{ sku.unidade or "" }}</small>
+            <small>Minimo: {{ fmt_min(sku.estoque_minimo) or "sem minimo definido" }}</small>
+        </div>
+        <input type="hidden" name="sku" value="{{ sku.sku }}">
+        <label>Saldo contado
+            <input name="quantidade_contada" inputmode="decimal" placeholder="0" required data-counted-stock>
         </label>
-        <button class="btn primary large" type="submit" {% if not active_session %}disabled{% endif %}>Salvar contagem</button>
+        <div class="diff-preview">
+            <span>Diferenca prevista</span>
+            <strong data-inventory-diff>0</strong>
+        </div>
+        <label>Observacao
+            <textarea name="observacao" rows="3" placeholder="Opcional"></textarea>
+        </label>
+        <button class="btn primary large" type="submit">Confirmar inventario</button>
+        {% else %}
+        <div class="empty-state">
+            <strong>Aguardando SKU</strong>
+            <p>Leia ou digite um SKU ativo para ajustar o saldo contado.</p>
+        </div>
+        {% endif %}
     </form>
 
     <section class="panel">
         <div class="panel-head">
-            <h2>Minhas ultimas contagens</h2>
+            <h2>Ultimos inventarios</h2>
         </div>
         <div class="mobile-count-list">
-            {% for count in last_counts %}
+            {% for mv in last_counts %}
             <article class="mobile-count-item">
                 <div>
-                    <strong>{{ count.sku.sku }}</strong>
-                    <span>{{ count.sku.descricao }}</span>
+                    <strong>{{ mv.sku.sku }}</strong>
+                    <span>{{ mv.sku.descricao }}</span>
                 </div>
                 <div>
-                    <strong>{{ count.quantidade_contada|qty }}</strong>
-                    <span>Dif. {{ count.diferenca|qty }}</span>
+                    <strong>{{ mv.saldo_posterior|qty }}</strong>
+                    <span>Dif. {{ mv.quantidade|qty }}</span>
                 </div>
             </article>
             {% else %}
             <div class="empty-state">
-                <strong>Nenhuma contagem sua nesta sessao.</strong>
+                <strong>Nenhum inventario registrado.</strong>
                 <p>Leia um SKU para comecar.</p>
             </div>
             {% endfor %}

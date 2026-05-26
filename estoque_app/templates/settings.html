@@ -30,4 +30,14 @@
     </label>
     <button class="btn primary" type="submit">Salvar configuracoes</button>
 </form>
+
+<section class="panel danger-zone">
+    <div>
+        <h2>Reset operacional</h2>
+        <p class="muted">Limpa movimentacoes, contagens de inventario, sessoes e fila de etiquetas. Mantem usuarios, SKUs, saldos, configuracoes e o cache dos ultimos lancamentos.</p>
+    </div>
+    <form method="post" action="{{ url_for('reset_data') }}" class="confirmable" data-confirm="Confirmar reset dos dados operacionais? Exporte os relatorios antes de continuar.">
+        <button class="btn danger large" type="submit">Resetar dados/logs</button>
+    </form>
+</section>
 {% endblock %}

@@ -42,7 +42,7 @@ class SKU(Base):
     unidade = Column(String(20), nullable=True)
     categoria = Column(String(120), nullable=True)
     localizacao = Column(String(120), nullable=True)
-    estoque_minimo = Column(Numeric(14, 3), nullable=False, default=0)
+    estoque_minimo = Column(Numeric(14, 3), nullable=True)
     active = Column(Boolean, nullable=False, default=True)
     created_at = Column(DateTime, nullable=False, default=now_utc)
     updated_at = Column(DateTime, nullable=False, default=now_utc, onupdate=now_utc)
@@ -78,6 +78,26 @@ class Movement(Base):
 
     sku = relationship("SKU", back_populates="movements")
     usuario = relationship("User", back_populates="movements")
+
+
+class DashboardMovementCache(Base):
+    __tablename__ = "dashboard_movement_cache"
+
+    id = Column(Integer, primary_key=True)
+    movement_id = Column(Integer, nullable=True, index=True)
+    created_at = Column(DateTime, nullable=False, index=True)
+    usuario_id = Column(Integer, nullable=True)
+    usuario_nome = Column(String(80), nullable=True)
+    sku_id = Column(Integer, nullable=True)
+    sku_codigo = Column(String(80), nullable=False)
+    descricao = Column(String(255), nullable=False)
+    tipo = Column(String(20), nullable=False, index=True)
+    quantidade = Column(Numeric(14, 3), nullable=False)
+    saldo_anterior = Column(Numeric(14, 3), nullable=False)
+    saldo_posterior = Column(Numeric(14, 3), nullable=False)
+    documento = Column(String(120), nullable=True)
+    observacao = Column(Text, nullable=True)
+    cached_at = Column(DateTime, nullable=False, default=now_utc)
 
 
 class InventorySession(Base):

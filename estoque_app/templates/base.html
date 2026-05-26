@@ -23,7 +23,7 @@
                 <a href="{{ url_for('dashboard') }}" class="{% if request.endpoint == 'dashboard' %}active{% endif %}">Dashboard</a>
                 <a href="{{ url_for('entrada') }}" class="{% if request.endpoint == 'entrada' %}active{% endif %}">Entrada</a>
                 <a href="{{ url_for('saida') }}" class="{% if request.endpoint == 'saida' %}active{% endif %}">Saida</a>
-                <a href="{{ url_for('inventory_mobile') }}" class="{% if request.endpoint == 'inventory_mobile' %}active{% endif %}">Inventario Mobile</a>
+                <a href="{{ url_for('inventory_mobile') }}" class="{% if request.endpoint == 'inventory_mobile' %}active{% endif %}">Inventario</a>
                 <a href="{{ url_for('print_label') }}" class="{% if request.endpoint == 'print_label' %}active{% endif %}">Etiqueta</a>
                 <a href="{{ url_for('stock') }}" class="{% if request.endpoint == 'stock' %}active{% endif %}">Estoque</a>
                 <a href="{{ url_for('movements') }}" class="{% if request.endpoint == 'movements' %}active{% endif %}">Movimentacoes</a>

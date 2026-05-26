@@ -4,8 +4,10 @@ from sqlalchemy import func
 
 from models import (
     AppSetting,
+    DashboardMovementCache,
     InventoryCount,
     InventorySession,
+    LabelPrintJob,
     Movement,
     SKU,
     StockBalance,
@@ -25,10 +27,22 @@ def to_decimal(value, default="0"):
         raise ValueError("Quantidade invalida.") from exc
 
 
+def to_optional_decimal(value):
+    if value is None:
+        return None
+    if isinstance(value, str) and value.strip() == "":
+        return None
+    return to_decimal(value)
+
+
 def decimal_to_str(value):
     value = to_decimal(value)
     text = f"{value:.3f}"
     return text.rstrip("0").rstrip(".") if "." in text else text
+
+
+def optional_decimal_to_str(value):
+    return "" if value is None else decimal_to_str(value)
 
 
 def get_setting(db, key, default=""):
@@ -94,12 +108,65 @@ def create_or_update_sku(db, data, user=None):
     sku.unidade = str(data.get("unidade") or "").strip() or None
     sku.categoria = str(data.get("categoria") or "").strip() or None
     sku.localizacao = str(data.get("localizacao") or "").strip() or None
-    sku.estoque_minimo = to_decimal(data.get("estoque_minimo", "0"))
+    if "estoque_minimo" in data:
+        sku.estoque_minimo = to_optional_decimal(data.get("estoque_minimo"))
     sku.active = bool(data.get("active", True))
     db.flush()
-    ensure_balance(db, sku)
+    balance = ensure_balance(db, sku)
+    if "saldo_atual" in data:
+        balance.saldo_atual = to_decimal(data.get("saldo_atual"))
     db.commit()
     return sku, created
+
+
+def cache_dashboard_movement(db, movement):
+    cache = DashboardMovementCache(
+        movement_id=movement.id,
+        created_at=movement.created_at,
+        usuario_id=movement.usuario_id,
+        usuario_nome=movement.usuario.username if movement.usuario else "",
+        sku_id=movement.sku_id,
+        sku_codigo=movement.sku.sku,
+        descricao=movement.sku.descricao,
+        tipo=movement.tipo,
+        quantidade=movement.quantidade,
+        saldo_anterior=movement.saldo_anterior,
+        saldo_posterior=movement.saldo_posterior,
+        documento=movement.documento,
+        observacao=movement.observacao,
+    )
+    db.add(cache)
+    db.flush()
+
+    old_rows = (
+        db.query(DashboardMovementCache)
+        .order_by(DashboardMovementCache.created_at.desc(), DashboardMovementCache.id.desc())
+        .offset(10)
+        .all()
+    )
+    for row in old_rows:
+        db.delete(row)
+
+
+def dashboard_movement_cache(db):
+    rows = (
+        db.query(DashboardMovementCache)
+        .order_by(DashboardMovementCache.created_at.desc(), DashboardMovementCache.id.desc())
+        .limit(10)
+        .all()
+    )
+    if rows:
+        return rows
+
+    for movement in db.query(Movement).order_by(Movement.created_at.desc()).limit(10).all():
+        cache_dashboard_movement(db, movement)
+    db.commit()
+    return (
+        db.query(DashboardMovementCache)
+        .order_by(DashboardMovementCache.created_at.desc(), DashboardMovementCache.id.desc())
+        .limit(10)
+        .all()
+    )
 
 
 def register_movement(db, sku, tipo, quantidade, usuario_id, documento="", observacao="", allow_negative=False):
@@ -140,6 +207,8 @@ def register_movement(db, sku, tipo, quantidade, usuario_id, documento="", obser
         observacao=observacao or None,
     )
     db.add(movement)
+    db.flush()
+    cache_dashboard_movement(db, movement)
     db.commit()
     return movement
 
@@ -148,9 +217,9 @@ def adjust_balance_to_count(db, sku, counted_qty, usuario_id, documento="", obse
     balance = ensure_balance(db, sku)
     saldo_atual = to_decimal(balance.saldo_atual)
     counted_qty = to_decimal(counted_qty)
+    if counted_qty < 0:
+        raise ValueError("Saldo contado nao pode ser negativo.")
     diff = counted_qty - saldo_atual
-    if diff == 0:
-        return None
     return register_movement(
         db,
         sku,
@@ -282,3 +351,13 @@ def close_inventory_and_adjust(db, session, user_id):
     session.closed_at = now_utc()
     db.commit()
     return adjusted
+
+
+def reset_operational_data(db):
+    deleted = {}
+    deleted["label_print_jobs"] = db.query(LabelPrintJob).delete(synchronize_session=False)
+    deleted["inventory_counts"] = db.query(InventoryCount).delete(synchronize_session=False)
+    deleted["inventory_sessions"] = db.query(InventorySession).delete(synchronize_session=False)
+    deleted["movements"] = db.query(Movement).delete(synchronize_session=False)
+    db.commit()
+    return deleted

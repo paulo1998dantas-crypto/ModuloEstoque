@@ -43,7 +43,7 @@
             <tbody>
                 {% for sku in rows %}
                 {% set saldo = sku.balance.saldo_atual if sku.balance else 0 %}
-                {% set status = 'ZERADO' if fmt_qty(saldo) == '0' else ('BAIXO' if saldo <= sku.estoque_minimo else 'OK') %}
+                {% set status = 'ZERADO' if fmt_qty(saldo) == '0' else ('BAIXO' if sku.estoque_minimo is not none and saldo <= sku.estoque_minimo else 'OK') %}
                 <tr>
                     <td>{{ sku.sku }}</td>
                     <td>{{ sku.descricao }}</td>
@@ -51,7 +51,7 @@
                     <td>{{ sku.categoria or "" }}</td>
                     <td>{{ sku.localizacao or "" }}</td>
                     <td class="num">{{ saldo|qty }}</td>
-                    <td class="num">{{ sku.estoque_minimo|qty }}</td>
+                    <td class="num">{{ fmt_min(sku.estoque_minimo) or "" }}</td>
                     <td><span class="badge {{ status|lower }}">{{ status }}</span></td>
                 </tr>
                 {% else %}

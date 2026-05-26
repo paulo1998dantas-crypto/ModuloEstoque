@@ -33,7 +33,7 @@ Comando de start:
 cd estoque_app && gunicorn app:app --bind 0.0.0.0:$PORT --workers 2 --threads 4 --timeout 120
 ```
 
-Depois do deploy, use `/inventario-mobile` no celular para contar itens. O ADM abre e finaliza a sessao em `/inventario-etiquetas`.
+Depois do deploy, use `/inventario` no celular para ajustar saldos por inventario.
 
 ## Instalacao
 

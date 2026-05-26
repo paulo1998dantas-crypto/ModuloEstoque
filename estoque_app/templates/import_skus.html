@@ -3,8 +3,8 @@
 {% block content %}
 <section class="page-head">
     <div>
-        <h1>Importar base de SKUs</h1>
-        <p>Cria novos SKUs e atualiza os existentes sem apagar ausentes.</p>
+        <h1>Importar base de estoque</h1>
+        <p>Cria ou atualiza SKUs, saldo atual e minimo sem apagar ausentes.</p>
     </div>
     <div class="actions">
         <a class="btn secondary" href="{{ url_for('download_template', name='skus') }}">Template</a>
@@ -17,7 +17,7 @@
         <input type="file" name="file" accept=".xlsx" required>
     </label>
     <div class="note">
-        Colunas obrigatorias: SKU, DESCRICAO, UNIDADE, CATEGORIA, LOCALIZACAO, ESTOQUE_MINIMO.
+        Colunas obrigatorias: SKU e DESCRICAO. Aceita SALDO_ATUAL ou ESTOQUE para atualizar o saldo. ESTOQUE_MINIMO e opcional; vazio significa sem minimo definido.
     </div>
     <button class="btn primary" type="submit">Importar planilha</button>
 </form>

@@ -40,7 +40,7 @@
                     <td>{{ sku.unidade or "" }}</td>
                     <td>{{ sku.categoria or "" }}</td>
                     <td>{{ sku.localizacao or "" }}</td>
-                    <td>{{ sku.estoque_minimo|qty }}</td>
+                    <td>{{ fmt_min(sku.estoque_minimo) }}</td>
                     <td><span class="badge {{ 'ok' if sku.active else 'off' }}">{{ "Ativo" if sku.active else "Inativo" }}</span></td>
                     <td><a class="btn small" href="{{ url_for('sku_form', sku_id=sku.id) }}">Editar</a></td>
                 </tr>

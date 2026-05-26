@@ -46,7 +46,9 @@ from services.excel_service import (
     label_queue_summary,
 )
 from services.estoque_service import (
+    adjust_balance_to_count,
     close_inventory_and_adjust,
+    dashboard_movement_cache,
     decimal_to_str,
     get_active_inventory_session,
     get_setting,
@@ -55,10 +57,13 @@ from services.estoque_service import (
     inventory_stats,
     normalize_sku,
     open_inventory_session,
+    optional_decimal_to_str,
     register_movement,
+    reset_operational_data,
     save_inventory_count,
     set_setting,
     to_decimal,
+    to_optional_decimal,
     create_or_update_sku,
 )
 
@@ -95,6 +100,7 @@ def inject_globals():
     return {
         "current_user": current_user(),
         "fmt_qty": decimal_to_str,
+        "fmt_min": optional_decimal_to_str,
         "database_label": "SQLite local" if Config.SQLALCHEMY_DATABASE_URI.startswith("sqlite") else "Supabase Postgres",
         "deployment_label": "Sistema local" if Config.SQLALCHEMY_DATABASE_URI.startswith("sqlite") else "Sistema online mobile",
     }
@@ -152,6 +158,7 @@ def stock_rows(database, filters):
     elif filters.get("active") == "0":
         query = query.filter(SKU.active.is_(False))
     if filters.get("saldo_baixo") == "1":
+        query = query.filter(SKU.estoque_minimo.isnot(None))
         query = query.filter(or_(StockBalance.saldo_atual <= SKU.estoque_minimo, StockBalance.saldo_atual.is_(None)))
     return query.order_by(SKU.sku).all()
 
@@ -200,10 +207,11 @@ def dashboard():
         database.query(SKU)
         .outerjoin(StockBalance)
         .filter(SKU.active.is_(True))
+        .filter(SKU.estoque_minimo.isnot(None))
         .filter(or_(StockBalance.saldo_atual <= SKU.estoque_minimo, StockBalance.saldo_atual.is_(None)))
         .count()
     )
-    last_movements = database.query(Movement).order_by(Movement.created_at.desc()).limit(8).all()
+    last_movements = dashboard_movement_cache(database)
     return render_template(
         "dashboard.html",
         total_active=total_active,
@@ -306,7 +314,7 @@ def sku_form(sku_id=None):
                 sku.unidade = data["unidade"].strip() or None
                 sku.categoria = data["categoria"].strip() or None
                 sku.localizacao = data["localizacao"].strip() or None
-                sku.estoque_minimo = to_decimal(data["estoque_minimo"])
+                sku.estoque_minimo = to_optional_decimal(data["estoque_minimo"])
                 sku.active = data["active"]
                 database.commit()
             else:
@@ -434,51 +442,62 @@ def saida():
     return render_template("movement_form.html", mode="saida", sku=sku, sku_code=sku_code)
 
 
-@app.route("/inventario-mobile", methods=["GET", "POST"])
+@app.route("/inventario-mobile")
+@login_required
+def inventory_mobile_legacy():
+    return redirect(url_for("inventory_mobile"))
+
+
+@app.route("/inventario", methods=["GET", "POST"])
 @login_required
 def inventory_mobile():
     database = db()
     user = current_user()
-    active_session = get_active_inventory_session(database)
+    sku = None
+    sku_code = request.args.get("sku", "").strip()
 
     if request.method == "POST":
         try:
-            if not active_session:
-                raise ValueError("Nao ha sessao de inventario aberta. Solicite abertura ao ADM.")
             sku = get_sku_by_code(database, request.form.get("sku"), active_only=True)
             if not sku:
                 raise ValueError("SKU nao cadastrado ou inativo.")
-            count = save_inventory_count(
+            counted_qty = request.form.get("quantidade_contada")
+            movement = adjust_balance_to_count(
                 database,
-                active_session.id,
                 sku,
-                request.form.get("quantidade_contada"),
+                counted_qty,
                 user.id,
+                documento="INVENTARIO",
+                observacao=request.form.get("observacao", ""),
             )
+            diferenca = to_decimal(movement.saldo_posterior) - to_decimal(movement.saldo_anterior)
             flash(
-                f"Contagem salva: {sku.sku}. Diferenca {decimal_to_str(count.diferenca)}.",
-                "success" if count.diferenca == 0 else "warning",
+                f"Inventario salvo: {sku.sku}. Diferenca {decimal_to_str(diferenca)}.",
+                "success" if diferenca == 0 else "warning",
             )
             return redirect(url_for("inventory_mobile"))
         except Exception as exc:
             database.rollback()
             flash(str(exc), "danger")
+            sku_code = request.form.get("sku", "")
 
-    last_counts = []
-    stats = inventory_stats(database, active_session)
-    if active_session:
-        last_counts = (
-            database.query(InventoryCount)
-            .filter_by(session_id=active_session.id, counted_by=user.id)
-            .order_by(InventoryCount.counted_at.desc())
-            .limit(12)
-            .all()
-        )
+    if sku_code:
+        sku = get_sku_by_code(database, sku_code, active_only=True)
+        if not sku:
+            flash("SKU nao cadastrado ou inativo.", "danger")
+
+    last_counts = (
+        database.query(Movement)
+        .filter(Movement.tipo == "INVENTARIO", Movement.usuario_id == user.id)
+        .order_by(Movement.created_at.desc())
+        .limit(12)
+        .all()
+    )
 
     return render_template(
         "inventory_mobile.html",
-        active_session=active_session,
-        stats=stats,
+        sku=sku,
+        sku_code=sku_code,
         last_counts=last_counts,
     )
 
@@ -573,6 +592,27 @@ def export_report(tipo):
 def backup():
     path = create_backup()
     flash(f"Backup gerado: {path}", "success")
+    return redirect(url_for("settings"))
+
+
+@app.route("/resetar-dados", methods=["POST"])
+@login_required
+@roles_required("ADM")
+def reset_data():
+    database = db()
+    try:
+        deleted = reset_operational_data(database)
+        flash(
+            "Dados operacionais resetados: "
+            f"{deleted['movements']} movimentacoes, "
+            f"{deleted['inventory_counts']} contagens, "
+            f"{deleted['inventory_sessions']} sessoes e "
+            f"{deleted['label_print_jobs']} jobs de etiqueta.",
+            "success",
+        )
+    except Exception as exc:
+        database.rollback()
+        flash(f"Falha ao resetar dados: {exc}", "danger")
     return redirect(url_for("settings"))
 
 

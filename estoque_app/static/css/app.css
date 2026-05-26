@@ -188,8 +188,15 @@ a {
     display: block;
 }
 
+.desktop-titlebar > div {
+    min-width: 0;
+}
+
 .desktop-titlebar strong {
     line-height: 1.1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
 .desktop-titlebar span,
@@ -421,10 +428,12 @@ a {
     overflow-x: auto;
     border: 1px solid var(--line);
     border-radius: 4px;
+    -webkit-overflow-scrolling: touch;
 }
 
 table {
     width: 100%;
+    min-width: 760px;
     border-collapse: collapse;
     background: #ffffff;
 }
@@ -608,6 +617,11 @@ textarea:focus {
     background: var(--surface);
     border: 1px solid var(--line);
     border-radius: 6px;
+}
+
+.filter-bar > input,
+.filter-bar > select {
+    flex: 1 1 170px;
 }
 
 .filter-bar.multi > input,
@@ -847,10 +861,70 @@ textarea:focus {
     display: block;
 }
 
+.mobile-count-item > div {
+    min-width: 0;
+}
+
+.mobile-count-item > div:last-child {
+    text-align: right;
+}
+
 .mobile-count-item span {
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+}
+
+.inventory-adjust .mobile-count-form {
+    position: static;
+}
+
+.inventory-count-card {
+    position: sticky;
+    top: 52px;
+    z-index: 4;
+}
+
+.diff-preview {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    align-items: center;
+    padding: 10px 12px;
+    border: 1px solid var(--line);
+    border-radius: 4px;
+    background: #f8fafc;
+}
+
+.diff-preview span {
+    color: var(--muted);
+    font-weight: 800;
+}
+
+.diff-preview strong {
+    font-size: 22px;
+    font-variant-numeric: tabular-nums;
+}
+
+.diff-preview strong.positive {
+    color: var(--success);
+}
+
+.diff-preview strong.negative {
+    color: var(--danger);
+}
+
+.danger-zone {
+    display: flex;
+    justify-content: space-between;
+    gap: 16px;
+    align-items: center;
+    border-color: #efb1aa;
+    background: #fff7f6;
+}
+
+.danger-zone p {
+    margin: 0;
 }
 
 @media (max-width: 980px) {
@@ -913,6 +987,11 @@ textarea:focus {
 
     .desktop-titlebar {
         padding: 0 10px;
+        justify-content: flex-start;
+    }
+
+    .desktop-titlebar > div {
+        flex: 1 1 auto;
     }
 
     .desktop-status {
@@ -921,7 +1000,23 @@ textarea:focus {
 
     .btn,
     .actions .btn,
-    .button-row .btn {
+    .button-row .btn,
+    .filter-bar .btn {
+        width: 100%;
+    }
+
+    .filter-bar,
+    .batch-actions,
+    .danger-zone {
+        align-items: stretch;
+        display: grid;
+        grid-template-columns: 1fr;
+    }
+
+    .filter-bar > input,
+    .filter-bar > select,
+    .filter-bar.multi > input,
+    .filter-bar.multi > select {
         width: 100%;
     }
 
@@ -944,5 +1039,9 @@ textarea:focus {
 
     .mobile-count-form {
         top: 44px;
+    }
+
+    .inventory-count-card {
+        position: static;
     }
 }

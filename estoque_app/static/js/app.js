@@ -116,6 +116,36 @@ function initPrintQueue() {
     }
 }
 
+function parseDecimal(value) {
+    const normalized = String(value || "").replace(",", ".").trim();
+    const parsed = Number.parseFloat(normalized);
+    return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function formatDecimal(value) {
+    return value.toLocaleString("pt-BR", {
+        minimumFractionDigits: 0,
+        maximumFractionDigits: 3
+    });
+}
+
+function initInventoryDiff() {
+    const counted = document.querySelector("[data-counted-stock]");
+    const current = document.querySelector("[data-current-stock]");
+    const target = document.querySelector("[data-inventory-diff]");
+    if (!counted || !current || !target) return;
+
+    const update = () => {
+        const diff = parseDecimal(counted.value) - parseDecimal(current.textContent);
+        target.textContent = formatDecimal(diff);
+        target.classList.toggle("negative", diff < 0);
+        target.classList.toggle("positive", diff > 0);
+    };
+
+    counted.addEventListener("input", update);
+    update();
+}
+
 document.addEventListener("DOMContentLoaded", () => {
     focusScanField();
 
@@ -133,4 +163,5 @@ document.addEventListener("DOMContentLoaded", () => {
     });
 
     initPrintQueue();
+    initInventoryDiff();
 });
