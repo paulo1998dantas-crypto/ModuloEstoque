@@ -17,6 +17,7 @@ from flask import (
     url_for,
 )
 from sqlalchemy import or_
+from werkzeug.exceptions import NotFound
 
 from auth import (
     current_user,
@@ -130,6 +131,16 @@ def handle_exception(exc):
     if request.path.startswith("/api/"):
         return jsonify({"ok": False, "error": str(exc)}), 500
     flash(f"Erro inesperado: {exc}", "danger")
+    return redirect(url_for("dashboard") if session.get("user_id") else url_for("login"))
+
+
+@app.errorhandler(NotFound)
+def handle_not_found(exc):
+    if request.path == "/favicon.ico":
+        return "", 204
+    if request.path.startswith("/api/"):
+        return jsonify({"ok": False, "error": "Rota nao encontrada."}), 404
+    flash("Pagina nao encontrada. Voltei para a tela inicial.", "warning")
     return redirect(url_for("dashboard") if session.get("user_id") else url_for("login"))
 
 
