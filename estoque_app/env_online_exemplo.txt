@@ -1,7 +1,7 @@
 # Copie este arquivo para ".env" na mesma pasta do app.py ou do EstoqueJIMontadora.exe.
 # Preencha com a mesma DATABASE_URL usada no Render para o app local conversar com o Supabase.
 
-DATABASE_URL=postgresql://postgres.PROJECT_REF:SUA_SENHA@aws-1-us-west-2.pooler.supabase.com:5432/postgres
+DATABASE_URL=postgresql://postgres.PROJECT_REF:SUA_SENHA@aws-1-us-west-2.pooler.supabase.com:6543/postgres
 ESTOQUE_DATABASE_MODE=online
 ESTOQUE_SECRET_KEY=use-a-mesma-chave-do-render
 ESTOQUE_ADMIN_USER=admin

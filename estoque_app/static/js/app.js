@@ -75,6 +75,8 @@ async function printJob(row) {
             const queuedMessage = `${error.message} Job mantido pendente na fila compartilhada para impressao pelo app local.`;
             await postJsonData(`/api/label-jobs/${id}/local-result`, {ok: false, queue_local: true, error: queuedMessage}).catch(() => null);
             updateJobRow(row, "PENDENTE", queuedMessage, "");
+            error.queueLocal = true;
+            error.queuedMessage = queuedMessage;
             throw error;
         }
     }
@@ -108,7 +110,11 @@ function initPrintQueue() {
                 await printJob(row);
                 if (progress) progress.textContent = `Job ${id} impresso.`;
             } catch (error) {
-                updateJobRow(row, "ERRO", error.message, "");
+                if (error.queueLocal) {
+                    updateJobRow(row, "PENDENTE", error.queuedMessage || error.message, "");
+                } else {
+                    updateJobRow(row, "ERRO", error.message, "");
+                }
                 if (progress) progress.textContent = error.message;
             }
         });
@@ -170,7 +176,11 @@ function initPrintQueue() {
                 try {
                     await printJob(row);
                 } catch (error) {
-                    updateJobRow(row, "ERRO", error.message, "");
+                    if (error.queueLocal) {
+                        updateJobRow(row, "PENDENTE", error.queuedMessage || error.message, "");
+                    } else {
+                        updateJobRow(row, "ERRO", error.message, "");
+                    }
                 }
             }
             printAll.disabled = false;

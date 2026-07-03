@@ -15,5 +15,7 @@ services:
         value: admin
       - key: ESTOQUE_ADMIN_PASSWORD
         sync: false
+      - key: ESTOQUE_DATABASE_MODE
+        value: online
       - key: DATABASE_URL
         sync: false
