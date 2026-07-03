@@ -1,6 +1,6 @@
 # Controle de Estoque Offline para Almoxarifado Industrial
 
-Sistema local em Python/Flask com SQLite para cadastro de SKUs, etiquetas Zebra em ZPL, entrada, saida, inventario, relatórios Excel, backup e auditoria de movimentacoes.
+Sistema local em Python/Flask com SQLite para cadastro de SKUs, etiquetas Zebra em ZPL, entrada, empenho, baixa, inventario, relatórios Excel, backup e auditoria de movimentacoes.
 
 ## Requisitos
 
@@ -12,10 +12,19 @@ Sistema local em Python/Flask com SQLite para cadastro de SKUs, etiquetas Zebra 
 
 O sistema tambem roda online para inventario via celular. Quando a variavel `DATABASE_URL` existe, o banco usado passa a ser Supabase/Postgres. Quando ela nao existe, o app continua usando SQLite local.
 
+Se existir uma `DATABASE_URL` antiga ou invalida no `.env`, o app local pode ser forcado a usar SQLite com:
+
+```text
+ESTOQUE_DATABASE_MODE=local
+```
+
+Para voltar ao Supabase/Postgres, use `ESTOQUE_DATABASE_MODE=online` junto com uma `DATABASE_URL` valida.
+
 Variaveis usadas no Render:
 
 ```text
 DATABASE_URL
+ESTOQUE_DATABASE_MODE
 ESTOQUE_SECRET_KEY
 ESTOQUE_ADMIN_USER
 ESTOQUE_ADMIN_PASSWORD
@@ -133,11 +142,11 @@ O sistema usa o arquivo:
 templates_zpl/etiqueta_base.zpl
 ```
 
-O template incluido esta ajustado para etiqueta 80x40 mm em Zebra 203 dpi e foi baseado no export do ZebraDesigner:
+O template incluido esta ajustado para etiqueta 100x50 mm em Zebra 203 dpi e foi baseado no export do ZebraDesigner:
 
 ```text
-Largura: 640 dots
-Altura: 320 dots
+Largura: 800 dots
+Altura: 400 dots
 ```
 
 Ele aceita estes placeholders:
@@ -157,7 +166,7 @@ Para usar uma etiqueta criada no ZebraDesigner:
 4. Para este template, a quantidade e enviada no ZPL com `^PQ{{QTD}}`.
 5. Faca um teste pelo botao `Salvar ZPL` antes de imprimir.
 
-A descricao impressa usa `{{DESCRICAO_58}}`, limitada automaticamente a 58 caracteres.
+A descricao impressa usa `{{DESCRICAO_58}}`, limitada automaticamente a 58 caracteres e com fonte reduzida para descricoes longas.
 
 ## Configurar impressora Zebra
 
@@ -206,13 +215,15 @@ Regras:
 - SKU novo e criado.
 - SKU existente e atualizado.
 - SKUs ausentes da planilha nao sao apagados.
-- Entrada/saida so aceita SKU cadastrado e ativo.
+- Entrada, empenho e baixa so aceitam SKU cadastrado e ativo.
 
 O sistema gera os arquivos:
 
 - `template_importacao_skus.xlsx`
 - `dados_exemplo.xlsx`
 - `template_etiquetas_lote.xlsx`
+- `template_baixa_consumo.xlsx`
+- `template_empenhos.xlsx`
 
 Tambem e possivel baixa-los pela interface.
 
@@ -223,7 +234,9 @@ Tambem e possivel baixa-los pela interface.
 3. Acesse `Entrada`.
 4. Leia o codigo de barras com o leitor USB.
 5. Informe quantidade, documento/nota e confirme.
-6. Para retirada, use `Saida`.
+6. Para reserva de consumo, use `Empenho`.
+7. Para carregar empenhos existentes antes do inventario, use `Empenho > Importar empenhos` com `SKU`, `UNIDADE_DE_MEDIDA` e `SALDO_EMPENHADO`.
+8. Para baixa do consumo real, use `Baixa` e importe a planilha com `SKU`, `UNIDADE_DE_MEDIDA` e `SALDO_CONSUMIDO`.
 
 Os campos de leitura recebem foco automatico e aceitam leitores USB que funcionam como teclado.
 
@@ -253,7 +266,8 @@ Menu `Relatorios`:
 
 - estoque atual
 - entradas
-- saidas
+- empenhos
+- baixas
 - movimentacoes completas
 - inventario
 
@@ -272,7 +286,8 @@ backups/estoque_backup_AAAAMMDD_HHMMSS.db
 ## Observacoes operacionais
 
 - O saldo nunca deve ser alterado diretamente no banco.
-- Use entrada, saida ou inventario para manter auditoria.
-- Saida com saldo negativo vem bloqueada por padrao.
+- Use entrada, empenho, baixa ou inventario para manter auditoria.
+- Baixa com saldo negativo vem bloqueada por padrao.
 - A liberacao de saldo negativo e configuracao ADM.
+- ADM pode excluir uma movimentacao especifica pelo historico; o sistema reverte o efeito dela no saldo atual.
 - O sistema nao depende de internet para rodar depois de instalado.

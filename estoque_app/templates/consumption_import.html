@@ -1,0 +1,78 @@
+{% extends "base.html" %}
+{% block title %}Baixa - Estoque{% endblock %}
+{% block content %}
+<section class="page-head">
+    <div>
+        <h1>Baixa por consumo real</h1>
+        <p>Importe a planilha com SKU, unidade de medida e saldo consumido.</p>
+    </div>
+    <a class="btn secondary" href="{{ url_for('download_template', name='baixa') }}">Baixar modelo</a>
+</section>
+
+<section class="split">
+    <form method="post" enctype="multipart/form-data" class="panel form-grid">
+        <label>Planilha Excel
+            <input type="file" name="file" accept=".xlsx,.xlsm,.xltx,.xltm" required>
+        </label>
+        <label>Documento / referencia
+            <input name="documento" placeholder="Opcional">
+        </label>
+        <label>Observacao
+            <textarea name="observacao" rows="3"></textarea>
+        </label>
+        <button class="btn primary large" type="submit">Importar baixa</button>
+    </form>
+
+    <section class="panel">
+        <h2>Layout da planilha</h2>
+        <div class="table-wrap">
+            <table>
+                <thead>
+                    <tr>
+                        <th>SKU</th>
+                        <th>UNIDADE_DE_MEDIDA</th>
+                        <th>SALDO_CONSUMIDO</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td>PAR-0001</td>
+                        <td>UN</td>
+                        <td class="num">3</td>
+                    </tr>
+                    <tr>
+                        <td>CAB-0012</td>
+                        <td>M</td>
+                        <td class="num">12,5</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </section>
+</section>
+
+{% if result and result.errors %}
+<section class="panel">
+    <div class="panel-head">
+        <h2>Erros encontrados</h2>
+        <span class="badge erro">{{ result.errors|length }}</span>
+    </div>
+    <div class="table-wrap">
+        <table>
+            <thead>
+                <tr>
+                    <th>Mensagem</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for error in result.errors %}
+                <tr>
+                    <td>{{ error }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</section>
+{% endif %}
+{% endblock %}

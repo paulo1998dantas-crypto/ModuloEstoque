@@ -18,9 +18,13 @@
         <strong>Entradas</strong>
         <span>Historico de recebimentos.</span>
     </a>
-    <a class="report-card" href="{{ url_for('export_report', tipo='saidas') }}">
-        <strong>Saidas</strong>
-        <span>Retiradas para producao.</span>
+    <a class="report-card" href="{{ url_for('export_report', tipo='empenhos') }}">
+        <strong>Empenhos</strong>
+        <span>Reservas lancadas pela operacao.</span>
+    </a>
+    <a class="report-card" href="{{ url_for('export_report', tipo='baixas') }}">
+        <strong>Baixas</strong>
+        <span>Consumo real importado por planilha.</span>
     </a>
     <a class="report-card" href="{{ url_for('export_report', tipo='movimentacoes') }}">
         <strong>Movimentacoes completas</strong>

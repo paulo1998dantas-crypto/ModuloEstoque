@@ -4,7 +4,7 @@
 <section class="page-head">
     <div>
         <h1>Movimentacoes</h1>
-        <p>Historico auditavel de entradas, saidas, inventario e ajustes.</p>
+        <p>Historico auditavel de entradas, empenhos, baixas, inventario e ajustes.</p>
     </div>
     {% if can_export %}
     <a class="btn secondary" href="{{ url_for('export_report', tipo='movimentacoes') }}">Exportar completo</a>
@@ -15,7 +15,8 @@
     <select name="tipo">
         <option value="" {% if not tipo %}selected{% endif %}>Todos os tipos</option>
         <option value="ENTRADA" {% if tipo == 'ENTRADA' %}selected{% endif %}>Entrada</option>
-        <option value="SAIDA" {% if tipo == 'SAIDA' %}selected{% endif %}>Saida</option>
+        <option value="EMPENHO" {% if tipo == 'EMPENHO' %}selected{% endif %}>Empenho</option>
+        <option value="BAIXA" {% if tipo == 'BAIXA' %}selected{% endif %}>Baixa</option>
         {% if current_user.role == 'ADM' %}
         <option value="INVENTARIO" {% if tipo == 'INVENTARIO' %}selected{% endif %}>Inventario</option>
         <option value="AJUSTE" {% if tipo == 'AJUSTE' %}selected{% endif %}>Ajuste</option>
@@ -40,6 +41,9 @@
                     <th>Posterior</th>
                     <th>Documento</th>
                     <th>Observacao</th>
+                    {% if current_user.role == 'ADM' %}
+                    <th>Acoes</th>
+                    {% endif %}
                 </tr>
             </thead>
             <tbody>
@@ -50,15 +54,23 @@
                     <td>{{ mv.usuario.username }}</td>
                     <td>{{ mv.sku.sku }}</td>
                     <td>{{ mv.sku.descricao }}</td>
-                    <td><span class="badge {{ mv.tipo|lower }}">{{ mv.tipo }}</span></td>
+                    <td><span class="badge {{ mv.tipo|lower }}">{{ movement_label(mv.tipo) }}</span></td>
                     <td class="num">{{ mv.quantidade|qty }}</td>
                     <td class="num">{{ mv.saldo_anterior|qty }}</td>
                     <td class="num">{{ mv.saldo_posterior|qty }}</td>
                     <td>{{ mv.documento or "" }}</td>
                     <td>{{ mv.observacao or "" }}</td>
+                    {% if current_user.role == 'ADM' %}
+                    <td>
+                        <form method="post" action="{{ url_for('delete_movement_route', movement_id=mv.id) }}" class="confirmable" data-confirm="Excluir a movimentacao {{ mv.id }} e reverter o efeito no saldo atual?">
+                            <input type="hidden" name="tipo" value="{{ tipo }}">
+                            <button class="btn small danger" type="submit">Excluir</button>
+                        </form>
+                    </td>
+                    {% endif %}
                 </tr>
                 {% else %}
-                <tr><td colspan="11" class="empty">Nenhuma movimentacao registrada.</td></tr>
+                <tr><td colspan="{{ 12 if current_user.role == 'ADM' else 11 }}" class="empty">Nenhuma movimentacao registrada.</td></tr>
                 {% endfor %}
             </tbody>
         </table>

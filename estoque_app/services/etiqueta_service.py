@@ -34,14 +34,50 @@ def descricao_58(descricao):
     return _safe_zpl_text(descricao)[:58]
 
 
+def _split_description_lines(text):
+    if len(text) <= 29:
+        return [text]
+
+    if " " not in text:
+        return [text[:29], text[29:58]]
+
+    split_at = text.rfind(" ", 0, 30)
+    if split_at <= 0 or len(text[split_at + 1:]) > 29:
+        split_at = text.find(" ", max(len(text) - 29, 1))
+    if split_at <= 0:
+        split_at = 29
+
+    first = text[:split_at].strip()
+    second = text[split_at:].strip()
+    if len(first) > 29:
+        second = f"{first[29:]} {second}".strip()
+        first = first[:29].strip()
+    if len(second) > 29:
+        second = second[:29].strip()
+    return [line for line in (first, second) if line]
+
+
+def _description_lines(text):
+    return _split_description_lines(text)
+
+
+def _description_font_size(lines):
+    line_count = max(len(lines), 1)
+    longest = max((len(line) for line in lines), default=1)
+    max_font_w = {1: 40, 2: 24}[line_count]
+    max_font_h = {1: 48, 2: 34}[line_count]
+    font_w = min(max_font_w, max(18, 690 // longest))
+    font_h = min(max_font_h, max(26, int(font_w * 1.35)))
+    return str(font_h), str(font_w)
+
+
 def description_layout(descricao):
     text = descricao_58(descricao)
-    length = len(text)
-    if length <= 24:
-        return text, "42", "40", "1", "38"
-    if length <= 42:
-        return text, "34", "32", "2", "30"
-    return text, "28", "27", "2", "28"
+    lines = _description_lines(text)
+    line_count = max(len(lines), 1)
+    font_h, font_w = _description_font_size(lines)
+    desc_y = {1: "45", 2: "27"}[line_count]
+    return "\\&".join(lines), font_h, font_w, str(line_count), desc_y
 
 
 def render_label_zpl(sku, descricao, quantidade=1):
@@ -79,6 +115,13 @@ def zpl_for_quantity(sku, descricao, quantidade):
     return render_label_zpl(sku, descricao, quantidade=quantidade)
 
 
+def _normalize_label_zpl(zpl):
+    data = _extract_zpl_label_data(zpl)
+    if not data["sku"] or not data["descricao"]:
+        return _sanitize_zpl_for_raw(zpl)
+    return render_label_zpl(data["sku"], data["descricao"], data["quantidade"])
+
+
 def _extract_zpl_label_data(zpl):
     text = _sanitize_zpl_for_raw(zpl)
 
@@ -88,8 +131,8 @@ def _extract_zpl_label_data(zpl):
         sku_candidates = re.findall(r"\^FD([0-9A-Za-z_.-]+)\^FS", text)
         sku = sku_candidates[-1] if sku_candidates else ""
 
-    desc_match = re.search(r"\^FO28,\d+.*?\^FD([^^\r\n]*)\^FS", text, flags=re.S)
-    descricao = desc_match.group(1).strip() if desc_match else ""
+    desc_match = re.search(r"\^FO\d+,\d+.*?\^FD([^^\r\n]*)\^FS", text, flags=re.S)
+    descricao = desc_match.group(1).replace("\\&", " ").strip() if desc_match else ""
 
     date_match = re.search(r"DATA EMISSAO:\s*([0-9/.-]+)", text)
     data_text = date_match.group(1).strip() if date_match else datetime.now().strftime("%d/%m/%Y")
@@ -118,37 +161,40 @@ def render_label_epl_from_zpl(zpl):
     sku = data["sku"]
     descricao = data["descricao"]
     quantidade = data["quantidade"]
+    desc_lines = _description_lines(descricao)
+    desc_line_count = max(len(desc_lines), 1)
 
-    if len(descricao) <= 24:
+    if desc_line_count == 1:
         desc_font = "5,1,1"
-        desc_y = 28
+        desc_y = 32
+        desc_line_gap = 0
         desc_char_width = 32
-    elif len(descricao) <= 42:
-        desc_font = "4,2,2"
-        desc_y = 28
-        desc_char_width = 28
     else:
-        desc_font = "3,2,2"
-        desc_y = 26
-        desc_char_width = 24
+        desc_font = "4,1,1"
+        desc_y = 24
+        desc_line_gap = 36
+        desc_char_width = 16
 
-    desc_x = _center_x(descricao, 28, 584, desc_char_width)
-    sku_x = _center_x(sku, 37, 390, 32)
+    sku_x = _center_x(sku, 46, 488, 32)
+    desc_commands = [
+        f'A{_center_x(line, 35, 730, desc_char_width)},{desc_y + (index * desc_line_gap)},0,{desc_font},N,"{line}"'
+        for index, line in enumerate(desc_lines)
+    ]
 
     lines = [
         "N",
-        "q640",
-        "Q320,24",
+        "q800",
+        "Q400,24",
         "S2",
         "D10",
         "ZT",
-        "LO28,10,584,2",
-        f'A{desc_x},{desc_y},0,{desc_font},N,"{descricao}"',
-        "LO28,101,475,7",
-        'A37,130,0,4,1,1,N,"SKU"',
-        f'A{sku_x},166,0,5,1,2,N,"{sku}"',
-        f'A37,268,0,3,1,1,N,"DATA EMISSAO: {data["data"]}"',
-        f'B455,112,0,1,2,4,150,N,"{sku}"',
+        "LO35,13,730,2",
+        *desc_commands,
+        "LO35,126,594,7",
+        'A46,163,0,4,1,1,N,"SKU"',
+        f'A{sku_x},208,0,5,1,2,N,"{sku}"',
+        f'A46,335,0,3,1,1,N,"DATA EMISSAO: {data["data"]}"',
+        f'B520,140,0,1,2,4,198,N,"{sku}"',
         f"P{quantidade}",
         "",
     ]
@@ -256,7 +302,7 @@ def print_zpl(zpl, printer_name=None):
     if not _printer_is_ready(win32print, target_printer):
         raise RuntimeError(f"A fila da impressora '{target_printer}' esta em erro/offline no Windows. Limpe a fila ou reconecte a Zebra.")
 
-    payload_text = _sanitize_zpl_for_raw(zpl)
+    payload_text = _normalize_label_zpl(zpl)
     command_language = "ZPL"
     if _printer_prefers_epl(target_printer):
         payload_text = render_label_epl_from_zpl(payload_text)

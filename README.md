@@ -28,7 +28,8 @@ estoque_app/dist/EstoqueJIMontadora.zip
 
 - Login com perfil ADM e OPERADOR
 - Cadastro e importacao Excel de SKUs
-- Controle de entrada, saida e inventario com historico auditavel
+- Controle de entrada, empenho, baixa e inventario com historico auditavel
+- Importacao Excel de empenhos e baixas por consumo real
 - Inventario online via mobile
 - Impressao Zebra via ZPL
 - Etiquetas em massa para inventario
@@ -47,6 +48,14 @@ Arquivos importantes:
 - `runtime.txt`: versao Python usada no deploy
 
 Quando `DATABASE_URL` estiver configurado, o app usa Supabase/Postgres. Sem `DATABASE_URL`, continua usando SQLite local.
+
+Para forcar o app local a ignorar uma `DATABASE_URL` salva no `.env` e usar SQLite, defina:
+
+```text
+ESTOQUE_DATABASE_MODE=local
+```
+
+Para usar Supabase/Postgres explicitamente, defina `ESTOQUE_DATABASE_MODE=online` e mantenha uma `DATABASE_URL` valida.
 
 ## App local usando Supabase
 

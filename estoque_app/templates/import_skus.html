@@ -4,7 +4,7 @@
 <section class="page-head">
     <div>
         <h1>Importar base de estoque</h1>
-        <p>Cria ou atualiza SKUs, saldo atual e minimo sem apagar ausentes.</p>
+        <p>Substitui a base atual de SKUs, saldos, movimentacoes, inventarios e fila de etiquetas.</p>
     </div>
     <div class="actions">
         <a class="btn secondary" href="{{ url_for('download_template', name='skus') }}">Template</a>
@@ -17,8 +17,8 @@
         <input type="file" name="file" accept=".xlsx" required>
     </label>
     <div class="note">
-        Colunas obrigatorias: SKU e DESCRICAO. Aceita SALDO_ATUAL ou ESTOQUE para atualizar o saldo. ESTOQUE_MINIMO e opcional; vazio significa sem minimo definido.
+        Colunas obrigatorias: SKU e DESCRICAO. Aceita SALDO_ATUAL ou ESTOQUE para definir o novo saldo. ESTOQUE_MINIMO e opcional; vazio significa sem minimo definido. Se a planilha tiver erros, nada sera alterado.
     </div>
-    <button class="btn primary" type="submit">Importar planilha</button>
+    <button class="btn primary" type="submit">Substituir base pela planilha</button>
 </form>
 {% endblock %}

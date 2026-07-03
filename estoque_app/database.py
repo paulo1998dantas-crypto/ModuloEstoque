@@ -1,7 +1,7 @@
 from contextlib import contextmanager
 from urllib.parse import urlsplit
 
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, text
 from sqlalchemy.orm import declarative_base, scoped_session, sessionmaker
 from sqlalchemy.pool import NullPool
 
@@ -36,6 +36,54 @@ def init_db():
     import models  # noqa: F401
 
     Base.metadata.create_all(bind=engine)
+    migrate_sqlite_schema()
+
+
+def migrate_sqlite_schema():
+    if not Config.SQLALCHEMY_DATABASE_URI.startswith("sqlite"):
+        return
+
+    with engine.connect().execution_options(isolation_level="AUTOCOMMIT") as connection:
+        skus_columns = {
+            row[1]: row
+            for row in connection.execute(text("PRAGMA table_info(skus)"))
+        }
+        estoque_minimo = skus_columns.get("estoque_minimo")
+        if not estoque_minimo or not estoque_minimo[3]:
+            return
+        try:
+            connection.execute(text("PRAGMA foreign_keys=OFF"))
+            connection.execute(text("DROP TABLE IF EXISTS skus_new"))
+            connection.execute(text("""
+                CREATE TABLE skus_new (
+                    id INTEGER NOT NULL,
+                    sku VARCHAR(80) NOT NULL,
+                    descricao VARCHAR(255) NOT NULL,
+                    unidade VARCHAR(20),
+                    categoria VARCHAR(120),
+                    localizacao VARCHAR(120),
+                    estoque_minimo NUMERIC(14, 3),
+                    active BOOLEAN NOT NULL,
+                    created_at DATETIME NOT NULL,
+                    updated_at DATETIME NOT NULL,
+                    PRIMARY KEY (id)
+                )
+            """))
+            connection.execute(text("""
+                INSERT INTO skus_new (
+                    id, sku, descricao, unidade, categoria, localizacao,
+                    estoque_minimo, active, created_at, updated_at
+                )
+                SELECT
+                    id, sku, descricao, unidade, categoria, localizacao,
+                    estoque_minimo, active, created_at, updated_at
+                FROM skus
+            """))
+            connection.execute(text("DROP TABLE skus"))
+            connection.execute(text("ALTER TABLE skus_new RENAME TO skus"))
+            connection.execute(text("CREATE UNIQUE INDEX IF NOT EXISTS ix_skus_sku ON skus (sku)"))
+        finally:
+            connection.execute(text("PRAGMA foreign_keys=ON"))
 
 
 @contextmanager

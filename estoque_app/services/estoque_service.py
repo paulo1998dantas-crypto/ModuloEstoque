@@ -89,7 +89,7 @@ def ensure_balance(db, sku):
     return balance
 
 
-def create_or_update_sku(db, data, user=None):
+def create_or_update_sku(db, data, user=None, commit=True):
     sku_code = normalize_sku(data.get("sku"))
     descricao = str(data.get("descricao") or "").strip()
     if not sku_code:
@@ -115,7 +115,8 @@ def create_or_update_sku(db, data, user=None):
     balance = ensure_balance(db, sku)
     if "saldo_atual" in data:
         balance.saldo_atual = to_decimal(data.get("saldo_atual"))
-    db.commit()
+    if commit:
+        db.commit()
     return sku, created
 
 
@@ -169,14 +170,21 @@ def dashboard_movement_cache(db):
     )
 
 
-def register_movement(db, sku, tipo, quantidade, usuario_id, documento="", observacao="", allow_negative=False):
+def clear_dashboard_movement_cache(db):
+    db.query(DashboardMovementCache).delete(synchronize_session=False)
+    db.flush()
+
+
+def register_movement(db, sku, tipo, quantidade, usuario_id, documento="", observacao="", allow_negative=False, commit=True):
     if sku is None:
         raise ValueError("SKU nao encontrado.")
-    if not sku.active and tipo in {"ENTRADA", "SAIDA"}:
+    if tipo == "SAIDA":
+        tipo = "EMPENHO"
+    if not sku.active and tipo in {"ENTRADA", "EMPENHO", "BAIXA"}:
         raise ValueError("SKU inativo. Movimentacao bloqueada.")
 
     quantidade = to_decimal(quantidade)
-    if quantidade <= 0 and tipo in {"ENTRADA", "SAIDA"}:
+    if quantidade <= 0 and tipo in {"ENTRADA", "EMPENHO", "BAIXA"}:
         raise ValueError("Quantidade deve ser maior que zero.")
 
     balance = ensure_balance(db, sku)
@@ -184,10 +192,12 @@ def register_movement(db, sku, tipo, quantidade, usuario_id, documento="", obser
 
     if tipo == "ENTRADA":
         saldo_posterior = saldo_anterior + quantidade
-    elif tipo == "SAIDA":
+    elif tipo == "EMPENHO":
+        saldo_posterior = saldo_anterior
+    elif tipo == "BAIXA":
         saldo_posterior = saldo_anterior - quantidade
         if saldo_posterior < 0 and not allow_negative:
-            raise ValueError("Saida bloqueada: saldo insuficiente.")
+            raise ValueError("Baixa bloqueada: saldo insuficiente.")
     elif tipo in {"INVENTARIO", "AJUSTE"}:
         saldo_posterior = saldo_anterior + quantidade
         if saldo_posterior < 0 and not allow_negative:
@@ -209,8 +219,27 @@ def register_movement(db, sku, tipo, quantidade, usuario_id, documento="", obser
     db.add(movement)
     db.flush()
     cache_dashboard_movement(db, movement)
-    db.commit()
+    if commit:
+        db.commit()
     return movement
+
+
+def delete_movement(db, movement, allow_negative=False):
+    if movement is None:
+        raise ValueError("Movimentacao nao encontrada.")
+
+    balance = ensure_balance(db, movement.sku)
+    saldo_atual = to_decimal(balance.saldo_atual)
+    impacto = to_decimal(movement.saldo_posterior) - to_decimal(movement.saldo_anterior)
+    saldo_corrigido = saldo_atual - impacto
+    if saldo_corrigido < 0 and not allow_negative:
+        raise ValueError("Exclusao bloqueada: o saldo ficaria negativo.")
+
+    balance.saldo_atual = saldo_corrigido
+    db.delete(movement)
+    clear_dashboard_movement_cache(db)
+    db.commit()
+    return saldo_corrigido
 
 
 def adjust_balance_to_count(db, sku, counted_qty, usuario_id, documento="", observacao=""):
@@ -360,4 +389,18 @@ def reset_operational_data(db):
     deleted["inventory_sessions"] = db.query(InventorySession).delete(synchronize_session=False)
     deleted["movements"] = db.query(Movement).delete(synchronize_session=False)
     db.commit()
+    return deleted
+
+
+def reset_sku_base(db):
+    deleted = {}
+    deleted["label_print_jobs"] = db.query(LabelPrintJob).delete(synchronize_session=False)
+    deleted["inventory_counts"] = db.query(InventoryCount).delete(synchronize_session=False)
+    deleted["inventory_sessions"] = db.query(InventorySession).delete(synchronize_session=False)
+    deleted["movements"] = db.query(Movement).delete(synchronize_session=False)
+    deleted["dashboard_movement_cache"] = db.query(DashboardMovementCache).delete(synchronize_session=False)
+    deleted["stock_balances"] = db.query(StockBalance).delete(synchronize_session=False)
+    deleted["skus"] = db.query(SKU).delete(synchronize_session=False)
+    db.flush()
+    db.expunge_all()
     return deleted

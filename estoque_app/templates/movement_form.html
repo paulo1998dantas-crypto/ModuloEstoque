@@ -1,17 +1,20 @@
 {% extends "base.html" %}
 {% set is_entry = mode == 'entrada' %}
-{% block title %}{{ "Entrada" if is_entry else "Saida" }} - Estoque{% endblock %}
+{% block title %}{{ "Entrada" if is_entry else "Empenho" }} - Estoque{% endblock %}
 {% block content %}
 <section class="page-head">
     <div>
-        <h1>{{ "Entrada de estoque" if is_entry else "Saida para Producao" }}</h1>
-        <p>Leia o codigo de barras do SKU, confira o item e confirme a quantidade.</p>
+        <h1>{{ "Entrada de estoque" if is_entry else "Empenho de estoque" }}</h1>
+        <p>{{ "Leia o codigo de barras do SKU, confira o item e confirme a quantidade." if is_entry else "Registre a quantidade empenhada; a baixa real sera feita por planilha de consumo." }}</p>
     </div>
+    {% if not is_entry %}
+    <a class="btn secondary" href="{{ url_for('import_commitments') }}">Importar empenhos</a>
+    {% endif %}
 </section>
 
 <section class="scan-layout">
     <form method="get" class="panel scan-panel">
-        <label class="scan-label">{{ "Ler SKU recebido" if is_entry else "Ler SKU retirado" }}
+        <label class="scan-label">{{ "Ler SKU recebido" if is_entry else "Ler SKU empenhado" }}
             <input class="scan-input" name="sku" value="{{ sku_code }}" data-autofocus autocomplete="off" placeholder="Bipe o codigo de barras">
         </label>
         <button class="btn primary large" type="submit">Buscar SKU</button>
@@ -28,14 +31,14 @@
         <label>Quantidade
             <input name="quantidade" inputmode="decimal" required autofocus>
         </label>
-        <label>{{ "Documento / nota" if is_entry else "Chassi, OS, setor ou referencia" }}
+        <label>{{ "Documento / nota" if is_entry else "Chassi, OS, setor ou referencia do empenho" }}
             <input name="documento">
         </label>
         <label>Observacao
             <textarea name="observacao" rows="3"></textarea>
         </label>
-        <button class="btn {{ 'primary' if is_entry else 'danger' }} large" type="submit">
-            Confirmar {{ "entrada" if is_entry else "saida" }}
+        <button class="btn primary large" type="submit">
+            Confirmar {{ "entrada" if is_entry else "empenho" }}
         </button>
         {% else %}
         <div class="empty-state">

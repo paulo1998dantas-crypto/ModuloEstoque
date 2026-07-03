@@ -26,6 +26,8 @@ if exist "dist\EstoqueJIMontadora.zip" del /q "dist\EstoqueJIMontadora.zip"
   --add-data "templates_zpl;templates_zpl" ^
   --add-data "template_importacao_skus.xlsx;." ^
   --add-data "template_etiquetas_lote.xlsx;." ^
+  --add-data "template_baixa_consumo.xlsx;." ^
+  --add-data "template_empenhos.xlsx;." ^
   --add-data "dados_exemplo.xlsx;." ^
   --add-data "env_online_exemplo.txt;." ^
   desktop_launcher.py

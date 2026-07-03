@@ -42,8 +42,18 @@ for env_path in (BASE_DIR / ".env", BASE_DIR.parent / ".env"):
 
 
 def build_database_url():
+    database_mode = os.environ.get("ESTOQUE_DATABASE_MODE", "").strip().lower()
     database_url = os.environ.get("DATABASE_URL", "").strip()
+    if database_mode in {"local", "sqlite", "offline"}:
+        return f"sqlite:///{DB_PATH.as_posix()}"
+    online_modes = {"online", "supabase", "postgres", "postgresql"}
+    if database_mode and database_mode not in online_modes:
+        raise ValueError(
+            "ESTOQUE_DATABASE_MODE deve ser 'local' para SQLite ou 'online' para Supabase/Postgres."
+        )
     if not database_url:
+        if database_mode in online_modes:
+            raise ValueError("DATABASE_URL deve ser preenchida quando ESTOQUE_DATABASE_MODE=online.")
         return f"sqlite:///{DB_PATH.as_posix()}"
 
     if database_url.startswith("postgres://"):

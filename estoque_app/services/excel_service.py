@@ -10,13 +10,39 @@ from sqlalchemy import func, or_
 from config import EXPORTS_DIR
 from models import InventoryCount, InventorySession, LabelPrintJob, Movement, SKU, StockBalance
 from services.etiqueta_service import create_label_job
-from services.estoque_service import create_or_update_sku, decimal_to_str, get_sku_by_code, optional_decimal_to_str, to_decimal
+from services.estoque_service import (
+    create_or_update_sku,
+    decimal_to_str,
+    get_sku_by_code,
+    normalize_sku,
+    optional_decimal_to_str,
+    reset_sku_base,
+    register_movement,
+    to_decimal,
+    to_optional_decimal,
+)
 
 
 SKU_IMPORT_COLUMNS = ["SKU", "DESCRICAO", "SALDO_ATUAL", "ESTOQUE_MINIMO"]
 SKU_REQUIRED_COLUMNS = ["SKU", "DESCRICAO"]
 STOCK_COLUMN_ALIASES = ["SALDO_ATUAL", "ESTOQUE_ATUAL", "ESTOQUE", "SALDO"]
 LABEL_IMPORT_COLUMNS = ["SKU", "QUANTIDADE"]
+CONSUMPTION_IMPORT_COLUMNS = ["SKU", "UNIDADE_DE_MEDIDA", "SALDO_CONSUMIDO"]
+COMMITMENT_IMPORT_COLUMNS = ["SKU", "UNIDADE_DE_MEDIDA", "SALDO_EMPENHADO"]
+CONSUMPTION_UNIT_ALIASES = ["UNIDADE_DE_MEDIDA", "UNIDADE_MEDIDA", "UNIDADE", "UM"]
+CONSUMPTION_QTY_ALIASES = [
+    "SALDO_CONSUMIDO",
+    "CONSUMO_REAL",
+    "QUANTIDADE_CONSUMIDA",
+    "QTD_CONSUMIDA",
+    "CONSUMIDO",
+]
+COMMITMENT_QTY_ALIASES = [
+    "SALDO_EMPENHADO",
+    "QUANTIDADE_EMPENHADA",
+    "QTD_EMPENHADA",
+    "EMPENHADO",
+]
 
 
 def _normalize_header(value):
@@ -52,6 +78,19 @@ def _first_cell(ws, row_number, headers, column_names, default=None):
     return default
 
 
+def _find_header(headers, aliases):
+    for alias in aliases:
+        if alias in headers:
+            return alias
+    return None
+
+
+def _normalize_text(value):
+    text = unicodedata.normalize("NFKD", str(value or "").strip())
+    text = "".join(char for char in text if not unicodedata.combining(char))
+    return re.sub(r"\s+", " ", text.upper()).strip()
+
+
 def _style_header(ws):
     fill = PatternFill("solid", fgColor="1F6FEB")
     for cell in ws[1]:
@@ -68,7 +107,9 @@ def import_skus_from_excel(db, file_obj):
     if missing:
         raise ValueError(f"Colunas ausentes: {', '.join(missing)}")
 
-    result = {"created": 0, "updated": 0, "errors": []}
+    result = {"created": 0, "updated": 0, "deleted": {}, "errors": []}
+    rows = []
+    seen_skus = set()
     for row_number in range(header_row + 1, ws.max_row + 1):
         raw_sku = ws.cell(row_number, headers["SKU"]).value
         raw_desc = ws.cell(row_number, headers["DESCRICAO"]).value
@@ -87,15 +128,45 @@ def import_skus_from_excel(db, file_obj):
             data["estoque_minimo"] = _cell(ws, row_number, headers, "ESTOQUE_MINIMO")
         if any(column in headers for column in STOCK_COLUMN_ALIASES):
             data["saldo_atual"] = _first_cell(ws, row_number, headers, STOCK_COLUMN_ALIASES, "0")
+
         try:
-            _, created = create_or_update_sku(db, data)
+            sku_code = normalize_sku(raw_sku)
+            if not sku_code:
+                raise ValueError("SKU e obrigatorio.")
+            if not str(raw_desc or "").strip():
+                raise ValueError("Descricao e obrigatoria.")
+            if sku_code in seen_skus:
+                raise ValueError("SKU duplicado na planilha.")
+            seen_skus.add(sku_code)
+            if "estoque_minimo" in data:
+                to_optional_decimal(data.get("estoque_minimo"))
+            if "saldo_atual" in data:
+                to_decimal(data.get("saldo_atual"))
+            rows.append(data)
+        except Exception as exc:
+            result["errors"].append(f"Linha {row_number}: {exc}")
+
+    if not rows and not result["errors"]:
+        result["errors"].append("Nenhum SKU encontrado na planilha.")
+    if result["errors"]:
+        db.rollback()
+        return result
+
+    try:
+        result["deleted"] = reset_sku_base(db)
+        for data in rows:
+            _, created = create_or_update_sku(db, data, commit=False)
             if created:
                 result["created"] += 1
             else:
                 result["updated"] += 1
-        except Exception as exc:
-            db.rollback()
-            result["errors"].append(f"Linha {row_number}: {exc}")
+        db.commit()
+    except Exception as exc:
+        db.rollback()
+        result["created"] = 0
+        result["updated"] = 0
+        result["deleted"] = {}
+        result["errors"].append(str(exc))
     return result
 
 
@@ -131,10 +202,163 @@ def import_label_jobs_from_excel(db, file_obj, user_id, inventory_session_id=Non
     return result
 
 
+def import_consumption_from_excel(db, file_obj, user_id, documento="", observacao="", allow_negative=False):
+    wb = load_workbook(file_obj, data_only=True)
+    ws = wb.active
+    headers, header_row = _headers(ws, ["SKU"])
+    qty_header = _find_header(headers, CONSUMPTION_QTY_ALIASES)
+    unit_header = _find_header(headers, CONSUMPTION_UNIT_ALIASES)
+    missing = []
+    if "SKU" not in headers:
+        missing.append("SKU")
+    if not unit_header:
+        missing.append("UNIDADE_DE_MEDIDA")
+    if not qty_header:
+        missing.append("SALDO_CONSUMIDO")
+    if missing:
+        raise ValueError(f"Colunas ausentes: {', '.join(missing)}")
+
+    result = {"processed": 0, "total_consumed": "0", "errors": []}
+    rows = []
+    total_consumed = to_decimal(0)
+    for row_number in range(header_row + 1, ws.max_row + 1):
+        raw_sku = ws.cell(row_number, headers["SKU"]).value
+        raw_unit = ws.cell(row_number, headers[unit_header]).value
+        raw_consumed = ws.cell(row_number, headers[qty_header]).value
+        if not raw_sku and not raw_unit and not raw_consumed:
+            continue
+
+        try:
+            sku = get_sku_by_code(db, raw_sku, active_only=True)
+            if not sku:
+                raise ValueError("SKU nao cadastrado ou inativo")
+            if raw_unit is None or str(raw_unit).strip() == "":
+                raise ValueError("Unidade de medida e obrigatoria")
+            if sku.unidade and _normalize_text(raw_unit) != _normalize_text(sku.unidade):
+                raise ValueError(f"Unidade divergente. Cadastro: {sku.unidade}")
+            consumed = to_decimal(raw_consumed)
+            if consumed <= 0:
+                raise ValueError("Saldo consumido deve ser maior que zero")
+            if not allow_negative:
+                saldo_atual = to_decimal(sku.balance.saldo_atual if sku.balance else 0)
+                if saldo_atual - consumed < 0:
+                    raise ValueError("Saldo insuficiente para baixa")
+            rows.append((row_number, sku, str(raw_unit).strip(), consumed))
+            total_consumed += consumed
+        except Exception as exc:
+            result["errors"].append(f"Linha {row_number}: {raw_sku or ''} - {exc}")
+
+    if not rows and not result["errors"]:
+        result["errors"].append("Nenhum consumo encontrado na planilha.")
+    if result["errors"]:
+        db.rollback()
+        return result
+
+    try:
+        document = documento or f"BAIXA-EXCEL-{datetime.now().strftime('%Y%m%d-%H%M%S')}"
+        for row_number, sku, unidade, consumed in rows:
+            note = observacao or f"Baixa por consumo real via planilha. Linha {row_number}; unidade {unidade}."
+            register_movement(
+                db,
+                sku,
+                "BAIXA",
+                consumed,
+                user_id,
+                documento=document,
+                observacao=note,
+                allow_negative=allow_negative,
+                commit=False,
+            )
+            result["processed"] += 1
+        db.commit()
+        result["total_consumed"] = decimal_to_str(total_consumed)
+    except Exception as exc:
+        db.rollback()
+        result["processed"] = 0
+        result["total_consumed"] = "0"
+        result["errors"].append(str(exc))
+    return result
+
+
+def import_commitments_from_excel(db, file_obj, user_id, documento="", observacao=""):
+    wb = load_workbook(file_obj, data_only=True)
+    ws = wb.active
+    headers, header_row = _headers(ws, ["SKU"])
+    qty_header = _find_header(headers, COMMITMENT_QTY_ALIASES)
+    unit_header = _find_header(headers, CONSUMPTION_UNIT_ALIASES)
+    missing = []
+    if "SKU" not in headers:
+        missing.append("SKU")
+    if not unit_header:
+        missing.append("UNIDADE_DE_MEDIDA")
+    if not qty_header:
+        missing.append("SALDO_EMPENHADO")
+    if missing:
+        raise ValueError(f"Colunas ausentes: {', '.join(missing)}")
+
+    result = {"processed": 0, "total_committed": "0", "errors": []}
+    rows = []
+    total_committed = to_decimal(0)
+    for row_number in range(header_row + 1, ws.max_row + 1):
+        raw_sku = ws.cell(row_number, headers["SKU"]).value
+        raw_unit = ws.cell(row_number, headers[unit_header]).value
+        raw_committed = ws.cell(row_number, headers[qty_header]).value
+        if not raw_sku and not raw_unit and not raw_committed:
+            continue
+
+        try:
+            sku = get_sku_by_code(db, raw_sku, active_only=True)
+            if not sku:
+                raise ValueError("SKU nao cadastrado ou inativo")
+            if raw_unit is None or str(raw_unit).strip() == "":
+                raise ValueError("Unidade de medida e obrigatoria")
+            if sku.unidade and _normalize_text(raw_unit) != _normalize_text(sku.unidade):
+                raise ValueError(f"Unidade divergente. Cadastro: {sku.unidade}")
+            committed = to_decimal(raw_committed)
+            if committed <= 0:
+                raise ValueError("Saldo empenhado deve ser maior que zero")
+            rows.append((row_number, sku, str(raw_unit).strip(), committed))
+            total_committed += committed
+        except Exception as exc:
+            result["errors"].append(f"Linha {row_number}: {raw_sku or ''} - {exc}")
+
+    if not rows and not result["errors"]:
+        result["errors"].append("Nenhum empenho encontrado na planilha.")
+    if result["errors"]:
+        db.rollback()
+        return result
+
+    try:
+        document = documento or f"EMPENHO-EXCEL-{datetime.now().strftime('%Y%m%d-%H%M%S')}"
+        for row_number, sku, unidade, committed in rows:
+            note = observacao or f"Empenho inicial via planilha. Linha {row_number}; unidade {unidade}."
+            register_movement(
+                db,
+                sku,
+                "EMPENHO",
+                committed,
+                user_id,
+                documento=document,
+                observacao=note,
+                commit=False,
+            )
+            result["processed"] += 1
+        db.commit()
+        result["total_committed"] = decimal_to_str(total_committed)
+    except Exception as exc:
+        db.rollback()
+        result["processed"] = 0
+        result["total_committed"] = "0"
+        result["errors"].append(str(exc))
+    return result
+
+
 def create_template_files(base_dir):
     template_path = Path(base_dir) / "template_importacao_skus.xlsx"
     sample_path = Path(base_dir) / "dados_exemplo.xlsx"
     label_template_path = Path(base_dir) / "template_etiquetas_lote.xlsx"
+    consumption_template_path = Path(base_dir) / "template_baixa_consumo.xlsx"
+    commitment_template_path = Path(base_dir) / "template_empenhos.xlsx"
 
     wb = Workbook()
     ws = wb.active
@@ -172,7 +396,29 @@ def create_template_files(base_dir):
     ws.column_dimensions["B"].width = 16
     wb.save(label_template_path)
 
-    return template_path, sample_path, label_template_path
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Baixa"
+    ws.append(CONSUMPTION_IMPORT_COLUMNS)
+    ws.append(["PAR-0001", "UN", 3])
+    ws.append(["CAB-0012", "M", 12.5])
+    _style_header(ws)
+    for width, column in zip([22, 22, 20], "ABC"):
+        ws.column_dimensions[column].width = width
+    wb.save(consumption_template_path)
+
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Empenhos"
+    ws.append(COMMITMENT_IMPORT_COLUMNS)
+    ws.append(["PAR-0001", "UN", 5])
+    ws.append(["CAB-0012", "M", 18])
+    _style_header(ws)
+    for width, column in zip([22, 22, 20], "ABC"):
+        ws.column_dimensions[column].width = width
+    wb.save(commitment_template_path)
+
+    return template_path, sample_path, label_template_path, consumption_template_path, commitment_template_path
 
 
 def _metadata(ws, title, user, filters=None):
@@ -255,8 +501,14 @@ def export_movements_report(db, user, tipo=None):
     wb = Workbook()
     ws = wb.active
     ws.title = "Movimentacoes"
-    title = "Relatorio completo de movimentacoes" if not tipo else f"Relatorio de {tipo.lower()}"
-    _metadata(ws, title, user, f"tipo={tipo}" if tipo else "Sem filtros")
+    if isinstance(tipo, (list, tuple, set)):
+        tipo_label = ", ".join(tipo)
+        title = f"Relatorio de {tipo_label.lower()}"
+        filter_label = f"tipo={tipo_label}"
+    else:
+        title = "Relatorio completo de movimentacoes" if not tipo else f"Relatorio de {tipo.lower()}"
+        filter_label = f"tipo={tipo}" if tipo else "Sem filtros"
+    _metadata(ws, title, user, filter_label)
     ws.append([
         "ID",
         "Data/Hora",
@@ -271,16 +523,19 @@ def export_movements_report(db, user, tipo=None):
         "Observacao",
     ])
     query = db.query(Movement).join(SKU)
-    if tipo:
+    if isinstance(tipo, (list, tuple, set)):
+        query = query.filter(Movement.tipo.in_(tipo))
+    elif tipo:
         query = query.filter(Movement.tipo == tipo)
     for mv in query.order_by(Movement.created_at.desc()).all():
+        tipo_display = "EMPENHO" if mv.tipo == "SAIDA" else mv.tipo
         ws.append([
             mv.id,
             mv.created_at.strftime("%d/%m/%Y %H:%M:%S"),
             mv.usuario.username,
             mv.sku.sku,
             mv.sku.descricao,
-            mv.tipo,
+            tipo_display,
             decimal_to_str(mv.quantidade),
             decimal_to_str(mv.saldo_anterior),
             decimal_to_str(mv.saldo_posterior),
@@ -288,7 +543,11 @@ def export_movements_report(db, user, tipo=None):
             mv.observacao,
         ])
     _autosize(ws)
-    return _save_report(wb, f"relatorio_{tipo.lower() if tipo else 'movimentacoes'}")
+    if isinstance(tipo, (list, tuple, set)):
+        prefix = "relatorio_empenhos"
+    else:
+        prefix = f"relatorio_{tipo.lower() if tipo else 'movimentacoes'}"
+    return _save_report(wb, prefix)
 
 
 def export_inventory_report(db, user, session_id=None):

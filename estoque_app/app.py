@@ -46,7 +46,9 @@ from services.excel_service import (
     export_inventory_report,
     export_movements_report,
     export_stock_report,
+    import_commitments_from_excel,
     import_label_jobs_from_excel,
+    import_consumption_from_excel,
     import_skus_from_excel,
     label_queue_summary,
 )
@@ -54,6 +56,7 @@ from services.estoque_service import (
     adjust_balance_to_count,
     close_inventory_and_adjust,
     dashboard_movement_cache,
+    delete_movement,
     decimal_to_str,
     get_active_inventory_session,
     get_setting,
@@ -106,6 +109,7 @@ def inject_globals():
         "current_user": current_user(),
         "fmt_qty": decimal_to_str,
         "fmt_min": optional_decimal_to_str,
+        "movement_label": movement_label,
         "direct_print_available": direct_print_available(),
         "print_mode": request_print_mode(),
         "database_label": "SQLite local" if Config.SQLALCHEMY_DATABASE_URI.startswith("sqlite") else "Supabase Postgres",
@@ -221,6 +225,18 @@ def can_print_sku(database, sku, user):
 
 def can_access_label_job(job, user):
     return bool(user and (user.role == "ADM" or job.usuario_id == user.id))
+
+
+def movement_label(tipo):
+    labels = {
+        "ENTRADA": "ENTRADA",
+        "SAIDA": "EMPENHO",
+        "EMPENHO": "EMPENHO",
+        "BAIXA": "BAIXA",
+        "INVENTARIO": "INVENTARIO",
+        "AJUSTE": "AJUSTE",
+    }
+    return labels.get(tipo, tipo or "")
 
 
 def is_loopback_request():
@@ -422,12 +438,27 @@ def import_skus():
             flash("Envie um arquivo .xlsx.", "danger")
             return redirect(url_for("import_skus"))
         database = db()
-        result = import_skus_from_excel(database, file)
-        flash(f"Importacao concluida: {result['created']} criados, {result['updated']} atualizados.", "success")
-        for error in result["errors"][:10]:
-            flash(error, "warning")
-        if len(result["errors"]) > 10:
-            flash(f"Mais {len(result['errors']) - 10} erros ocultos.", "warning")
+        try:
+            result = import_skus_from_excel(database, file)
+        except Exception as exc:
+            database.rollback()
+            flash(f"Falha ao importar planilha: {exc}", "danger")
+            return redirect(url_for("import_skus"))
+        if result["errors"]:
+            flash("Importacao cancelada. A base atual nao foi alterada.", "danger")
+            for error in result["errors"][:10]:
+                flash(error, "warning")
+            if len(result["errors"]) > 10:
+                flash(f"Mais {len(result['errors']) - 10} erros ocultos.", "warning")
+        else:
+            deleted = result.get("deleted", {})
+            flash(
+                "Base substituida com sucesso: "
+                f"{result['created']} SKUs importados, "
+                f"{deleted.get('skus', 0)} SKUs antigos removidos e "
+                f"{deleted.get('stock_balances', 0)} saldos antigos resetados.",
+                "success",
+            )
         return redirect(url_for("import_skus"))
     return render_template("import_skus.html")
 
@@ -503,18 +534,17 @@ def saida():
         try:
             sku = get_sku_by_code(database, request.form.get("sku"), active_only=True)
             if not sku:
-                raise ValueError("SKU nao cadastrado ou inativo. Saida bloqueada.")
+                raise ValueError("SKU nao cadastrado ou inativo. Empenho bloqueado.")
             register_movement(
                 database,
                 sku,
-                "SAIDA",
+                "EMPENHO",
                 request.form.get("quantidade"),
                 session["user_id"],
                 documento=request.form.get("documento", ""),
                 observacao=request.form.get("observacao", ""),
-                allow_negative=get_setting_bool(database, "allow_negative_stock", False),
             )
-            flash("Saida registrada com sucesso.", "success")
+            flash("Empenho registrado com sucesso.", "success")
             return redirect(url_for("saida"))
         except Exception as exc:
             database.rollback()
@@ -523,8 +553,73 @@ def saida():
     if sku_code:
         sku = get_sku_by_code(database, sku_code, active_only=True)
         if not sku:
-            flash("SKU nao cadastrado ou inativo. Saida bloqueada.", "danger")
+            flash("SKU nao cadastrado ou inativo. Empenho bloqueado.", "danger")
     return render_template("movement_form.html", mode="saida", sku=sku, sku_code=sku_code)
+
+
+@app.route("/empenhos/importar", methods=["GET", "POST"])
+@login_required
+def import_commitments():
+    database = db()
+    result = None
+    if request.method == "POST":
+        file = request.files.get("file")
+        if not file or not file.filename:
+            flash("Selecione uma planilha Excel para importar.", "danger")
+            return redirect(url_for("import_commitments"))
+        try:
+            result = import_commitments_from_excel(
+                database,
+                file,
+                session["user_id"],
+                documento=request.form.get("documento", ""),
+                observacao=request.form.get("observacao", ""),
+            )
+            if result["errors"]:
+                flash("A planilha possui erros. Nenhum empenho foi registrado.", "danger")
+            else:
+                flash(
+                    f"Empenhos importados: {result['processed']} linha(s), total empenhado {result['total_committed']}.",
+                    "success",
+                )
+                return redirect(url_for("import_commitments"))
+        except Exception as exc:
+            database.rollback()
+            flash(f"Falha ao importar planilha: {exc}", "danger")
+    return render_template("commitment_import.html", result=result)
+
+
+@app.route("/baixa", methods=["GET", "POST"])
+@login_required
+def baixa():
+    database = db()
+    result = None
+    if request.method == "POST":
+        file = request.files.get("file")
+        if not file or not file.filename:
+            flash("Selecione uma planilha Excel para importar.", "danger")
+            return redirect(url_for("baixa"))
+        try:
+            result = import_consumption_from_excel(
+                database,
+                file,
+                session["user_id"],
+                documento=request.form.get("documento", ""),
+                observacao=request.form.get("observacao", ""),
+                allow_negative=get_setting_bool(database, "allow_negative_stock", False),
+            )
+            if result["errors"]:
+                flash("A planilha possui erros. Nenhuma baixa foi registrada.", "danger")
+            else:
+                flash(
+                    f"Baixa importada: {result['processed']} linha(s), total consumido {result['total_consumed']}.",
+                    "success",
+                )
+                return redirect(url_for("baixa"))
+        except Exception as exc:
+            database.rollback()
+            flash(f"Falha ao importar planilha: {exc}", "danger")
+    return render_template("consumption_import.html", result=result)
 
 
 @app.route("/inventario-mobile")
@@ -665,11 +760,37 @@ def movements():
     tipo = request.args.get("tipo", "")
     query = database.query(Movement)
     if user.role != "ADM":
-        query = query.filter(Movement.tipo.in_(["ENTRADA", "SAIDA"]))
+        query = query.filter(Movement.tipo.in_(["ENTRADA", "EMPENHO", "BAIXA", "SAIDA"]))
     if tipo:
-        query = query.filter(Movement.tipo == tipo)
+        if tipo == "EMPENHO":
+            query = query.filter(Movement.tipo.in_(["EMPENHO", "SAIDA"]))
+        else:
+            query = query.filter(Movement.tipo == tipo)
     rows = query.order_by(Movement.created_at.desc()).limit(500).all()
     return render_template("movements.html", movements=rows, tipo=tipo, can_export=user_can_export(database, user))
+
+
+@app.route("/movimentacoes/<int:movement_id>/excluir", methods=["POST"])
+@login_required
+@roles_required("ADM")
+def delete_movement_route(movement_id):
+    database = db()
+    movement = database.get(Movement, movement_id)
+    try:
+        sku_code = movement.sku.sku if movement else ""
+        saldo_corrigido = delete_movement(
+            database,
+            movement,
+            allow_negative=get_setting_bool(database, "allow_negative_stock", False),
+        )
+        flash(
+            f"Movimentacao {movement_id} excluida. Saldo atual de {sku_code}: {decimal_to_str(saldo_corrigido)}.",
+            "success",
+        )
+    except Exception as exc:
+        database.rollback()
+        flash(f"Falha ao excluir movimentacao: {exc}", "danger")
+    return redirect(url_for("movements", tipo=request.form.get("tipo", "")))
 
 
 @app.route("/relatorios")
@@ -691,8 +812,10 @@ def export_report(tipo):
         path = export_stock_report(database, user, {})
     elif tipo == "entradas":
         path = export_movements_report(database, user, "ENTRADA")
-    elif tipo == "saidas":
-        path = export_movements_report(database, user, "SAIDA")
+    elif tipo in {"empenhos", "saidas"}:
+        path = export_movements_report(database, user, ["EMPENHO", "SAIDA"])
+    elif tipo == "baixas":
+        path = export_movements_report(database, user, "BAIXA")
     elif tipo == "movimentacoes":
         path = export_movements_report(database, user)
     elif tipo == "inventario":
@@ -814,8 +937,6 @@ def inventory_labels():
                     .order_by(LabelPrintJob.created_at)
                     .all()
                 )
-                if active_session:
-                    jobs = [job for job in jobs if job.inventory_session_id == active_session.id]
                 chunks = []
                 for job in jobs:
                     path = prepare_label_job_file(database, job)
@@ -844,8 +965,6 @@ def inventory_labels():
 
             elif action == "cancel_pending":
                 query = database.query(LabelPrintJob).filter(LabelPrintJob.status == "PENDENTE")
-                if active_session:
-                    query = query.filter(LabelPrintJob.inventory_session_id == active_session.id)
                 updated = query.update({LabelPrintJob.status: "CANCELADO"}, synchronize_session=False)
                 database.commit()
                 flash(f"{updated} job(s) cancelados.", "success")
@@ -858,8 +977,6 @@ def inventory_labels():
     active_session = get_active_inventory_session(database)
     stats = inventory_stats(database, active_session)
     jobs_query = database.query(LabelPrintJob).order_by(LabelPrintJob.created_at.desc())
-    if active_session:
-        jobs_query = jobs_query.filter(LabelPrintJob.inventory_session_id == active_session.id)
     jobs = jobs_query.limit(200).all()
     counts = []
     if active_session:
@@ -877,7 +994,7 @@ def inventory_labels():
         stats=stats,
         jobs=jobs,
         counts=counts,
-        queue_summary=label_queue_summary(database, active_session.id if active_session else None),
+        queue_summary=label_queue_summary(database),
         skus_for_selection=skus_for_selection,
     )
 
@@ -969,6 +1086,9 @@ def api_label_job_local_result(job_id):
         job.status = "IMPRESSO"
         job.erro = None
         job.printed_at = now_utc()
+    elif payload.get("queue_local"):
+        job.status = "PENDENTE"
+        job.erro = payload.get("error") or local_bridge_unavailable_message()
     else:
         job.status = "ERRO"
         job.erro = payload.get("error") or local_bridge_unavailable_message()
@@ -1058,6 +1178,8 @@ def download_template(name):
         "skus": "template_importacao_skus.xlsx",
         "exemplo": "dados_exemplo.xlsx",
         "etiquetas": "template_etiquetas_lote.xlsx",
+        "baixa": "template_baixa_consumo.xlsx",
+        "empenhos": "template_empenhos.xlsx",
     }
     if name not in allowed:
         flash("Template invalido.", "danger")

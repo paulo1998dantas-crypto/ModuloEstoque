@@ -656,12 +656,12 @@ textarea:focus {
 
 .badge.ok,
 .badge.entrada,
+.badge.baixa,
 .badge.impresso {
     background: #e6f6ed;
     color: var(--success);
 }
 
-.badge.saida,
 .badge.baixo,
 .badge.erro,
 .badge.danger {
@@ -672,6 +672,8 @@ textarea:focus {
 .badge.zerado,
 .badge.pendente,
 .badge.inventario,
+.badge.empenho,
+.badge.saida,
 .badge.ajuste {
     background: #fff4dc;
     color: var(--warning);

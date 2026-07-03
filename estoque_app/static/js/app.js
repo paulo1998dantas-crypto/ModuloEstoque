@@ -72,8 +72,9 @@ async function printJob(row) {
             updateJobRow(row, result.status || "IMPRESSO", "", result.printed_at);
             return printed;
         } catch (error) {
-            await postJsonData(`/api/label-jobs/${id}/local-result`, {ok: false, error: error.message}).catch(() => null);
-            updateJobRow(row, "ERRO", error.message, "");
+            const queuedMessage = `${error.message} Job mantido pendente na fila compartilhada para impressao pelo app local.`;
+            await postJsonData(`/api/label-jobs/${id}/local-result`, {ok: false, queue_local: true, error: queuedMessage}).catch(() => null);
+            updateJobRow(row, "PENDENTE", queuedMessage, "");
             throw error;
         }
     }
@@ -186,8 +187,9 @@ function initSingleLocalPrint() {
             const qty = form ? form.querySelector("input[name='quantidade']") : null;
             button.disabled = true;
             if (progress) progress.textContent = "Gerando ZPL e enviando para a ponte local...";
+            let data;
             try {
-                const data = await postJsonData("/api/labels/zpl", {
+                data = await postJsonData("/api/labels/zpl", {
                     sku: button.dataset.sku,
                     quantidade: qty ? qty.value : 1
                 });
@@ -198,7 +200,11 @@ function initSingleLocalPrint() {
                     progress.textContent = `Etiqueta enviada para a Zebra neste desktop.${printer}`;
                 }
             } catch (error) {
-                if (progress) progress.textContent = error.message;
+                const queuedMessage = `${error.message} Job mantido pendente na fila compartilhada para impressao pelo app local.`;
+                if (data && data.job_id) {
+                    await postJsonData(`/api/label-jobs/${data.job_id}/local-result`, {ok: false, queue_local: true, error: queuedMessage}).catch(() => null);
+                }
+                if (progress) progress.textContent = queuedMessage;
             } finally {
                 button.disabled = false;
             }
