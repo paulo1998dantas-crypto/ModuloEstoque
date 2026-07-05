@@ -18,6 +18,7 @@ from services.estoque_service import (
     optional_decimal_to_str,
     reset_sku_base,
     register_movement,
+    save_inventory_count,
     to_decimal,
     to_optional_decimal,
 )
@@ -31,6 +32,7 @@ CONSUMPTION_IMPORT_COLUMNS = ["SKU", "UNIDADE_DE_MEDIDA", "SALDO_CONSUMIDO"]
 COMMITMENT_IMPORT_COLUMNS = ["SKU", "UNIDADE_DE_MEDIDA", "SALDO_EMPENHADO"]
 BOM_IMPORT_COLUMNS = ["ITEM_CODIGO", "COMPONENTE_CODIGO", "DESCRICAO", "UNIDADE", "QUANTIDADE"]
 BOM_REQUIRED_COLUMNS = ["ITEM_CODIGO", "COMPONENTE_CODIGO", "DESCRICAO", "UNIDADE", "QUANTIDADE"]
+INVENTORY_COUNT_IMPORT_COLUMNS = ["SKU", "UNIDADE_DE_MEDIDA", "SALDO_CONTADO"]
 CONSUMPTION_UNIT_ALIASES = ["UNIDADE_DE_MEDIDA", "UNIDADE_MEDIDA", "UNIDADE", "UM"]
 CONSUMPTION_QTY_ALIASES = [
     "SALDO_CONSUMIDO",
@@ -44,6 +46,13 @@ COMMITMENT_QTY_ALIASES = [
     "QUANTIDADE_EMPENHADA",
     "QTD_EMPENHADA",
     "EMPENHADO",
+]
+INVENTORY_COUNT_QTY_ALIASES = [
+    "SALDO_CONTADO",
+    "QUANTIDADE_CONTADA",
+    "QTD_CONTADA",
+    "CONTAGEM",
+    "SALDO_FISICO",
 ]
 
 
@@ -440,6 +449,66 @@ def import_bom_from_excel(db, file_obj):
     return result
 
 
+def import_inventory_counts_from_excel(db, file_obj, session_id, user_id):
+    wb = load_workbook(file_obj, data_only=True)
+    ws = wb.active
+    headers, header_row = _headers(ws, ["SKU"])
+    qty_header = _find_header(headers, INVENTORY_COUNT_QTY_ALIASES)
+    unit_header = _find_header(headers, CONSUMPTION_UNIT_ALIASES)
+    missing = []
+    if "SKU" not in headers:
+        missing.append("SKU")
+    if not qty_header:
+        missing.append("SALDO_CONTADO")
+    if missing:
+        raise ValueError(f"Colunas ausentes: {', '.join(missing)}")
+
+    result = {"processed": 0, "errors": []}
+    rows = []
+    seen_skus = set()
+    for row_number in range(header_row + 1, ws.max_row + 1):
+        raw_sku = ws.cell(row_number, headers["SKU"]).value
+        raw_unit = ws.cell(row_number, headers[unit_header]).value if unit_header else ""
+        raw_counted = ws.cell(row_number, headers[qty_header]).value
+        if not raw_sku and not raw_unit and raw_counted in (None, ""):
+            continue
+
+        try:
+            sku = get_sku_by_code(db, raw_sku, active_only=True)
+            if not sku:
+                raise ValueError("SKU nao cadastrado ou inativo")
+            sku_code = normalize_sku(raw_sku)
+            if sku_code in seen_skus:
+                raise ValueError("SKU duplicado na planilha")
+            seen_skus.add(sku_code)
+            if raw_unit is not None and str(raw_unit).strip():
+                if sku.unidade and _normalize_text(raw_unit) != _normalize_text(sku.unidade):
+                    raise ValueError(f"Unidade divergente. Cadastro: {sku.unidade}")
+            counted = to_decimal(raw_counted)
+            if counted < 0:
+                raise ValueError("Saldo contado nao pode ser negativo")
+            rows.append((row_number, sku, counted))
+        except Exception as exc:
+            result["errors"].append(f"Linha {row_number}: {raw_sku or ''} - {exc}")
+
+    if not rows and not result["errors"]:
+        result["errors"].append("Nenhuma contagem encontrada na planilha.")
+    if result["errors"]:
+        db.rollback()
+        return result
+
+    try:
+        for _, sku, counted in rows:
+            save_inventory_count(db, session_id, sku, counted, user_id, commit=False)
+            result["processed"] += 1
+        db.commit()
+    except Exception as exc:
+        db.rollback()
+        result["processed"] = 0
+        result["errors"].append(str(exc))
+    return result
+
+
 def create_template_files(base_dir):
     template_path = Path(base_dir) / "template_importacao_skus.xlsx"
     sample_path = Path(base_dir) / "dados_exemplo.xlsx"
@@ -447,6 +516,7 @@ def create_template_files(base_dir):
     consumption_template_path = Path(base_dir) / "template_baixa_consumo.xlsx"
     commitment_template_path = Path(base_dir) / "template_empenhos.xlsx"
     bom_template_path = Path(base_dir) / "template_bom.xlsx"
+    inventory_count_template_path = Path(base_dir) / "template_contagem_inventario.xlsx"
 
     wb = Workbook()
     ws = wb.active
@@ -517,7 +587,26 @@ def create_template_files(base_dir):
         ws.column_dimensions[column].width = width
     wb.save(bom_template_path)
 
-    return template_path, sample_path, label_template_path, consumption_template_path, commitment_template_path, bom_template_path
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Contagem"
+    ws.append(INVENTORY_COUNT_IMPORT_COLUMNS)
+    ws.append(["PAR-0001", "UN", 124])
+    ws.append(["CAB-0012", "M", 78.5])
+    _style_header(ws)
+    for width, column in zip([22, 22, 18], "ABC"):
+        ws.column_dimensions[column].width = width
+    wb.save(inventory_count_template_path)
+
+    return (
+        template_path,
+        sample_path,
+        label_template_path,
+        consumption_template_path,
+        commitment_template_path,
+        bom_template_path,
+        inventory_count_template_path,
+    )
 
 
 def _metadata(ws, title, user, filters=None):

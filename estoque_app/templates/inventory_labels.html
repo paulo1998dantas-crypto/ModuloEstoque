@@ -8,6 +8,7 @@
     </div>
     <div class="actions">
         <a class="btn secondary" href="{{ url_for('download_template', name='etiquetas') }}">Template etiquetas</a>
+        <a class="btn secondary" href="{{ url_for('download_template', name='contagem_inventario') }}">Template contagem</a>
         {% if active_session %}
         <a class="btn secondary" href="{{ url_for('export_inventory_preview_route') }}">Exportar previa</a>
         {% endif %}
@@ -71,6 +72,25 @@
             </label>
             <button class="btn primary large" type="submit">Salvar contagem</button>
         </form>
+    </section>
+
+    <section class="panel">
+        <h2>Contagem em massa</h2>
+        {% if active_session %}
+        <form method="post" class="form-grid" enctype="multipart/form-data">
+            <input type="hidden" name="action" value="import_counts">
+            <label>Planilha de contagem
+                <input type="file" name="file" accept=".xlsx,.xlsm,.xltx,.xltm" required>
+            </label>
+            <div class="note">Colunas: SKU, UNIDADE_DE_MEDIDA e SALDO_CONTADO. SKUs repetidos cancelam a importacao.</div>
+            <button class="btn primary large" type="submit">Importar contagem</button>
+        </form>
+        {% else %}
+        <div class="empty-state">
+            <strong>Abra uma sessao de inventario</strong>
+            <p>A importacao em massa grava contagens dentro da sessao aberta.</p>
+        </div>
+        {% endif %}
     </section>
 </section>
 

@@ -384,7 +384,7 @@ def open_inventory_session(db, user_id, observacao=""):
     return session, True
 
 
-def save_inventory_count(db, session_id, sku, quantidade_contada, user_id):
+def save_inventory_count(db, session_id, sku, quantidade_contada, user_id, commit=True):
     quantidade_contada = to_decimal(quantidade_contada)
     if quantidade_contada < 0:
         raise ValueError("Quantidade contada nao pode ser negativa.")
@@ -406,7 +406,10 @@ def save_inventory_count(db, session_id, sku, quantidade_contada, user_id):
     count.diferenca = diferenca
     count.counted_by = user_id
     count.counted_at = now_utc()
-    db.commit()
+    if commit:
+        db.commit()
+    else:
+        db.flush()
     return count
 
 

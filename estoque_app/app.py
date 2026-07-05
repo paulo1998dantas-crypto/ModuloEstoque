@@ -48,6 +48,7 @@ from services.excel_service import (
     export_stock_report,
     import_commitments_from_excel,
     import_bom_from_excel,
+    import_inventory_counts_from_excel,
     import_label_jobs_from_excel,
     import_consumption_from_excel,
     import_skus_from_excel,
@@ -1002,6 +1003,17 @@ def inventory_labels():
                 for error in result["errors"][:10]:
                     flash(error, "warning")
 
+            elif action == "import_counts":
+                if not active_session:
+                    raise ValueError("Abra uma sessao de inventario antes de importar contagens.")
+                file = request.files.get("file")
+                if not file or not file.filename.lower().endswith((".xlsx", ".xlsm", ".xltx", ".xltm")):
+                    raise ValueError("Envie uma planilha Excel valida com SKU e SALDO_CONTADO.")
+                result = import_inventory_counts_from_excel(database, file, active_session.id, user.id)
+                if result["errors"]:
+                    raise ValueError("Importacao cancelada. " + " | ".join(result["errors"][:5]))
+                flash(f"Contagem em massa importada: {result['processed']} SKU(s) contados.", "success")
+
             elif action == "save_all_zpl":
                 jobs = (
                     database.query(LabelPrintJob)
@@ -1253,6 +1265,7 @@ def download_template(name):
         "baixa": "template_baixa_consumo.xlsx",
         "empenhos": "template_empenhos.xlsx",
         "bom": "template_bom.xlsx",
+        "contagem_inventario": "template_contagem_inventario.xlsx",
     }
     if name not in allowed:
         flash("Template invalido.", "danger")

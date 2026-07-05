@@ -225,6 +225,7 @@ O sistema gera os arquivos:
 - `template_baixa_consumo.xlsx`
 - `template_empenhos.xlsx`
 - `template_bom.xlsx`
+- `template_contagem_inventario.xlsx`
 
 Tambem e possivel baixa-los pela interface.
 
@@ -239,7 +240,8 @@ Tambem e possivel baixa-los pela interface.
 7. Para carregar empenhos existentes antes do inventario, use `Empenho > Importar empenhos` com `SKU`, `UNIDADE_DE_MEDIDA` e `SALDO_EMPENHADO`.
 8. Para itens com estrutura de produto, use `B.O.M` e importe `ITEM_CODIGO`, `COMPONENTE_CODIGO`, `DESCRICAO`, `UNIDADE` e `QUANTIDADE`.
 9. Ao dar entrada em um item pai com B.O.M cadastrada, revise o pop-up de backflush para alterar, incluir ou excluir componentes antes de confirmar.
-10. Para baixa do consumo real, use `Baixa` e importe a planilha com `SKU`, `UNIDADE_DE_MEDIDA` e `SALDO_CONSUMIDO`.
+10. Para importar contagens em massa, abra uma sessao em `Inventario ADM` e envie a planilha com `SKU`, `UNIDADE_DE_MEDIDA` e `SALDO_CONTADO`.
+11. Para baixa do consumo real, use `Baixa` e importe a planilha com `SKU`, `UNIDADE_DE_MEDIDA` e `SALDO_CONSUMIDO`.
 
 Os campos de leitura recebem foco automatico e aceitam leitores USB que funcionam como teclado.
 
