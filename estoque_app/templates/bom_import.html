@@ -1,0 +1,81 @@
+{% extends "base.html" %}
+{% block title %}Importar B.O.M - Estoque{% endblock %}
+{% block content %}
+<section class="page-head">
+    <div>
+        <h1>Importar B.O.M</h1>
+        <p>Cadastre estruturas de produto para consumo automatico na entrada.</p>
+    </div>
+    <a class="btn secondary" href="{{ url_for('download_template', name='bom') }}">Baixar modelo</a>
+</section>
+
+<section class="split">
+    <form method="post" enctype="multipart/form-data" class="panel form-grid">
+        <label>Planilha Excel
+            <input type="file" name="file" accept=".xlsx,.xlsm,.xltx,.xltm" required>
+        </label>
+        <div class="note">
+            Ao importar, as estruturas dos itens presentes na planilha sao substituidas. Itens que nao aparecem na planilha permanecem iguais.
+        </div>
+        <button class="btn primary large" type="submit">Importar B.O.M</button>
+    </form>
+
+    <section class="panel">
+        <h2>Layout da planilha</h2>
+        <div class="table-wrap">
+            <table>
+                <thead>
+                    <tr>
+                        <th>ITEM_CODIGO</th>
+                        <th>COMPONENTE_CODIGO</th>
+                        <th>DESCRICAO</th>
+                        <th>UNIDADE</th>
+                        <th>QUANTIDADE</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td>PROD-0001</td>
+                        <td>PAR-0001</td>
+                        <td>Parafuso sextavado M8 x 30 zincado</td>
+                        <td>UN</td>
+                        <td class="num">4</td>
+                    </tr>
+                    <tr>
+                        <td>PROD-0001</td>
+                        <td>CAB-0012</td>
+                        <td>Cabo eletrico flexivel 2,5 mm preto</td>
+                        <td>M</td>
+                        <td class="num">2,5</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </section>
+</section>
+
+{% if result and result.errors %}
+<section class="panel">
+    <div class="panel-head">
+        <h2>Erros encontrados</h2>
+        <span class="badge erro">{{ result.errors|length }}</span>
+    </div>
+    <div class="table-wrap">
+        <table>
+            <thead>
+                <tr>
+                    <th>Mensagem</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for error in result.errors %}
+                <tr>
+                    <td>{{ error }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</section>
+{% endif %}
+{% endblock %}

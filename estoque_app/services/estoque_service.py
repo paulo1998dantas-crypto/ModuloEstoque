@@ -4,6 +4,7 @@ from sqlalchemy import func
 
 from models import (
     AppSetting,
+    BomComponent,
     DashboardMovementCache,
     InventoryCount,
     InventorySession,
@@ -224,6 +225,109 @@ def register_movement(db, sku, tipo, quantidade, usuario_id, documento="", obser
     return movement
 
 
+def bom_components_for_sku(db, sku):
+    if sku is None:
+        return []
+    return (
+        db.query(BomComponent)
+        .filter(BomComponent.item_sku_id == sku.id)
+        .order_by(BomComponent.id)
+        .all()
+    )
+
+
+def build_backflush_preview(db, sku, entry_qty):
+    entry_qty = to_decimal(entry_qty)
+    if entry_qty <= 0:
+        raise ValueError("Quantidade deve ser maior que zero.")
+
+    rows = []
+    for component in bom_components_for_sku(db, sku):
+        component_sku = component.component_sku
+        required_qty = to_decimal(component.quantidade) * entry_qty
+        saldo_atual = component_sku.balance.saldo_atual if component_sku and component_sku.balance else 0
+        rows.append(
+            {
+                "sku": component_sku.sku if component_sku else "",
+                "descricao": component.descricao or (component_sku.descricao if component_sku else ""),
+                "unidade": component.unidade or (component_sku.unidade if component_sku else ""),
+                "quantidade": decimal_to_str(required_qty),
+                "saldo_atual": decimal_to_str(saldo_atual),
+                "bom_quantidade": decimal_to_str(component.quantidade),
+            }
+        )
+    return rows
+
+
+def parse_backflush_rows(db, component_codes, component_quantities):
+    rows_by_sku = {}
+    max_len = max(len(component_codes), len(component_quantities))
+    for index in range(max_len):
+        raw_code = component_codes[index] if index < len(component_codes) else ""
+        raw_qty = component_quantities[index] if index < len(component_quantities) else ""
+        if not str(raw_code or "").strip() and not str(raw_qty or "").strip():
+            continue
+
+        sku = get_sku_by_code(db, raw_code, active_only=True)
+        if not sku:
+            raise ValueError(f"Backflush linha {index + 1}: componente nao cadastrado ou inativo.")
+        qty = to_decimal(raw_qty)
+        if qty <= 0:
+            raise ValueError(f"Backflush linha {index + 1}: quantidade deve ser maior que zero.")
+
+        key = normalize_sku(raw_code)
+        if key in rows_by_sku:
+            rows_by_sku[key]["quantidade"] += qty
+        else:
+            rows_by_sku[key] = {"sku": sku, "quantidade": qty}
+    return list(rows_by_sku.values())
+
+
+def register_entry_with_backflush(
+    db,
+    sku,
+    quantidade,
+    usuario_id,
+    component_rows,
+    documento="",
+    observacao="",
+    allow_negative=False,
+):
+    document = documento or f"ENTRADA-BACKFLUSH-{now_utc().strftime('%Y%m%d-%H%M%S')}"
+    entry = register_movement(
+        db,
+        sku,
+        "ENTRADA",
+        quantidade,
+        usuario_id,
+        documento=document,
+        observacao=observacao,
+        commit=False,
+    )
+    for row in component_rows:
+        component_sku = row["sku"]
+        consumed = row["quantidade"]
+        note = (
+            f"Backflush da entrada {entry.id} do item {sku.sku}. "
+            f"Quantidade entrada: {decimal_to_str(quantidade)}."
+        )
+        if observacao:
+            note = f"{note} {observacao}"
+        register_movement(
+            db,
+            component_sku,
+            "BAIXA",
+            consumed,
+            usuario_id,
+            documento=document,
+            observacao=note,
+            allow_negative=allow_negative,
+            commit=False,
+        )
+    db.commit()
+    return entry
+
+
 def delete_movement(db, movement, allow_negative=False):
     if movement is None:
         raise ValueError("Movimentacao nao encontrada.")
@@ -399,6 +503,7 @@ def reset_sku_base(db):
     deleted["inventory_sessions"] = db.query(InventorySession).delete(synchronize_session=False)
     deleted["movements"] = db.query(Movement).delete(synchronize_session=False)
     deleted["dashboard_movement_cache"] = db.query(DashboardMovementCache).delete(synchronize_session=False)
+    deleted["bom_components"] = db.query(BomComponent).delete(synchronize_session=False)
     deleted["stock_balances"] = db.query(StockBalance).delete(synchronize_session=False)
     deleted["skus"] = db.query(SKU).delete(synchronize_session=False)
     db.flush()

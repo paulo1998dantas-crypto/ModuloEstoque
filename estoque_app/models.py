@@ -49,6 +49,11 @@ class SKU(Base):
 
     balance = relationship("StockBalance", back_populates="sku", uselist=False)
     movements = relationship("Movement", back_populates="sku")
+    bom_components = relationship(
+        "BomComponent",
+        foreign_keys="BomComponent.item_sku_id",
+        back_populates="item_sku",
+    )
 
 
 class StockBalance(Base):
@@ -98,6 +103,25 @@ class DashboardMovementCache(Base):
     documento = Column(String(120), nullable=True)
     observacao = Column(Text, nullable=True)
     cached_at = Column(DateTime, nullable=False, default=now_utc)
+
+
+class BomComponent(Base):
+    __tablename__ = "bom_components"
+    __table_args__ = (
+        UniqueConstraint("item_sku_id", "component_sku_id", name="uq_bom_item_component"),
+    )
+
+    id = Column(Integer, primary_key=True)
+    item_sku_id = Column(Integer, ForeignKey("skus.id"), nullable=False, index=True)
+    component_sku_id = Column(Integer, ForeignKey("skus.id"), nullable=False, index=True)
+    descricao = Column(String(255), nullable=True)
+    unidade = Column(String(20), nullable=True)
+    quantidade = Column(Numeric(14, 3), nullable=False)
+    created_at = Column(DateTime, nullable=False, default=now_utc)
+    updated_at = Column(DateTime, nullable=False, default=now_utc, onupdate=now_utc)
+
+    item_sku = relationship("SKU", foreign_keys=[item_sku_id], back_populates="bom_components")
+    component_sku = relationship("SKU", foreign_keys=[component_sku_id])
 
 
 class InventorySession(Base):

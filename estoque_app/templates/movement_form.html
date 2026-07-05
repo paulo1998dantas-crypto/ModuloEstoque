@@ -9,6 +9,8 @@
     </div>
     {% if not is_entry %}
     <a class="btn secondary" href="{{ url_for('import_commitments') }}">Importar empenhos</a>
+    {% elif current_user.role == 'ADM' %}
+    <a class="btn secondary" href="{{ url_for('import_bom') }}">Importar B.O.M</a>
     {% endif %}
 </section>
 
@@ -48,4 +50,58 @@
         {% endif %}
     </form>
 </section>
+
+{% if backflush %}
+<div class="modal-backdrop" data-backflush-modal>
+    <section class="modal-panel">
+        <div class="panel-head">
+            <div>
+                <h2>Confirmar consumo da B.O.M</h2>
+                <p class="muted">{{ sku.sku }} - entrada de {{ backflush.quantidade }} {{ sku.unidade or "" }}</p>
+            </div>
+            <a class="btn secondary" href="{{ url_for('entrada', sku=sku.sku) }}">Cancelar</a>
+        </div>
+
+        <form method="post" class="form-grid">
+            <input type="hidden" name="confirm_backflush" value="1">
+            <input type="hidden" name="sku" value="{{ sku.sku }}">
+            <input type="hidden" name="quantidade" value="{{ backflush.quantidade }}">
+            <input type="hidden" name="documento" value="{{ backflush.documento }}">
+            <input type="hidden" name="observacao" value="{{ backflush.observacao }}">
+
+            <div class="table-wrap">
+                <table data-bom-table>
+                    <thead>
+                        <tr>
+                            <th>Componente</th>
+                            <th>Descricao</th>
+                            <th>Un</th>
+                            <th>Saldo</th>
+                            <th>Qtd consumo</th>
+                            <th></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for component in backflush.components %}
+                        <tr data-bom-row>
+                            <td><input name="component_sku" value="{{ component.sku }}" required></td>
+                            <td>{{ component.descricao }}</td>
+                            <td>{{ component.unidade }}</td>
+                            <td class="num">{{ component.saldo_atual }}</td>
+                            <td><input name="component_quantidade" inputmode="decimal" value="{{ component.quantidade }}" required></td>
+                            <td><button class="btn small danger" type="button" data-remove-bom-row>Excluir</button></td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+
+            <div class="actions">
+                <button class="btn secondary" type="button" data-add-bom-row>Adicionar componente</button>
+                <button class="btn primary large" type="submit">Confirmar entrada e backflush</button>
+            </div>
+        </form>
+    </section>
+</div>
+{% endif %}
 {% endblock %}

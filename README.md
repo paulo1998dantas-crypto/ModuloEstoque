@@ -28,7 +28,9 @@ estoque_app/dist/EstoqueJIMontadora.zip
 
 - Login com perfil ADM e OPERADOR
 - Cadastro e importacao Excel de SKUs
+- Cadastro e importacao Excel de B.O.M
 - Controle de entrada, empenho, baixa e inventario com historico auditavel
+- Backflush de componentes na entrada de itens com estrutura
 - Importacao Excel de empenhos e baixas por consumo real
 - Inventario online via mobile
 - Impressao Zebra via ZPL

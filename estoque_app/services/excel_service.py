@@ -8,7 +8,7 @@ from openpyxl.styles import Font, PatternFill
 from sqlalchemy import func, or_
 
 from config import EXPORTS_DIR
-from models import InventoryCount, InventorySession, LabelPrintJob, Movement, SKU, StockBalance
+from models import BomComponent, InventoryCount, InventorySession, LabelPrintJob, Movement, SKU, StockBalance
 from services.etiqueta_service import create_label_job
 from services.estoque_service import (
     create_or_update_sku,
@@ -29,6 +29,8 @@ STOCK_COLUMN_ALIASES = ["SALDO_ATUAL", "ESTOQUE_ATUAL", "ESTOQUE", "SALDO"]
 LABEL_IMPORT_COLUMNS = ["SKU", "QUANTIDADE"]
 CONSUMPTION_IMPORT_COLUMNS = ["SKU", "UNIDADE_DE_MEDIDA", "SALDO_CONSUMIDO"]
 COMMITMENT_IMPORT_COLUMNS = ["SKU", "UNIDADE_DE_MEDIDA", "SALDO_EMPENHADO"]
+BOM_IMPORT_COLUMNS = ["ITEM_CODIGO", "COMPONENTE_CODIGO", "DESCRICAO", "UNIDADE", "QUANTIDADE"]
+BOM_REQUIRED_COLUMNS = ["ITEM_CODIGO", "COMPONENTE_CODIGO", "DESCRICAO", "UNIDADE", "QUANTIDADE"]
 CONSUMPTION_UNIT_ALIASES = ["UNIDADE_DE_MEDIDA", "UNIDADE_MEDIDA", "UNIDADE", "UM"]
 CONSUMPTION_QTY_ALIASES = [
     "SALDO_CONSUMIDO",
@@ -353,12 +355,98 @@ def import_commitments_from_excel(db, file_obj, user_id, documento="", observaca
     return result
 
 
+def import_bom_from_excel(db, file_obj):
+    wb = load_workbook(file_obj, data_only=True)
+    ws = wb.active
+    headers, header_row = _headers(ws, BOM_REQUIRED_COLUMNS)
+    missing = [col for col in BOM_REQUIRED_COLUMNS if col not in headers]
+    if missing:
+        raise ValueError(f"Colunas ausentes: {', '.join(missing)}")
+
+    result = {"processed": 0, "items": 0, "deleted": 0, "errors": []}
+    rows = []
+    parent_ids = set()
+    seen_pairs = set()
+    for row_number in range(header_row + 1, ws.max_row + 1):
+        raw_item = ws.cell(row_number, headers["ITEM_CODIGO"]).value
+        raw_component = ws.cell(row_number, headers["COMPONENTE_CODIGO"]).value
+        raw_desc = ws.cell(row_number, headers["DESCRICAO"]).value
+        raw_unit = ws.cell(row_number, headers["UNIDADE"]).value
+        raw_qty = ws.cell(row_number, headers["QUANTIDADE"]).value
+        if not raw_item and not raw_component and not raw_desc and not raw_unit and not raw_qty:
+            continue
+
+        try:
+            item_sku = get_sku_by_code(db, raw_item, active_only=True)
+            if not item_sku:
+                raise ValueError("Item pai nao cadastrado ou inativo")
+            component_sku = get_sku_by_code(db, raw_component, active_only=True)
+            if not component_sku:
+                raise ValueError("Componente nao cadastrado ou inativo")
+            if item_sku.id == component_sku.id:
+                raise ValueError("Item pai e componente nao podem ser iguais")
+            descricao = str(raw_desc or "").strip()
+            if not descricao:
+                raise ValueError("Descricao e obrigatoria")
+            unidade = str(raw_unit or "").strip()
+            if not unidade:
+                raise ValueError("Unidade e obrigatoria")
+            if component_sku.unidade and _normalize_text(unidade) != _normalize_text(component_sku.unidade):
+                raise ValueError(f"Unidade divergente. Cadastro do componente: {component_sku.unidade}")
+            quantidade = to_decimal(raw_qty)
+            if quantidade <= 0:
+                raise ValueError("Quantidade deve ser maior que zero")
+            pair = (item_sku.id, component_sku.id)
+            if pair in seen_pairs:
+                raise ValueError("Componente duplicado para o mesmo item na planilha")
+            seen_pairs.add(pair)
+            parent_ids.add(item_sku.id)
+            rows.append(
+                BomComponent(
+                    item_sku_id=item_sku.id,
+                    component_sku_id=component_sku.id,
+                    descricao=descricao,
+                    unidade=unidade,
+                    quantidade=quantidade,
+                )
+            )
+        except Exception as exc:
+            result["errors"].append(f"Linha {row_number}: {raw_item or ''} / {raw_component or ''} - {exc}")
+
+    if not rows and not result["errors"]:
+        result["errors"].append("Nenhuma estrutura B.O.M encontrada na planilha.")
+    if result["errors"]:
+        db.rollback()
+        return result
+
+    try:
+        deleted = (
+            db.query(BomComponent)
+            .filter(BomComponent.item_sku_id.in_(parent_ids))
+            .delete(synchronize_session=False)
+        )
+        for row in rows:
+            db.add(row)
+        db.commit()
+        result["processed"] = len(rows)
+        result["items"] = len(parent_ids)
+        result["deleted"] = deleted
+    except Exception as exc:
+        db.rollback()
+        result["processed"] = 0
+        result["items"] = 0
+        result["deleted"] = 0
+        result["errors"].append(str(exc))
+    return result
+
+
 def create_template_files(base_dir):
     template_path = Path(base_dir) / "template_importacao_skus.xlsx"
     sample_path = Path(base_dir) / "dados_exemplo.xlsx"
     label_template_path = Path(base_dir) / "template_etiquetas_lote.xlsx"
     consumption_template_path = Path(base_dir) / "template_baixa_consumo.xlsx"
     commitment_template_path = Path(base_dir) / "template_empenhos.xlsx"
+    bom_template_path = Path(base_dir) / "template_bom.xlsx"
 
     wb = Workbook()
     ws = wb.active
@@ -418,7 +506,18 @@ def create_template_files(base_dir):
         ws.column_dimensions[column].width = width
     wb.save(commitment_template_path)
 
-    return template_path, sample_path, label_template_path, consumption_template_path, commitment_template_path
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "BOM"
+    ws.append(BOM_IMPORT_COLUMNS)
+    ws.append(["PROD-0001", "PAR-0001", "Parafuso sextavado M8 x 30 zincado", "UN", 4])
+    ws.append(["PROD-0001", "CAB-0012", "Cabo eletrico flexivel 2,5 mm preto", "M", 2.5])
+    _style_header(ws)
+    for width, column in zip([22, 24, 48, 14, 18], "ABCDE"):
+        ws.column_dimensions[column].width = width
+    wb.save(bom_template_path)
+
+    return template_path, sample_path, label_template_path, consumption_template_path, commitment_template_path, bom_template_path
 
 
 def _metadata(ws, title, user, filters=None):

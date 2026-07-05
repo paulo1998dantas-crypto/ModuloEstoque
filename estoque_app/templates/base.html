@@ -34,6 +34,7 @@
                 <span class="nav-section">Administracao</span>
                 <a href="{{ url_for('inventory_labels') }}" class="{% if request.endpoint == 'inventory_labels' %}active{% endif %}">Inventario ADM</a>
                 <a href="{{ url_for('skus') }}" class="{% if request.endpoint in ['skus', 'sku_form', 'import_skus'] %}active{% endif %}">SKUs</a>
+                <a href="{{ url_for('import_bom') }}" class="{% if request.endpoint == 'import_bom' %}active{% endif %}">B.O.M</a>
                 <a href="{{ url_for('users') }}" class="{% if request.endpoint in ['users', 'toggle_user'] %}active{% endif %}">Usuarios</a>
                 <a href="{{ url_for('settings') }}" class="{% if request.endpoint == 'settings' %}active{% endif %}">Configuracoes</a>
                 {% endif %}

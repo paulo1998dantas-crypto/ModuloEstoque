@@ -47,6 +47,7 @@ from services.excel_service import (
     export_movements_report,
     export_stock_report,
     import_commitments_from_excel,
+    import_bom_from_excel,
     import_label_jobs_from_excel,
     import_consumption_from_excel,
     import_skus_from_excel,
@@ -54,6 +55,7 @@ from services.excel_service import (
 )
 from services.estoque_service import (
     adjust_balance_to_count,
+    build_backflush_preview,
     close_inventory_and_adjust,
     dashboard_movement_cache,
     delete_movement,
@@ -66,7 +68,9 @@ from services.estoque_service import (
     normalize_sku,
     open_inventory_session,
     optional_decimal_to_str,
+    parse_backflush_rows,
     register_movement,
+    register_entry_with_backflush,
     reset_operational_data,
     save_inventory_count,
     set_setting,
@@ -497,19 +501,58 @@ def entrada():
     database = db()
     sku = None
     sku_code = request.args.get("sku", "").strip()
+    backflush = None
     if request.method == "POST":
         try:
             sku = get_sku_by_code(database, request.form.get("sku"), active_only=True)
             if not sku:
                 raise ValueError("SKU nao cadastrado ou inativo. Entrada bloqueada.")
+            quantidade = request.form.get("quantidade")
+            documento = request.form.get("documento", "")
+            observacao = request.form.get("observacao", "")
+            if request.form.get("confirm_backflush") == "1":
+                component_rows = parse_backflush_rows(
+                    database,
+                    request.form.getlist("component_sku"),
+                    request.form.getlist("component_quantidade"),
+                )
+                register_entry_with_backflush(
+                    database,
+                    sku,
+                    quantidade,
+                    session["user_id"],
+                    component_rows,
+                    documento=documento,
+                    observacao=observacao,
+                    allow_negative=get_setting_bool(database, "allow_negative_stock", False),
+                )
+                total_consumed = sum((row["quantidade"] for row in component_rows), to_decimal(0))
+                flash(
+                    f"Entrada registrada com backflush: {len(component_rows)} componente(s), "
+                    f"total consumido {decimal_to_str(total_consumed)}.",
+                    "success",
+                )
+                return redirect(url_for("entrada"))
+
+            bom_rows = build_backflush_preview(database, sku, quantidade)
+            if bom_rows:
+                backflush = {
+                    "quantidade": quantidade,
+                    "documento": documento,
+                    "observacao": observacao,
+                    "components": bom_rows,
+                }
+                flash("Item com B.O.M cadastrada. Confirme o consumo dos componentes.", "warning")
+                return render_template("movement_form.html", mode="entrada", sku=sku, sku_code=sku.sku, backflush=backflush)
+
             register_movement(
                 database,
                 sku,
                 "ENTRADA",
-                request.form.get("quantidade"),
+                quantidade,
                 session["user_id"],
-                documento=request.form.get("documento", ""),
-                observacao=request.form.get("observacao", ""),
+                documento=documento,
+                observacao=observacao,
             )
             flash("Entrada registrada com sucesso.", "success")
             return redirect(url_for("entrada"))
@@ -521,7 +564,36 @@ def entrada():
         sku = get_sku_by_code(database, sku_code, active_only=True)
         if not sku:
             flash("SKU nao cadastrado ou inativo. Entrada bloqueada.", "danger")
-    return render_template("movement_form.html", mode="entrada", sku=sku, sku_code=sku_code)
+    return render_template("movement_form.html", mode="entrada", sku=sku, sku_code=sku_code, backflush=backflush)
+
+
+@app.route("/bom/importar", methods=["GET", "POST"])
+@login_required
+@roles_required("ADM")
+def import_bom():
+    result = None
+    if request.method == "POST":
+        file = request.files.get("file")
+        if not file or not file.filename.lower().endswith((".xlsx", ".xlsm", ".xltx", ".xltm")):
+            flash("Envie uma planilha Excel valida.", "danger")
+            return redirect(url_for("import_bom"))
+        database = db()
+        try:
+            result = import_bom_from_excel(database, file)
+        except Exception as exc:
+            database.rollback()
+            flash(f"Falha ao importar B.O.M: {exc}", "danger")
+            return redirect(url_for("import_bom"))
+        if result["errors"]:
+            flash("Importacao cancelada. Nenhuma estrutura B.O.M foi alterada.", "danger")
+        else:
+            flash(
+                f"B.O.M importada: {result['processed']} componente(s) em "
+                f"{result['items']} item(ns). Estruturas antigas substituidas: {result['deleted']}.",
+                "success",
+            )
+            return redirect(url_for("import_bom"))
+    return render_template("bom_import.html", result=result)
 
 
 @app.route("/saida", methods=["GET", "POST"])
@@ -1180,6 +1252,7 @@ def download_template(name):
         "etiquetas": "template_etiquetas_lote.xlsx",
         "baixa": "template_baixa_consumo.xlsx",
         "empenhos": "template_empenhos.xlsx",
+        "bom": "template_bom.xlsx",
     }
     if name not in allowed:
         flash("Template invalido.", "danger")

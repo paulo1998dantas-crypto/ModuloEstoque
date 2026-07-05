@@ -252,6 +252,40 @@ function initInventoryDiff() {
     update();
 }
 
+function initBackflushBom() {
+    const table = document.querySelector("[data-bom-table]");
+    if (!table) return;
+    const tbody = table.querySelector("tbody");
+
+    function bindRemove(button) {
+        button.addEventListener("click", () => {
+            const row = button.closest("[data-bom-row]");
+            if (row) row.remove();
+        });
+    }
+
+    table.querySelectorAll("[data-remove-bom-row]").forEach(bindRemove);
+
+    const addButton = document.querySelector("[data-add-bom-row]");
+    if (addButton) {
+        addButton.addEventListener("click", () => {
+            const row = document.createElement("tr");
+            row.dataset.bomRow = "1";
+            row.innerHTML = [
+                '<td><input name="component_sku" required placeholder="SKU"></td>',
+                '<td class="muted">Item incluido manualmente</td>',
+                '<td></td>',
+                '<td class="num"></td>',
+                '<td><input name="component_quantidade" inputmode="decimal" required placeholder="0"></td>',
+                '<td><button class="btn small danger" type="button" data-remove-bom-row>Excluir</button></td>'
+            ].join("");
+            tbody.appendChild(row);
+            bindRemove(row.querySelector("[data-remove-bom-row]"));
+            row.querySelector("input").focus();
+        });
+    }
+}
+
 document.addEventListener("DOMContentLoaded", () => {
     focusScanField();
 
@@ -271,4 +305,5 @@ document.addEventListener("DOMContentLoaded", () => {
     initPrintQueue();
     initSingleLocalPrint();
     initInventoryDiff();
+    initBackflushBom();
 });
