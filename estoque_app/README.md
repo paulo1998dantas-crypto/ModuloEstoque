@@ -204,17 +204,16 @@ Colunas opcionais aceitas:
 
 ```text
 SALDO_ATUAL ou ESTOQUE
-ESTOQUE_MINIMO
-UNIDADE
-CATEGORIA
-LOCALIZACAO
 ```
 
 Regras:
 
 - SKU novo e criado.
-- SKU existente e atualizado.
+- SKU existente tem a descricao atualizada.
+- Saldo atual so muda quando `SALDO_ATUAL` ou `ESTOQUE` estiver preenchido na linha.
+- Saldo em branco preserva o saldo atual do item.
 - SKUs ausentes da planilha nao sao apagados.
+- Movimentacoes, inventarios e fila de etiquetas nao sao apagados.
 - Entrada, empenho e baixa so aceitam SKU cadastrado e ativo.
 
 O sistema gera os arquivos:

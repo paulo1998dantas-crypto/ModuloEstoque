@@ -457,12 +457,11 @@ def import_skus():
             if len(result["errors"]) > 10:
                 flash(f"Mais {len(result['errors']) - 10} erros ocultos.", "warning")
         else:
-            deleted = result.get("deleted", {})
             flash(
-                "Base substituida com sucesso: "
-                f"{result['created']} SKUs importados, "
-                f"{deleted.get('skus', 0)} SKUs antigos removidos e "
-                f"{deleted.get('stock_balances', 0)} saldos antigos resetados.",
+                "SKUs atualizados com sucesso: "
+                f"{result['created']} criados, "
+                f"{result['updated']} atualizados e "
+                f"{result['balances_updated']} saldo(s) alterado(s).",
                 "success",
             )
         return redirect(url_for("import_skus"))

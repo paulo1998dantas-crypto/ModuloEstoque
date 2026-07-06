@@ -106,9 +106,12 @@ def create_or_update_sku(db, data, user=None, commit=True):
         created = True
 
     sku.descricao = descricao
-    sku.unidade = str(data.get("unidade") or "").strip() or None
-    sku.categoria = str(data.get("categoria") or "").strip() or None
-    sku.localizacao = str(data.get("localizacao") or "").strip() or None
+    if "unidade" in data:
+        sku.unidade = str(data.get("unidade") or "").strip() or None
+    if "categoria" in data:
+        sku.categoria = str(data.get("categoria") or "").strip() or None
+    if "localizacao" in data:
+        sku.localizacao = str(data.get("localizacao") or "").strip() or None
     if "estoque_minimo" in data:
         sku.estoque_minimo = to_optional_decimal(data.get("estoque_minimo"))
     sku.active = bool(data.get("active", True))

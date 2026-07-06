@@ -16,11 +16,9 @@ from services.estoque_service import (
     get_sku_by_code,
     normalize_sku,
     optional_decimal_to_str,
-    reset_sku_base,
     register_movement,
     save_inventory_count,
     to_decimal,
-    to_optional_decimal,
 )
 
 
@@ -126,7 +124,7 @@ def import_skus_from_excel(db, file_obj):
     if missing:
         raise ValueError(f"Colunas ausentes: {', '.join(missing)}")
 
-    result = {"created": 0, "updated": 0, "deleted": {}, "errors": []}
+    result = {"created": 0, "updated": 0, "balances_updated": 0, "errors": []}
     rows = []
     seen_skus = set()
     for row_number in range(header_row + 1, ws.max_row + 1):
@@ -135,18 +133,16 @@ def import_skus_from_excel(db, file_obj):
         if not raw_sku and not raw_desc:
             continue
 
+        existing_sku = get_sku_by_code(db, raw_sku)
         data = {
             "sku": raw_sku,
             "descricao": raw_desc,
-            "unidade": _cell(ws, row_number, headers, "UNIDADE"),
-            "categoria": _cell(ws, row_number, headers, "CATEGORIA"),
-            "localizacao": _cell(ws, row_number, headers, "LOCALIZACAO"),
-            "active": True,
+            "active": existing_sku.active if existing_sku else True,
         }
-        if "ESTOQUE_MINIMO" in headers:
-            data["estoque_minimo"] = _cell(ws, row_number, headers, "ESTOQUE_MINIMO")
         if any(column in headers for column in STOCK_COLUMN_ALIASES):
-            data["saldo_atual"] = _first_cell(ws, row_number, headers, STOCK_COLUMN_ALIASES, "0")
+            saldo_atual = _first_cell(ws, row_number, headers, STOCK_COLUMN_ALIASES)
+            if saldo_atual is not None and str(saldo_atual).strip() != "":
+                data["saldo_atual"] = saldo_atual
 
         try:
             sku_code = normalize_sku(raw_sku)
@@ -157,8 +153,6 @@ def import_skus_from_excel(db, file_obj):
             if sku_code in seen_skus:
                 raise ValueError("SKU duplicado na planilha.")
             seen_skus.add(sku_code)
-            if "estoque_minimo" in data:
-                to_optional_decimal(data.get("estoque_minimo"))
             if "saldo_atual" in data:
                 to_decimal(data.get("saldo_atual"))
             rows.append(data)
@@ -172,19 +166,20 @@ def import_skus_from_excel(db, file_obj):
         return result
 
     try:
-        result["deleted"] = reset_sku_base(db)
         for data in rows:
             _, created = create_or_update_sku(db, data, commit=False)
             if created:
                 result["created"] += 1
             else:
                 result["updated"] += 1
+            if "saldo_atual" in data:
+                result["balances_updated"] += 1
         db.commit()
     except Exception as exc:
         db.rollback()
         result["created"] = 0
         result["updated"] = 0
-        result["deleted"] = {}
+        result["balances_updated"] = 0
         result["errors"].append(str(exc))
     return result
 
