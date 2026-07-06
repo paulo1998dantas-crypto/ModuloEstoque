@@ -48,6 +48,7 @@ from services.excel_service import (
     export_stock_report,
     import_commitments_from_excel,
     import_bom_from_excel,
+    import_inventory_balance_additions_from_excel,
     import_inventory_counts_from_excel,
     import_label_jobs_from_excel,
     import_consumption_from_excel,
@@ -1014,6 +1015,21 @@ def inventory_labels():
                     raise ValueError("Importacao cancelada. " + " | ".join(result["errors"][:5]))
                 flash(f"Contagem em massa importada: {result['processed']} SKU(s) contados.", "success")
 
+            elif action == "import_count_additions":
+                if not active_session:
+                    raise ValueError("Abra uma sessao de inventario antes de somar saldos.")
+                file = request.files.get("file")
+                if not file or not file.filename.lower().endswith((".xlsx", ".xlsm", ".xltx", ".xltm")):
+                    raise ValueError("Envie uma planilha Excel valida com SKU e SALDO_SOMAR.")
+                result = import_inventory_balance_additions_from_excel(database, file, active_session.id, user.id)
+                if result["errors"]:
+                    raise ValueError("Importacao cancelada. " + " | ".join(result["errors"][:5]))
+                flash(
+                    f"Saldos somados na contagem: {result['processed']} SKU(s), "
+                    f"total adicionado {result['total_added']}.",
+                    "success",
+                )
+
             elif action == "save_all_zpl":
                 jobs = (
                     database.query(LabelPrintJob)
@@ -1266,6 +1282,7 @@ def download_template(name):
         "empenhos": "template_empenhos.xlsx",
         "bom": "template_bom.xlsx",
         "contagem_inventario": "template_contagem_inventario.xlsx",
+        "somar_saldo_inventario": "template_somar_saldo_inventario.xlsx",
     }
     if name not in allowed:
         flash("Template invalido.", "danger")

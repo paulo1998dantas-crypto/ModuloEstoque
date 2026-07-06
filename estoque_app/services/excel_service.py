@@ -33,6 +33,7 @@ COMMITMENT_IMPORT_COLUMNS = ["SKU", "UNIDADE_DE_MEDIDA", "SALDO_EMPENHADO"]
 BOM_IMPORT_COLUMNS = ["ITEM_CODIGO", "COMPONENTE_CODIGO", "DESCRICAO", "UNIDADE", "QUANTIDADE"]
 BOM_REQUIRED_COLUMNS = ["ITEM_CODIGO", "COMPONENTE_CODIGO", "DESCRICAO", "UNIDADE", "QUANTIDADE"]
 INVENTORY_COUNT_IMPORT_COLUMNS = ["SKU", "UNIDADE_DE_MEDIDA", "SALDO_CONTADO"]
+INVENTORY_ADD_IMPORT_COLUMNS = ["SKU", "UNIDADE_DE_MEDIDA", "SALDO_SOMAR"]
 CONSUMPTION_UNIT_ALIASES = ["UNIDADE_DE_MEDIDA", "UNIDADE_MEDIDA", "UNIDADE", "UM"]
 CONSUMPTION_QTY_ALIASES = [
     "SALDO_CONSUMIDO",
@@ -53,6 +54,13 @@ INVENTORY_COUNT_QTY_ALIASES = [
     "QTD_CONTADA",
     "CONTAGEM",
     "SALDO_FISICO",
+]
+INVENTORY_ADD_QTY_ALIASES = [
+    "SALDO_SOMAR",
+    "QUANTIDADE_SOMAR",
+    "QTD_SOMAR",
+    "SOMAR_SALDO",
+    "ENTRADA_MASSA",
 ]
 
 
@@ -509,6 +517,72 @@ def import_inventory_counts_from_excel(db, file_obj, session_id, user_id):
     return result
 
 
+def import_inventory_balance_additions_from_excel(db, file_obj, session_id, user_id):
+    wb = load_workbook(file_obj, data_only=True)
+    ws = wb.active
+    headers, header_row = _headers(ws, ["SKU"])
+    qty_header = _find_header(headers, INVENTORY_ADD_QTY_ALIASES)
+    unit_header = _find_header(headers, CONSUMPTION_UNIT_ALIASES)
+    missing = []
+    if "SKU" not in headers:
+        missing.append("SKU")
+    if not qty_header:
+        missing.append("SALDO_SOMAR")
+    if missing:
+        raise ValueError(f"Colunas ausentes: {', '.join(missing)}")
+
+    result = {"processed": 0, "total_added": "0", "errors": []}
+    rows = []
+    seen_skus = set()
+    total_added = to_decimal(0)
+    for row_number in range(header_row + 1, ws.max_row + 1):
+        raw_sku = ws.cell(row_number, headers["SKU"]).value
+        raw_unit = ws.cell(row_number, headers[unit_header]).value if unit_header else ""
+        raw_addition = ws.cell(row_number, headers[qty_header]).value
+        if not raw_sku and not raw_unit and raw_addition in (None, ""):
+            continue
+
+        try:
+            sku = get_sku_by_code(db, raw_sku, active_only=True)
+            if not sku:
+                raise ValueError("SKU nao cadastrado ou inativo")
+            sku_code = normalize_sku(raw_sku)
+            if sku_code in seen_skus:
+                raise ValueError("SKU duplicado na planilha")
+            seen_skus.add(sku_code)
+            if raw_unit is not None and str(raw_unit).strip():
+                if sku.unidade and _normalize_text(raw_unit) != _normalize_text(sku.unidade):
+                    raise ValueError(f"Unidade divergente. Cadastro: {sku.unidade}")
+            addition = to_decimal(raw_addition)
+            if addition <= 0:
+                raise ValueError("Saldo a somar deve ser maior que zero")
+            saldo_atual = to_decimal(sku.balance.saldo_atual if sku.balance else 0)
+            counted = saldo_atual + addition
+            rows.append((row_number, sku, counted, addition))
+            total_added += addition
+        except Exception as exc:
+            result["errors"].append(f"Linha {row_number}: {raw_sku or ''} - {exc}")
+
+    if not rows and not result["errors"]:
+        result["errors"].append("Nenhum saldo a somar encontrado na planilha.")
+    if result["errors"]:
+        db.rollback()
+        return result
+
+    try:
+        for _, sku, counted, _ in rows:
+            save_inventory_count(db, session_id, sku, counted, user_id, commit=False)
+            result["processed"] += 1
+        db.commit()
+        result["total_added"] = decimal_to_str(total_added)
+    except Exception as exc:
+        db.rollback()
+        result["processed"] = 0
+        result["total_added"] = "0"
+        result["errors"].append(str(exc))
+    return result
+
+
 def create_template_files(base_dir):
     template_path = Path(base_dir) / "template_importacao_skus.xlsx"
     sample_path = Path(base_dir) / "dados_exemplo.xlsx"
@@ -517,6 +591,7 @@ def create_template_files(base_dir):
     commitment_template_path = Path(base_dir) / "template_empenhos.xlsx"
     bom_template_path = Path(base_dir) / "template_bom.xlsx"
     inventory_count_template_path = Path(base_dir) / "template_contagem_inventario.xlsx"
+    inventory_add_template_path = Path(base_dir) / "template_somar_saldo_inventario.xlsx"
 
     wb = Workbook()
     ws = wb.active
@@ -598,6 +673,17 @@ def create_template_files(base_dir):
         ws.column_dimensions[column].width = width
     wb.save(inventory_count_template_path)
 
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Somar saldo"
+    ws.append(INVENTORY_ADD_IMPORT_COLUMNS)
+    ws.append(["PAR-0001", "UN", 10])
+    ws.append(["CAB-0012", "M", 4.5])
+    _style_header(ws)
+    for width, column in zip([22, 22, 18], "ABC"):
+        ws.column_dimensions[column].width = width
+    wb.save(inventory_add_template_path)
+
     return (
         template_path,
         sample_path,
@@ -606,6 +692,7 @@ def create_template_files(base_dir):
         commitment_template_path,
         bom_template_path,
         inventory_count_template_path,
+        inventory_add_template_path,
     )
 
 

@@ -30,6 +30,7 @@ if exist "dist\EstoqueJIMontadora.zip" del /q "dist\EstoqueJIMontadora.zip"
   --add-data "template_empenhos.xlsx;." ^
   --add-data "template_bom.xlsx;." ^
   --add-data "template_contagem_inventario.xlsx;." ^
+  --add-data "template_somar_saldo_inventario.xlsx;." ^
   --add-data "dados_exemplo.xlsx;." ^
   --add-data "env_online_exemplo.txt;." ^
   desktop_launcher.py

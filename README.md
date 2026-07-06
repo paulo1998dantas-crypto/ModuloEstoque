@@ -33,6 +33,7 @@ estoque_app/dist/EstoqueJIMontadora.zip
 - Backflush de componentes na entrada de itens com estrutura
 - Importacao Excel de empenhos e baixas por consumo real
 - Importacao Excel de contagens em massa no inventario
+- Importacao Excel para somar saldo em massa no inventario
 - Inventario online via mobile
 - Impressao Zebra via ZPL
 - Etiquetas em massa para inventario
