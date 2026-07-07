@@ -1,9 +1,9 @@
 {% extends "base.html" %}
-{% block title %}Importar SKUs - Estoque{% endblock %}
+{% block title %}Importar CODs - Estoque{% endblock %}
 {% block content %}
 <section class="page-head">
     <div>
-        <h1>Atualizar SKUs por Excel</h1>
+        <h1>Atualizar CODs por Excel</h1>
         <p>Atualiza cadastro de itens sem apagar movimentacoes, inventarios ou saldos existentes.</p>
     </div>
     <div class="actions">
@@ -17,8 +17,8 @@
         <input type="file" name="file" accept=".xlsx" required>
     </label>
     <div class="note">
-        Colunas obrigatorias: SKU e DESCRICAO. UNIDADE, GRUPO e CATEGORIA sao opcionais e, quando preenchidos, atualizam o cadastro. O saldo muda somente quando SALDO_ATUAL ou ESTOQUE estiver preenchido. Campos opcionais em branco preservam os dados atuais. Se a planilha tiver erros, nada sera alterado.
+        Colunas obrigatorias: COD e DESCRICAO. UNIDADE, GRUPO e CATEGORIA sao opcionais e, quando preenchidos, atualizam o cadastro. O saldo muda somente quando SALDO_ATUAL ou ESTOQUE estiver preenchido. Campos opcionais em branco preservam os dados atuais. Planilhas antigas continuam aceitas. Se a planilha tiver erros, nada sera alterado.
     </div>
-    <button class="btn primary" type="submit">Atualizar SKUs pela planilha</button>
+    <button class="btn primary" type="submit">Atualizar CODs pela planilha</button>
 </form>
 {% endblock %}

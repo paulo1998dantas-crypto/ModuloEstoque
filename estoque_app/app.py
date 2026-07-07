@@ -418,7 +418,7 @@ def sku_form(sku_id=None):
             if sku:
                 existing = get_sku_by_code(database, data["sku"])
                 if existing and existing.id != sku.id:
-                    raise ValueError("SKU ja cadastrado.")
+                    raise ValueError("COD ja cadastrado.")
                 sku.sku = normalize_sku(data["sku"])
                 sku.descricao = data["descricao"].strip()
                 sku.unidade = data["unidade"].strip() or None
@@ -430,7 +430,7 @@ def sku_form(sku_id=None):
                 database.commit()
             else:
                 create_or_update_sku(database, data)
-            flash("SKU salvo com sucesso.", "success")
+            flash("COD salvo com sucesso.", "success")
             return redirect(url_for("skus"))
         except Exception as exc:
             database.rollback()
@@ -462,7 +462,7 @@ def import_skus():
                 flash(f"Mais {len(result['errors']) - 10} erros ocultos.", "warning")
         else:
             flash(
-                "SKUs atualizados com sucesso: "
+                "CODs atualizados com sucesso: "
                 f"{result['created']} criados, "
                 f"{result['updated']} atualizados e "
                 f"{result['balances_updated']} saldo(s) alterado(s).",
@@ -512,7 +512,7 @@ def entrada():
         try:
             sku = get_sku_by_code(database, request.form.get("sku"), active_only=True)
             if not sku:
-                raise ValueError("SKU nao cadastrado ou inativo. Entrada bloqueada.")
+                raise ValueError("COD nao cadastrado ou inativo. Entrada bloqueada.")
             quantidade = request.form.get("quantidade")
             documento = request.form.get("documento", "")
             observacao = request.form.get("observacao", "")
@@ -569,7 +569,7 @@ def entrada():
     if sku_code:
         sku = get_sku_by_code(database, sku_code, active_only=True)
         if not sku:
-            flash("SKU nao cadastrado ou inativo. Entrada bloqueada.", "danger")
+            flash("COD nao cadastrado ou inativo. Entrada bloqueada.", "danger")
     return render_template("movement_form.html", mode="entrada", sku=sku, sku_code=sku_code, backflush=backflush)
 
 
@@ -612,7 +612,7 @@ def saida():
         try:
             sku = get_sku_by_code(database, request.form.get("sku"), active_only=True)
             if not sku:
-                raise ValueError("SKU nao cadastrado ou inativo. Empenho bloqueado.")
+                raise ValueError("COD nao cadastrado ou inativo. Empenho bloqueado.")
             register_movement(
                 database,
                 sku,
@@ -631,7 +631,7 @@ def saida():
     if sku_code:
         sku = get_sku_by_code(database, sku_code, active_only=True)
         if not sku:
-            flash("SKU nao cadastrado ou inativo. Empenho bloqueado.", "danger")
+            flash("COD nao cadastrado ou inativo. Empenho bloqueado.", "danger")
     return render_template("movement_form.html", mode="saida", sku=sku, sku_code=sku_code)
 
 
@@ -718,7 +718,7 @@ def inventory_mobile():
         try:
             sku = get_sku_by_code(database, request.form.get("sku"), active_only=True)
             if not sku:
-                raise ValueError("SKU nao cadastrado ou inativo.")
+                raise ValueError("COD nao cadastrado ou inativo.")
             counted_qty = request.form.get("quantidade_contada")
             movement = adjust_balance_to_count(
                 database,
@@ -742,7 +742,7 @@ def inventory_mobile():
     if sku_code:
         sku = get_sku_by_code(database, sku_code, active_only=True)
         if not sku:
-            flash("SKU nao cadastrado ou inativo.", "danger")
+            flash("COD nao cadastrado ou inativo.", "danger")
 
     last_counts = (
         database.query(Movement)
@@ -770,9 +770,9 @@ def print_label():
     if sku_code:
         sku = get_sku_by_code(database, sku_code)
         if not sku:
-            flash("SKU nao cadastrado.", "danger")
+            flash("COD nao cadastrado.", "danger")
         elif not can_print_sku(database, sku, user):
-            flash("SKU inativo. Impressao bloqueada.", "danger")
+            flash("COD inativo. Impressao bloqueada.", "danger")
             sku = None
 
     if request.method == "POST" and sku:
@@ -812,9 +812,9 @@ def api_label_zpl():
     payload = request.get_json(silent=True) or request.form
     sku = get_sku_by_code(database, payload.get("sku"))
     if not sku:
-        return jsonify({"ok": False, "error": "SKU nao cadastrado."}), 404
+        return jsonify({"ok": False, "error": "COD nao cadastrado."}), 404
     if not can_print_sku(database, sku, user):
-        return jsonify({"ok": False, "error": "SKU inativo. Impressao bloqueada."}), 400
+        return jsonify({"ok": False, "error": "COD inativo. Impressao bloqueada."}), 400
     try:
         quantidade = int(payload.get("quantidade") or 1)
         if quantidade <= 0:
@@ -951,9 +951,9 @@ def inventory_labels():
             elif action == "add_job":
                 sku = get_sku_by_code(database, request.form.get("sku"))
                 if not sku:
-                    raise ValueError("SKU nao cadastrado.")
+                    raise ValueError("COD nao cadastrado.")
                 if not can_print_sku(database, sku, user):
-                    raise ValueError("SKU inativo. Impressao bloqueada.")
+                    raise ValueError("COD inativo. Impressao bloqueada.")
                 create_label_job(
                     database,
                     sku,
@@ -979,7 +979,7 @@ def inventory_labels():
                             active_session.id if active_session else None,
                         )
                         created += 1
-                flash(f"{created} SKU(s) adicionados a fila.", "success")
+                flash(f"{created} COD(s) adicionados a fila.", "success")
 
             elif action in {"generate_active", "generate_positive"}:
                 qty = int(request.form.get("quantidade_lote") or 1)
@@ -1002,7 +1002,7 @@ def inventory_labels():
             elif action == "import_jobs":
                 file = request.files.get("file")
                 if not file or not file.filename.lower().endswith(".xlsx"):
-                    raise ValueError("Envie uma planilha .xlsx com SKU e QUANTIDADE.")
+                    raise ValueError("Envie uma planilha .xlsx com COD e QUANTIDADE.")
                 result = import_label_jobs_from_excel(database, file, user.id, active_session.id if active_session else None)
                 flash(f"Importacao da fila concluida: {result['created']} registros criados.", "success")
                 for error in result["errors"][:10]:
@@ -1013,23 +1013,23 @@ def inventory_labels():
                     raise ValueError("Abra uma sessao de inventario antes de importar contagens.")
                 file = request.files.get("file")
                 if not file or not file.filename.lower().endswith((".xlsx", ".xlsm", ".xltx", ".xltm")):
-                    raise ValueError("Envie uma planilha Excel valida com SKU e SALDO_CONTADO.")
+                    raise ValueError("Envie uma planilha Excel valida com COD e SALDO_CONTADO.")
                 result = import_inventory_counts_from_excel(database, file, active_session.id, user.id)
                 if result["errors"]:
                     raise ValueError("Importacao cancelada. " + " | ".join(result["errors"][:5]))
-                flash(f"Contagem em massa importada: {result['processed']} SKU(s) contados.", "success")
+                flash(f"Contagem em massa importada: {result['processed']} COD(s) contados.", "success")
 
             elif action == "import_count_additions":
                 if not active_session:
                     raise ValueError("Abra uma sessao de inventario antes de somar saldos.")
                 file = request.files.get("file")
                 if not file or not file.filename.lower().endswith((".xlsx", ".xlsm", ".xltx", ".xltm")):
-                    raise ValueError("Envie uma planilha Excel valida com SKU e SALDO_SOMAR.")
+                    raise ValueError("Envie uma planilha Excel valida com COD e SALDO_SOMAR.")
                 result = import_inventory_balance_additions_from_excel(database, file, active_session.id, user.id)
                 if result["errors"]:
                     raise ValueError("Importacao cancelada. " + " | ".join(result["errors"][:5]))
                 flash(
-                    f"Saldos somados na contagem: {result['processed']} SKU(s), "
+                    f"Saldos somados na contagem: {result['processed']} COD(s), "
                     f"total adicionado {result['total_added']}.",
                     "success",
                 )
@@ -1054,7 +1054,7 @@ def inventory_labels():
                     raise ValueError("Abra uma sessao de inventario antes de contar.")
                 sku = get_sku_by_code(database, request.form.get("count_sku"), active_only=True)
                 if not sku:
-                    raise ValueError("SKU nao cadastrado ou inativo.")
+                    raise ValueError("COD nao cadastrado ou inativo.")
                 count = save_inventory_count(database, active_session.id, sku, request.form.get("quantidade_contada"), user.id)
                 flash(
                     f"Contagem salva: {sku.sku}. Diferenca {decimal_to_str(count.diferenca)}.",
@@ -1168,7 +1168,7 @@ def api_label_job_zpl(job_id):
     if not can_access_label_job(job, user):
         return jsonify({"ok": False, "error": "Acesso restrito para este job."}), 403
     if not can_print_sku(database, job.sku, user):
-        return jsonify({"ok": False, "error": "SKU inativo. Impressao bloqueada."}), 400
+        return jsonify({"ok": False, "error": "COD inativo. Impressao bloqueada."}), 400
     path = prepare_label_job_file(database, job)
     zpl = Path(path).read_text(encoding="utf-8")
     return jsonify({"ok": True, "job_id": job.id, "zpl": zpl, "path": str(path)})
@@ -1209,7 +1209,7 @@ def api_print_label_job(job_id):
     if not job:
         return jsonify({"ok": False, "error": "Job nao encontrado."}), 404
     if not can_print_sku(database, job.sku, current_user()):
-        return jsonify({"ok": False, "error": "SKU inativo. Impressao bloqueada."}), 400
+        return jsonify({"ok": False, "error": "COD inativo. Impressao bloqueada."}), 400
     if request_print_mode() != "server":
         job.status = "ERRO"
         job.erro = direct_print_unavailable_message()

@@ -4,7 +4,7 @@
 <section class="page-head">
     <div>
         <h1>Imprimir Etiqueta Zebra</h1>
-        <p>Busca por SKU, gera ZPL e imprime uma ou varias etiquetas.</p>
+        <p>Busca por COD, gera ZPL e imprime uma ou varias etiquetas.</p>
     </div>
 </section>
 
@@ -20,10 +20,10 @@
 
 <section class="scan-layout">
     <form method="get" class="panel scan-panel">
-        <label class="scan-label">SKU
-            <input class="scan-input" name="sku" value="{{ sku_code }}" data-autofocus autocomplete="off" placeholder="Bipe ou digite o SKU">
+        <label class="scan-label">COD
+            <input class="scan-input" name="sku" value="{{ sku_code }}" data-autofocus autocomplete="off" placeholder="Bipe ou digite o COD">
         </label>
-        <button class="btn primary large" type="submit">Buscar SKU</button>
+        <button class="btn primary large" type="submit">Buscar COD</button>
     </form>
 
     <form method="post" class="panel form-grid">
@@ -48,8 +48,8 @@
         <div class="note" data-local-print-progress></div>
         {% else %}
         <div class="empty-state">
-            <strong>Aguardando SKU</strong>
-            <p>A impressao e bloqueada para SKU inexistente ou inativo.</p>
+            <strong>Aguardando COD</strong>
+            <p>A impressao e bloqueada para COD inexistente ou inativo.</p>
         </div>
         {% endif %}
     </form>

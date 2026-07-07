@@ -1,6 +1,6 @@
 # Controle de Estoque Offline para Almoxarifado Industrial
 
-Sistema local em Python/Flask com SQLite para cadastro de SKUs, etiquetas Zebra em ZPL, entrada, empenho, baixa, inventario, relatórios Excel, backup e auditoria de movimentacoes.
+Sistema local em Python/Flask com SQLite para cadastro de CODs, etiquetas Zebra em ZPL, entrada, empenho, baixa, inventario, relatórios Excel, backup e auditoria de movimentacoes.
 
 ## Requisitos
 
@@ -189,14 +189,14 @@ No celular, a impressao direta fica bloqueada. Use um desktop conectado a Zebra 
 
 Se o Render estiver em dominio proprio, configure no app local a variavel `ESTOQUE_PRINT_BRIDGE_ORIGINS` com a URL do site online para liberar a ponte local.
 
-## Importacao de SKUs por Excel
+## Importacao de CODs por Excel
 
-Use o menu `SKUs > Importar Excel`.
+Use o menu `CODs > Importar Excel`.
 
 Colunas obrigatorias:
 
 ```text
-SKU
+COD
 DESCRICAO
 ```
 
@@ -211,15 +211,15 @@ SALDO_ATUAL ou ESTOQUE
 
 Regras:
 
-- SKU novo e criado.
-- SKU existente tem a descricao atualizada.
+- COD novo e criado.
+- COD existente tem a descricao atualizada.
 - Unidade, grupo e categoria sao atualizados quando estiverem preenchidos na linha.
 - Campos opcionais em branco preservam os dados atuais do item.
 - Saldo atual so muda quando `SALDO_ATUAL` ou `ESTOQUE` estiver preenchido na linha.
 - Saldo em branco preserva o saldo atual do item.
-- SKUs ausentes da planilha nao sao apagados.
+- CODs ausentes da planilha nao sao apagados.
 - Movimentacoes, inventarios e fila de etiquetas nao sao apagados.
-- Entrada, empenho e baixa so aceitam SKU cadastrado e ativo.
+- Entrada, empenho e baixa so aceitam COD cadastrado e ativo.
 
 O sistema gera os arquivos:
 
@@ -237,17 +237,17 @@ Tambem e possivel baixa-los pela interface.
 ## Fluxo do almoxarife
 
 1. Acesse `Etiqueta`.
-2. Leia/digite o SKU e imprima a etiqueta.
+2. Leia/digite o COD e imprima a etiqueta.
 3. Acesse `Entrada`.
 4. Leia o codigo de barras com o leitor USB.
 5. Informe quantidade, documento/nota e confirme.
 6. Para reserva de consumo, use `Empenho`.
-7. Para carregar empenhos existentes antes do inventario, use `Empenho > Importar empenhos` com `SKU`, `UNIDADE_DE_MEDIDA` e `SALDO_EMPENHADO`.
+7. Para carregar empenhos existentes antes do inventario, use `Empenho > Importar empenhos` com `COD`, `UNIDADE_DE_MEDIDA` e `SALDO_EMPENHADO`.
 8. Para itens com estrutura de produto, use `B.O.M` e importe `ITEM_CODIGO`, `COMPONENTE_CODIGO`, `DESCRICAO`, `UNIDADE` e `QUANTIDADE`.
 9. Ao dar entrada em um item pai com B.O.M cadastrada, revise o pop-up de backflush para alterar, incluir ou excluir componentes antes de confirmar.
-10. Para substituir saldos em massa, abra uma sessao em `Inventario ADM` e envie a planilha com `SKU`, `UNIDADE_DE_MEDIDA` e `SALDO_CONTADO`.
-11. Para somar saldos em massa, use `Inventario ADM > Somar saldo em massa` com `SKU`, `UNIDADE_DE_MEDIDA` e `SALDO_SOMAR`.
-12. Para baixa do consumo real, use `Baixa` e importe a planilha com `SKU`, `UNIDADE_DE_MEDIDA` e `SALDO_CONSUMIDO`.
+10. Para substituir saldos em massa, abra uma sessao em `Inventario ADM` e envie a planilha com `COD`, `UNIDADE_DE_MEDIDA` e `SALDO_CONTADO`.
+11. Para somar saldos em massa, use `Inventario ADM > Somar saldo em massa` com `COD`, `UNIDADE_DE_MEDIDA` e `SALDO_SOMAR`.
+12. Para baixa do consumo real, use `Baixa` e importe a planilha com `COD`, `UNIDADE_DE_MEDIDA` e `SALDO_CONSUMIDO`.
 
 Os campos de leitura recebem foco automatico e aceitam leitores USB que funcionam como teclado.
 
@@ -257,19 +257,19 @@ A tela ADM `Inventario ADM` permite:
 
 - abrir sessao de inventario
 - visualizar status e divergencias
-- gerar etiquetas para todos os SKUs ativos
-- gerar etiquetas somente para SKUs com saldo maior que zero
-- importar fila de etiquetas por Excel (`SKU`, `QUANTIDADE`)
-- selecionar varios SKUs e quantidade por SKU
+- gerar etiquetas para todos os CODs ativos
+- gerar etiquetas somente para CODs com saldo maior que zero
+- importar fila de etiquetas por Excel (`COD`, `QUANTIDADE`)
+- selecionar varios CODs e quantidade por COD
 - salvar ZPL consolidado para conferencia
 - imprimir fila progressivamente
 - reimprimir job individual
 - marcar etiqueta como impressa
-- contar SKU com leitor de codigo de barras
+- contar COD com leitor de codigo de barras
 - exportar previa do inventario
 - finalizar inventario gerando ajustes auditaveis
 
-Ao finalizar, o sistema cria movimentacoes do tipo `INVENTARIO` para corrigir os saldos dos SKUs contados. O historico anterior permanece intacto.
+Ao finalizar, o sistema cria movimentacoes do tipo `INVENTARIO` para corrigir os saldos dos CODs contados. O historico anterior permanece intacto.
 
 ## Relatorios Excel
 

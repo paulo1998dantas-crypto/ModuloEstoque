@@ -22,17 +22,17 @@ from services.estoque_service import (
 )
 
 
-SKU_IMPORT_COLUMNS = ["SKU", "DESCRICAO", "UNIDADE", "GRUPO", "CATEGORIA", "SALDO_ATUAL"]
-SKU_REQUIRED_COLUMNS = ["SKU", "DESCRICAO"]
+SKU_IMPORT_COLUMNS = ["COD", "DESCRICAO", "UNIDADE", "GRUPO", "CATEGORIA", "SALDO_ATUAL"]
+SKU_REQUIRED_COLUMNS = ["COD", "DESCRICAO"]
 STOCK_COLUMN_ALIASES = ["SALDO_ATUAL", "ESTOQUE_ATUAL", "ESTOQUE", "SALDO"]
 SKU_UNIT_ALIASES = ["UNIDADE", "UNIDADE_DE_MEDIDA", "UNIDADE_MEDIDA", "UM"]
-LABEL_IMPORT_COLUMNS = ["SKU", "QUANTIDADE"]
-CONSUMPTION_IMPORT_COLUMNS = ["SKU", "UNIDADE_DE_MEDIDA", "SALDO_CONSUMIDO"]
-COMMITMENT_IMPORT_COLUMNS = ["SKU", "UNIDADE_DE_MEDIDA", "SALDO_EMPENHADO"]
+LABEL_IMPORT_COLUMNS = ["COD", "QUANTIDADE"]
+CONSUMPTION_IMPORT_COLUMNS = ["COD", "UNIDADE_DE_MEDIDA", "SALDO_CONSUMIDO"]
+COMMITMENT_IMPORT_COLUMNS = ["COD", "UNIDADE_DE_MEDIDA", "SALDO_EMPENHADO"]
 BOM_IMPORT_COLUMNS = ["ITEM_CODIGO", "COMPONENTE_CODIGO", "DESCRICAO", "UNIDADE", "QUANTIDADE"]
 BOM_REQUIRED_COLUMNS = ["ITEM_CODIGO", "COMPONENTE_CODIGO", "DESCRICAO", "UNIDADE", "QUANTIDADE"]
-INVENTORY_COUNT_IMPORT_COLUMNS = ["SKU", "UNIDADE_DE_MEDIDA", "SALDO_CONTADO"]
-INVENTORY_ADD_IMPORT_COLUMNS = ["SKU", "UNIDADE_DE_MEDIDA", "SALDO_SOMAR"]
+INVENTORY_COUNT_IMPORT_COLUMNS = ["COD", "UNIDADE_DE_MEDIDA", "SALDO_CONTADO"]
+INVENTORY_ADD_IMPORT_COLUMNS = ["COD", "UNIDADE_DE_MEDIDA", "SALDO_SOMAR"]
 CONSUMPTION_UNIT_ALIASES = ["UNIDADE_DE_MEDIDA", "UNIDADE_MEDIDA", "UNIDADE", "UM"]
 CONSUMPTION_QTY_ALIASES = [
     "SALDO_CONSUMIDO",
@@ -76,6 +76,10 @@ def _headers(ws, required_columns, max_scan_rows=25):
             for idx, cell in enumerate(ws[row_number], start=1)
             if cell.value is not None and str(cell.value).strip()
         }
+        if "COD" in headers and "SKU" not in headers:
+            headers["SKU"] = headers["COD"]
+        elif "SKU" in headers and "COD" not in headers:
+            headers["COD"] = headers["SKU"]
         if all(column in headers for column in required_columns):
             return headers, row_number
     return {}, 1
@@ -129,7 +133,7 @@ def import_skus_from_excel(db, file_obj):
     rows = []
     seen_skus = set()
     for row_number in range(header_row + 1, ws.max_row + 1):
-        raw_sku = ws.cell(row_number, headers["SKU"]).value
+        raw_sku = ws.cell(row_number, headers["COD"]).value
         raw_desc = ws.cell(row_number, headers["DESCRICAO"]).value
         if not raw_sku and not raw_desc:
             continue
@@ -157,11 +161,11 @@ def import_skus_from_excel(db, file_obj):
         try:
             sku_code = normalize_sku(raw_sku)
             if not sku_code:
-                raise ValueError("SKU e obrigatorio.")
+                raise ValueError("COD e obrigatorio.")
             if not str(raw_desc or "").strip():
                 raise ValueError("Descricao e obrigatoria.")
             if sku_code in seen_skus:
-                raise ValueError("SKU duplicado na planilha.")
+                raise ValueError("COD duplicado na planilha.")
             seen_skus.add(sku_code)
             if "saldo_atual" in data:
                 to_decimal(data.get("saldo_atual"))
@@ -170,7 +174,7 @@ def import_skus_from_excel(db, file_obj):
             result["errors"].append(f"Linha {row_number}: {exc}")
 
     if not rows and not result["errors"]:
-        result["errors"].append("Nenhum SKU encontrado na planilha.")
+        result["errors"].append("Nenhum COD encontrado na planilha.")
     if result["errors"]:
         db.rollback()
         return result
@@ -205,16 +209,16 @@ def import_label_jobs_from_excel(db, file_obj, user_id, inventory_session_id=Non
     result = {"created": 0, "errors": []}
     origem = "INVENTARIO" if inventory_session_id else "EXCEL"
     for row_number in range(header_row + 1, ws.max_row + 1):
-        raw_sku = ws.cell(row_number, headers["SKU"]).value
+        raw_sku = ws.cell(row_number, headers["COD"]).value
         raw_qty = ws.cell(row_number, headers["QUANTIDADE"]).value or 1
         if not raw_sku:
             continue
         sku = get_sku_by_code(db, raw_sku)
         try:
             if not sku:
-                raise ValueError("SKU nao cadastrado")
+                raise ValueError("COD nao cadastrado")
             if not sku.active:
-                raise ValueError("SKU inativo")
+                raise ValueError("COD inativo")
             qty = int(to_decimal(raw_qty))
             if qty <= 0:
                 raise ValueError("Quantidade deve ser maior que zero")
@@ -229,12 +233,12 @@ def import_label_jobs_from_excel(db, file_obj, user_id, inventory_session_id=Non
 def import_consumption_from_excel(db, file_obj, user_id, documento="", observacao="", allow_negative=False):
     wb = load_workbook(file_obj, data_only=True)
     ws = wb.active
-    headers, header_row = _headers(ws, ["SKU"])
+    headers, header_row = _headers(ws, ["COD"])
     qty_header = _find_header(headers, CONSUMPTION_QTY_ALIASES)
     unit_header = _find_header(headers, CONSUMPTION_UNIT_ALIASES)
     missing = []
-    if "SKU" not in headers:
-        missing.append("SKU")
+    if "COD" not in headers:
+        missing.append("COD")
     if not unit_header:
         missing.append("UNIDADE_DE_MEDIDA")
     if not qty_header:
@@ -246,7 +250,7 @@ def import_consumption_from_excel(db, file_obj, user_id, documento="", observaca
     rows = []
     total_consumed = to_decimal(0)
     for row_number in range(header_row + 1, ws.max_row + 1):
-        raw_sku = ws.cell(row_number, headers["SKU"]).value
+        raw_sku = ws.cell(row_number, headers["COD"]).value
         raw_unit = ws.cell(row_number, headers[unit_header]).value
         raw_consumed = ws.cell(row_number, headers[qty_header]).value
         if not raw_sku and not raw_unit and not raw_consumed:
@@ -255,7 +259,7 @@ def import_consumption_from_excel(db, file_obj, user_id, documento="", observaca
         try:
             sku = get_sku_by_code(db, raw_sku, active_only=True)
             if not sku:
-                raise ValueError("SKU nao cadastrado ou inativo")
+                raise ValueError("COD nao cadastrado ou inativo")
             if raw_unit is None or str(raw_unit).strip() == "":
                 raise ValueError("Unidade de medida e obrigatoria")
             if sku.unidade and _normalize_text(raw_unit) != _normalize_text(sku.unidade):
@@ -307,12 +311,12 @@ def import_consumption_from_excel(db, file_obj, user_id, documento="", observaca
 def import_commitments_from_excel(db, file_obj, user_id, documento="", observacao=""):
     wb = load_workbook(file_obj, data_only=True)
     ws = wb.active
-    headers, header_row = _headers(ws, ["SKU"])
+    headers, header_row = _headers(ws, ["COD"])
     qty_header = _find_header(headers, COMMITMENT_QTY_ALIASES)
     unit_header = _find_header(headers, CONSUMPTION_UNIT_ALIASES)
     missing = []
-    if "SKU" not in headers:
-        missing.append("SKU")
+    if "COD" not in headers:
+        missing.append("COD")
     if not unit_header:
         missing.append("UNIDADE_DE_MEDIDA")
     if not qty_header:
@@ -324,7 +328,7 @@ def import_commitments_from_excel(db, file_obj, user_id, documento="", observaca
     rows = []
     total_committed = to_decimal(0)
     for row_number in range(header_row + 1, ws.max_row + 1):
-        raw_sku = ws.cell(row_number, headers["SKU"]).value
+        raw_sku = ws.cell(row_number, headers["COD"]).value
         raw_unit = ws.cell(row_number, headers[unit_header]).value
         raw_committed = ws.cell(row_number, headers[qty_header]).value
         if not raw_sku and not raw_unit and not raw_committed:
@@ -333,7 +337,7 @@ def import_commitments_from_excel(db, file_obj, user_id, documento="", observaca
         try:
             sku = get_sku_by_code(db, raw_sku, active_only=True)
             if not sku:
-                raise ValueError("SKU nao cadastrado ou inativo")
+                raise ValueError("COD nao cadastrado ou inativo")
             if raw_unit is None or str(raw_unit).strip() == "":
                 raise ValueError("Unidade de medida e obrigatoria")
             if sku.unidade and _normalize_text(raw_unit) != _normalize_text(sku.unidade):
@@ -465,12 +469,12 @@ def import_bom_from_excel(db, file_obj):
 def import_inventory_counts_from_excel(db, file_obj, session_id, user_id):
     wb = load_workbook(file_obj, data_only=True)
     ws = wb.active
-    headers, header_row = _headers(ws, ["SKU"])
+    headers, header_row = _headers(ws, ["COD"])
     qty_header = _find_header(headers, INVENTORY_COUNT_QTY_ALIASES)
     unit_header = _find_header(headers, CONSUMPTION_UNIT_ALIASES)
     missing = []
-    if "SKU" not in headers:
-        missing.append("SKU")
+    if "COD" not in headers:
+        missing.append("COD")
     if not qty_header:
         missing.append("SALDO_CONTADO")
     if missing:
@@ -480,7 +484,7 @@ def import_inventory_counts_from_excel(db, file_obj, session_id, user_id):
     rows = []
     seen_skus = set()
     for row_number in range(header_row + 1, ws.max_row + 1):
-        raw_sku = ws.cell(row_number, headers["SKU"]).value
+        raw_sku = ws.cell(row_number, headers["COD"]).value
         raw_unit = ws.cell(row_number, headers[unit_header]).value if unit_header else ""
         raw_counted = ws.cell(row_number, headers[qty_header]).value
         if not raw_sku and not raw_unit and raw_counted in (None, ""):
@@ -489,10 +493,10 @@ def import_inventory_counts_from_excel(db, file_obj, session_id, user_id):
         try:
             sku = get_sku_by_code(db, raw_sku, active_only=True)
             if not sku:
-                raise ValueError("SKU nao cadastrado ou inativo")
+                raise ValueError("COD nao cadastrado ou inativo")
             sku_code = normalize_sku(raw_sku)
             if sku_code in seen_skus:
-                raise ValueError("SKU duplicado na planilha")
+                raise ValueError("COD duplicado na planilha")
             seen_skus.add(sku_code)
             if raw_unit is not None and str(raw_unit).strip():
                 if sku.unidade and _normalize_text(raw_unit) != _normalize_text(sku.unidade):
@@ -525,12 +529,12 @@ def import_inventory_counts_from_excel(db, file_obj, session_id, user_id):
 def import_inventory_balance_additions_from_excel(db, file_obj, session_id, user_id):
     wb = load_workbook(file_obj, data_only=True)
     ws = wb.active
-    headers, header_row = _headers(ws, ["SKU"])
+    headers, header_row = _headers(ws, ["COD"])
     qty_header = _find_header(headers, INVENTORY_ADD_QTY_ALIASES)
     unit_header = _find_header(headers, CONSUMPTION_UNIT_ALIASES)
     missing = []
-    if "SKU" not in headers:
-        missing.append("SKU")
+    if "COD" not in headers:
+        missing.append("COD")
     if not qty_header:
         missing.append("SALDO_SOMAR")
     if missing:
@@ -541,7 +545,7 @@ def import_inventory_balance_additions_from_excel(db, file_obj, session_id, user
     seen_skus = set()
     total_added = to_decimal(0)
     for row_number in range(header_row + 1, ws.max_row + 1):
-        raw_sku = ws.cell(row_number, headers["SKU"]).value
+        raw_sku = ws.cell(row_number, headers["COD"]).value
         raw_unit = ws.cell(row_number, headers[unit_header]).value if unit_header else ""
         raw_addition = ws.cell(row_number, headers[qty_header]).value
         if not raw_sku and not raw_unit and raw_addition in (None, ""):
@@ -550,10 +554,10 @@ def import_inventory_balance_additions_from_excel(db, file_obj, session_id, user
         try:
             sku = get_sku_by_code(db, raw_sku, active_only=True)
             if not sku:
-                raise ValueError("SKU nao cadastrado ou inativo")
+                raise ValueError("COD nao cadastrado ou inativo")
             sku_code = normalize_sku(raw_sku)
             if sku_code in seen_skus:
-                raise ValueError("SKU duplicado na planilha")
+                raise ValueError("COD duplicado na planilha")
             seen_skus.add(sku_code)
             if raw_unit is not None and str(raw_unit).strip():
                 if sku.unidade and _normalize_text(raw_unit) != _normalize_text(sku.unidade):
@@ -600,7 +604,7 @@ def create_template_files(base_dir):
 
     wb = Workbook()
     ws = wb.active
-    ws.title = "SKUs"
+    ws.title = "Codigos"
     ws.append(SKU_IMPORT_COLUMNS)
     _style_header(ws)
     for width, column in zip([18, 48, 16, 24, 24, 18], "ABCDEF"):
@@ -609,7 +613,7 @@ def create_template_files(base_dir):
 
     wb = Workbook()
     ws = wb.active
-    ws.title = "SKUs"
+    ws.title = "Codigos"
     ws.append(SKU_IMPORT_COLUMNS)
     examples = [
         ["PAR-0001", "Parafuso sextavado M8 x 30 zincado", "UN", "Ferragens", "Fixadores", 125],
@@ -727,7 +731,7 @@ def export_stock_report(db, user, filters):
     ws = wb.active
     ws.title = "Estoque"
     _metadata(ws, "Relatorio de estoque atual", user, filters)
-    ws.append(["SKU", "Descricao", "Unidade", "Grupo", "Categoria", "Localizacao", "Saldo atual", "Estoque minimo", "Ativo", "Status"])
+    ws.append(["COD", "Descricao", "Unidade", "Grupo", "Categoria", "Localizacao", "Saldo atual", "Estoque minimo", "Ativo", "Status"])
 
     query = db.query(SKU).outerjoin(StockBalance)
     sku_filter = filters.get("sku")
@@ -797,7 +801,7 @@ def export_movements_report(db, user, tipo=None):
         "ID",
         "Data/Hora",
         "Usuario",
-        "SKU",
+        "COD",
         "Descricao",
         "Tipo",
         "Quantidade",
@@ -842,7 +846,7 @@ def export_inventory_report(db, user, session_id=None):
     ws.append([
         "Sessao",
         "Status",
-        "SKU",
+        "COD",
         "Descricao",
         "Saldo sistema",
         "Quantidade contada",
@@ -874,7 +878,7 @@ def export_inventory_preview(db, user, session):
     ws = wb.active
     ws.title = "Previa"
     _metadata(ws, "Previa do inventario", user, f"sessao={session.id if session else ''}")
-    ws.append(["SKU", "Descricao", "Saldo sistema", "Contagem", "Diferenca", "Status"])
+    ws.append(["COD", "Descricao", "Saldo sistema", "Contagem", "Diferenca", "Status"])
 
     counts_by_sku = {}
     if session:

@@ -5,7 +5,7 @@
 <section class="page-head">
     <div>
         <h1>{{ "Entrada de estoque" if is_entry else "Empenho de estoque" }}</h1>
-        <p>{{ "Leia o codigo de barras do SKU, confira o item e confirme a quantidade." if is_entry else "Registre a quantidade empenhada; a baixa real sera feita por planilha de consumo." }}</p>
+        <p>{{ "Leia o codigo de barras do COD, confira o item e confirme a quantidade." if is_entry else "Registre a quantidade empenhada; a baixa real sera feita por planilha de consumo." }}</p>
     </div>
     {% if not is_entry %}
     <a class="btn secondary" href="{{ url_for('import_commitments') }}">Importar empenhos</a>
@@ -16,10 +16,10 @@
 
 <section class="scan-layout">
     <form method="get" class="panel scan-panel">
-        <label class="scan-label">{{ "Ler SKU recebido" if is_entry else "Ler SKU empenhado" }}
+        <label class="scan-label">{{ "Ler COD recebido" if is_entry else "Ler COD empenhado" }}
             <input class="scan-input" name="sku" value="{{ sku_code }}" data-autofocus autocomplete="off" placeholder="Bipe o codigo de barras">
         </label>
-        <button class="btn primary large" type="submit">Buscar SKU</button>
+        <button class="btn primary large" type="submit">Buscar COD</button>
     </form>
 
     <form method="post" class="panel form-grid">
@@ -44,7 +44,7 @@
         </button>
         {% else %}
         <div class="empty-state">
-            <strong>Aguardando leitura de SKU</strong>
+            <strong>Aguardando leitura de COD</strong>
             <p>O item precisa estar cadastrado e ativo para movimentar estoque.</p>
         </div>
         {% endif %}

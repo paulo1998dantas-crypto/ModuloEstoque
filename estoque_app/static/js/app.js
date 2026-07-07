@@ -272,7 +272,7 @@ function initBackflushBom() {
             const row = document.createElement("tr");
             row.dataset.bomRow = "1";
             row.innerHTML = [
-                '<td><input name="component_sku" required placeholder="SKU"></td>',
+                '<td><input name="component_sku" required placeholder="COD"></td>',
                 '<td class="muted">Item incluido manualmente</td>',
                 '<td></td>',
                 '<td class="num"></td>',

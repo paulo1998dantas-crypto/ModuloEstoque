@@ -22,7 +22,7 @@
     </label>
     <label class="check-row">
         <input type="checkbox" name="admin_can_print_inactive_sku" {% if values.admin_can_print_inactive_sku %}checked{% endif %}>
-        ADM pode imprimir etiqueta de SKU inativo
+        ADM pode imprimir etiqueta de COD inativo
     </label>
     <label>
         Nome da impressora Zebra no Windows
@@ -34,7 +34,7 @@
 <section class="panel danger-zone">
     <div>
         <h2>Reset operacional</h2>
-        <p class="muted">Limpa movimentacoes, contagens de inventario, sessoes e fila de etiquetas. Mantem usuarios, SKUs, saldos, configuracoes e o cache dos ultimos lancamentos.</p>
+        <p class="muted">Limpa movimentacoes, contagens de inventario, sessoes e fila de etiquetas. Mantem usuarios, CODs, saldos, configuracoes e o cache dos ultimos lancamentos.</p>
     </div>
     <form method="post" action="{{ url_for('reset_data') }}" class="confirmable" data-confirm="Confirmar reset dos dados operacionais? Exporte os relatorios antes de continuar.">
         <button class="btn danger large" type="submit">Resetar dados/logs</button>

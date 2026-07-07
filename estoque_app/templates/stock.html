@@ -4,7 +4,7 @@
 <section class="page-head">
     <div>
         <h1>Consulta de estoque</h1>
-        <p>Filtros por SKU, descricao, grupo, categoria, localizacao e status.</p>
+        <p>Filtros por COD, descricao, grupo, categoria, localizacao e status.</p>
     </div>
     {% if can_export %}
     <a class="btn secondary" href="{{ url_for('export_stock', **filters) }}">Exportar Excel</a>
@@ -12,7 +12,7 @@
 </section>
 
 <form class="filter-bar multi" method="get">
-    <input name="sku" value="{{ filters.sku }}" placeholder="SKU">
+    <input name="sku" value="{{ filters.sku }}" placeholder="COD">
     <input name="descricao" value="{{ filters.descricao }}" placeholder="Descricao">
     <input name="grupo" value="{{ filters.grupo }}" placeholder="Grupo">
     <input name="categoria" value="{{ filters.categoria }}" placeholder="Categoria">
@@ -31,7 +31,7 @@
         <table>
             <thead>
                 <tr>
-                    <th>SKU</th>
+                    <th>COD</th>
                     <th>Descricao</th>
                     <th>Un</th>
                     <th>Grupo</th>

@@ -28,8 +28,8 @@
 
 <section class="metric-grid inventory">
     <article class="metric"><span>Sessao</span><strong>{{ active_session.id if active_session else "Sem sessao" }}</strong></article>
-    <article class="metric"><span>SKUs previstos</span><strong>{{ stats.total_skus }}</strong></article>
-    <article class="metric"><span>SKUs contados</span><strong>{{ stats.counted }}</strong></article>
+    <article class="metric"><span>CODs previstos</span><strong>{{ stats.total_skus }}</strong></article>
+    <article class="metric"><span>CODs contados</span><strong>{{ stats.counted }}</strong></article>
     <article class="metric danger-soft"><span>Divergencias</span><strong>{{ stats.divergences }}</strong></article>
     <article class="metric"><span>Ainda nao contados</span><strong>{{ stats.pending }}</strong></article>
     <article class="metric"><span>Saldo zerado</span><strong>{{ stats.zero_balance }}</strong></article>
@@ -65,7 +65,7 @@
         <h2>Contagem com leitor</h2>
         <form method="post" class="form-grid">
             <input type="hidden" name="action" value="count_sku">
-            <label>SKU
+            <label>COD
                 <input name="count_sku" data-autofocus autocomplete="off" placeholder="Bipe o codigo de barras">
             </label>
             <label>Quantidade contada
@@ -83,7 +83,7 @@
             <label>Planilha de contagem
                 <input type="file" name="file" accept=".xlsx,.xlsm,.xltx,.xltm" required>
             </label>
-            <div class="note">Colunas: SKU, UNIDADE_DE_MEDIDA e SALDO_CONTADO. O saldo contado substitui o saldo final esperado.</div>
+            <div class="note">Colunas: COD, UNIDADE_DE_MEDIDA e SALDO_CONTADO. O saldo contado substitui o saldo final esperado.</div>
             <button class="btn primary large" type="submit">Importar substituicao</button>
         </form>
         {% else %}
@@ -102,7 +102,7 @@
             <label>Planilha para somar saldo
                 <input type="file" name="file" accept=".xlsx,.xlsm,.xltx,.xltm" required>
             </label>
-            <div class="note">Colunas: SKU, UNIDADE_DE_MEDIDA e SALDO_SOMAR. O sistema soma esse valor ao saldo atual e salva como contagem.</div>
+            <div class="note">Colunas: COD, UNIDADE_DE_MEDIDA e SALDO_SOMAR. O sistema soma esse valor ao saldo atual e salva como contagem.</div>
             <button class="btn primary large" type="submit">Importar soma</button>
         </form>
         {% else %}
@@ -127,8 +127,8 @@
     <div class="split wide">
         <form method="post" class="form-grid">
             <input type="hidden" name="action" value="add_job">
-            <label>SKU individual
-                <input name="sku" autocomplete="off" placeholder="SKU">
+            <label>COD individual
+                <input name="sku" autocomplete="off" placeholder="COD">
             </label>
             <label>Quantidade
                 <input name="quantidade" type="number" min="1" value="1">
@@ -138,7 +138,7 @@
 
         <form method="post" class="form-grid" enctype="multipart/form-data">
             <input type="hidden" name="action" value="import_jobs">
-            <label>Importar planilha SKU / quantidade
+            <label>Importar planilha COD / quantidade
                 <input type="file" name="file" accept=".xlsx" required>
             </label>
             <button class="btn secondary" type="submit">Importar fila</button>
@@ -149,7 +149,7 @@
         <label>Quantidade padrao
             <input name="quantidade_lote" type="number" min="1" value="1">
         </label>
-        <button class="btn secondary" name="action" value="generate_active" type="submit">Todos os SKUs ativos</button>
+        <button class="btn secondary" name="action" value="generate_active" type="submit">Todos os CODs ativos</button>
         <button class="btn secondary" name="action" value="generate_positive" type="submit">Somente saldo maior que zero</button>
         <button class="btn secondary" name="action" value="save_all_zpl" type="submit">Baixar todos os ZPLs</button>
         <button class="btn danger" name="action" value="cancel_pending" type="submit">Cancelar pendentes</button>
@@ -158,8 +158,8 @@
 
 <section class="panel">
     <div class="panel-head">
-        <h2>Selecionar varios SKUs</h2>
-        <span class="muted">Mostrando ate 300 SKUs ativos.</span>
+        <h2>Selecionar varios CODs</h2>
+        <span class="muted">Mostrando ate 300 CODs ativos.</span>
     </div>
     <form method="post">
         <input type="hidden" name="action" value="selected_jobs">
@@ -192,7 +192,7 @@
             <thead>
                 <tr>
                     <th>ID</th>
-                    <th>SKU</th>
+                    <th>COD</th>
                     <th>Descricao</th>
                     <th>Qtd</th>
                     <th>Origem</th>
@@ -238,7 +238,7 @@
     <h2>Ultimas contagens</h2>
     <div class="table-wrap">
         <table>
-            <thead><tr><th>SKU</th><th>Descricao</th><th>Sistema</th><th>Contado</th><th>Diferenca</th><th>Usuario</th><th>Data</th></tr></thead>
+            <thead><tr><th>COD</th><th>Descricao</th><th>Sistema</th><th>Contado</th><th>Diferenca</th><th>Usuario</th><th>Data</th></tr></thead>
             <tbody>
                 {% for count in counts %}
                 <tr>

@@ -6,16 +6,16 @@
         <div>
             <span>Ajuste de saldo</span>
             <h1>Inventario</h1>
-            <p>Confira o SKU, informe o saldo fisico e registre o ajuste.</p>
+            <p>Confira o COD, informe o saldo fisico e registre o ajuste.</p>
         </div>
         <strong>INV</strong>
     </section>
 
     <form method="get" class="panel mobile-count-form">
-        <label>SKU
-            <input class="scan-input" name="sku" value="{{ sku_code }}" data-autofocus autocomplete="off" placeholder="Bipe ou digite o SKU">
+        <label>COD
+            <input class="scan-input" name="sku" value="{{ sku_code }}" data-autofocus autocomplete="off" placeholder="Bipe ou digite o COD">
         </label>
-        <button class="btn primary large" type="submit">Buscar SKU</button>
+        <button class="btn primary large" type="submit">Buscar COD</button>
     </form>
 
     <form method="post" class="panel form-grid inventory-count-card">
@@ -41,8 +41,8 @@
         <button class="btn primary large" type="submit">Confirmar inventario</button>
         {% else %}
         <div class="empty-state">
-            <strong>Aguardando SKU</strong>
-            <p>Leia ou digite um SKU ativo para ajustar o saldo contado.</p>
+            <strong>Aguardando COD</strong>
+            <p>Leia ou digite um COD ativo para ajustar o saldo contado.</p>
         </div>
         {% endif %}
     </form>
@@ -66,7 +66,7 @@
             {% else %}
             <div class="empty-state">
                 <strong>Nenhum inventario registrado.</strong>
-                <p>Leia um SKU para comecar.</p>
+                <p>Leia um COD para comecar.</p>
             </div>
             {% endfor %}
         </div>

@@ -27,7 +27,7 @@ estoque_app/dist/EstoqueJIMontadora.zip
 ## Funcionalidades
 
 - Login com perfil ADM e OPERADOR
-- Cadastro e importacao Excel de SKUs
+- Cadastro e importacao Excel de CODs
 - Cadastro e importacao Excel de B.O.M
 - Controle de entrada, empenho, baixa e inventario com historico auditavel
 - Backflush de componentes na entrada de itens com estrutura

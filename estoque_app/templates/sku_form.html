@@ -1,15 +1,15 @@
 {% extends "base.html" %}
-{% block title %}SKU - Estoque{% endblock %}
+{% block title %}COD - Estoque{% endblock %}
 {% block content %}
 <section class="page-head">
     <div>
-        <h1>{{ "Editar SKU" if sku else "Novo SKU" }}</h1>
+        <h1>{{ "Editar COD" if sku else "Novo COD" }}</h1>
         <p>A descricao usada na etiqueta sera limitada a 58 caracteres.</p>
     </div>
 </section>
 
 <form method="post" class="panel form-grid two">
-    <label>SKU
+    <label>COD
         <input name="sku" value="{{ sku.sku if sku else '' }}" maxlength="80" required autofocus>
     </label>
     <label>Descricao
@@ -32,11 +32,11 @@
     </label>
     <label class="check-row">
         <input type="checkbox" name="active" {% if not sku or sku.active %}checked{% endif %}>
-        SKU ativo
+        COD ativo
     </label>
     <div class="form-actions">
         <a class="btn secondary" href="{{ url_for('skus') }}">Voltar</a>
-        <button class="btn primary" type="submit">Salvar SKU</button>
+        <button class="btn primary" type="submit">Salvar COD</button>
     </div>
 </form>
 {% endblock %}

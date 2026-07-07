@@ -191,7 +191,7 @@ def render_label_epl_from_zpl(zpl):
         "LO35,13,730,2",
         *desc_commands,
         "LO35,126,594,7",
-        'A46,163,0,4,1,1,N,"SKU"',
+        'A46,163,0,4,1,1,N,"COD"',
         f'A{sku_x},208,0,5,1,2,N,"{sku}"',
         f'A46,335,0,3,1,1,N,"DATA EMISSAO: {data["data"]}"',
         f'B520,140,0,1,2,4,198,N,"{sku}"',

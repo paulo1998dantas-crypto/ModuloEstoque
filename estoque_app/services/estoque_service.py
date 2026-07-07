@@ -94,7 +94,7 @@ def create_or_update_sku(db, data, user=None, commit=True):
     sku_code = normalize_sku(data.get("sku"))
     descricao = str(data.get("descricao") or "").strip()
     if not sku_code:
-        raise ValueError("SKU e obrigatorio.")
+        raise ValueError("COD e obrigatorio.")
     if not descricao:
         raise ValueError("Descricao e obrigatoria.")
 
@@ -183,11 +183,11 @@ def clear_dashboard_movement_cache(db):
 
 def register_movement(db, sku, tipo, quantidade, usuario_id, documento="", observacao="", allow_negative=False, commit=True):
     if sku is None:
-        raise ValueError("SKU nao encontrado.")
+        raise ValueError("COD nao encontrado.")
     if tipo == "SAIDA":
         tipo = "EMPENHO"
     if not sku.active and tipo in {"ENTRADA", "EMPENHO", "BAIXA"}:
-        raise ValueError("SKU inativo. Movimentacao bloqueada.")
+        raise ValueError("COD inativo. Movimentacao bloqueada.")
 
     quantidade = to_decimal(quantidade)
     if quantidade <= 0 and tipo in {"ENTRADA", "EMPENHO", "BAIXA"}:
