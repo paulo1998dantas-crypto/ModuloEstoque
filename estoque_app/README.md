@@ -203,6 +203,9 @@ DESCRICAO
 Colunas opcionais aceitas:
 
 ```text
+UNIDADE ou UNIDADE_DE_MEDIDA
+GRUPO
+CATEGORIA
 SALDO_ATUAL ou ESTOQUE
 ```
 
@@ -210,6 +213,8 @@ Regras:
 
 - SKU novo e criado.
 - SKU existente tem a descricao atualizada.
+- Unidade, grupo e categoria sao atualizados quando estiverem preenchidos na linha.
+- Campos opcionais em branco preservam os dados atuais do item.
 - Saldo atual so muda quando `SALDO_ATUAL` ou `ESTOQUE` estiver preenchido na linha.
 - Saldo em branco preserva o saldo atual do item.
 - SKUs ausentes da planilha nao sao apagados.

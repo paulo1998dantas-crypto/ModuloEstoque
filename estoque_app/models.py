@@ -40,6 +40,7 @@ class SKU(Base):
     sku = Column(String(80), unique=True, nullable=False, index=True)
     descricao = Column(String(255), nullable=False)
     unidade = Column(String(20), nullable=True)
+    grupo = Column(String(120), nullable=True)
     categoria = Column(String(120), nullable=True)
     localizacao = Column(String(120), nullable=True)
     estoque_minimo = Column(Numeric(14, 3), nullable=True)

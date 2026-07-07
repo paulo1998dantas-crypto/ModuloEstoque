@@ -108,6 +108,8 @@ def create_or_update_sku(db, data, user=None, commit=True):
     sku.descricao = descricao
     if "unidade" in data:
         sku.unidade = str(data.get("unidade") or "").strip() or None
+    if "grupo" in data:
+        sku.grupo = str(data.get("grupo") or "").strip() or None
     if "categoria" in data:
         sku.categoria = str(data.get("categoria") or "").strip() or None
     if "localizacao" in data:

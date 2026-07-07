@@ -22,9 +22,10 @@ from services.estoque_service import (
 )
 
 
-SKU_IMPORT_COLUMNS = ["SKU", "DESCRICAO", "SALDO_ATUAL", "ESTOQUE_MINIMO"]
+SKU_IMPORT_COLUMNS = ["SKU", "DESCRICAO", "UNIDADE", "GRUPO", "CATEGORIA", "SALDO_ATUAL"]
 SKU_REQUIRED_COLUMNS = ["SKU", "DESCRICAO"]
 STOCK_COLUMN_ALIASES = ["SALDO_ATUAL", "ESTOQUE_ATUAL", "ESTOQUE", "SALDO"]
+SKU_UNIT_ALIASES = ["UNIDADE", "UNIDADE_DE_MEDIDA", "UNIDADE_MEDIDA", "UM"]
 LABEL_IMPORT_COLUMNS = ["SKU", "QUANTIDADE"]
 CONSUMPTION_IMPORT_COLUMNS = ["SKU", "UNIDADE_DE_MEDIDA", "SALDO_CONSUMIDO"]
 COMMITMENT_IMPORT_COLUMNS = ["SKU", "UNIDADE_DE_MEDIDA", "SALDO_EMPENHADO"]
@@ -139,6 +140,15 @@ def import_skus_from_excel(db, file_obj):
             "descricao": raw_desc,
             "active": existing_sku.active if existing_sku else True,
         }
+        optional_fields = {
+            "unidade": SKU_UNIT_ALIASES,
+            "grupo": ["GRUPO"],
+            "categoria": ["CATEGORIA"],
+        }
+        for field_name, aliases in optional_fields.items():
+            value = _first_cell(ws, row_number, headers, aliases)
+            if value is not None and str(value).strip() != "":
+                data[field_name] = value
         if any(column in headers for column in STOCK_COLUMN_ALIASES):
             saldo_atual = _first_cell(ws, row_number, headers, STOCK_COLUMN_ALIASES)
             if saldo_atual is not None and str(saldo_atual).strip() != "":
@@ -593,23 +603,23 @@ def create_template_files(base_dir):
     ws.title = "SKUs"
     ws.append(SKU_IMPORT_COLUMNS)
     _style_header(ws)
-    for width, column in zip([18, 48, 18, 18], "ABCD"):
+    for width, column in zip([18, 48, 16, 24, 24, 18], "ABCDEF"):
         ws.column_dimensions[column].width = width
     wb.save(template_path)
 
     wb = Workbook()
     ws = wb.active
     ws.title = "SKUs"
-    ws.append(["SKU", "DESCRICAO", "SALDO_ATUAL", "ESTOQUE_MINIMO", "UNIDADE", "CATEGORIA", "LOCALIZACAO"])
+    ws.append(SKU_IMPORT_COLUMNS)
     examples = [
-        ["PAR-0001", "Parafuso sextavado M8 x 30 zincado", 125, 50, "UN", "Fixadores", "A1-01"],
-        ["CAB-0012", "Cabo eletrico flexivel 2,5 mm preto", 80, "", "M", "Eletrica", "B2-04"],
-        ["CON-0100", "Conector pneumatico reto 1/4", 12, 20, "UN", "Pneumatica", "C3-02"],
+        ["PAR-0001", "Parafuso sextavado M8 x 30 zincado", "UN", "Ferragens", "Fixadores", 125],
+        ["CAB-0012", "Cabo eletrico flexivel 2,5 mm preto", "M", "Componentes", "Eletrica", ""],
+        ["CON-0100", "Conector pneumatico reto 1/4", "UN", "Componentes", "Pneumatica", 12],
     ]
     for row in examples:
         ws.append(row)
     _style_header(ws)
-    for width, column in zip([18, 48, 18, 18, 14, 24, 24], "ABCDEFG"):
+    for width, column in zip([18, 48, 16, 24, 24, 18], "ABCDEF"):
         ws.column_dimensions[column].width = width
     wb.save(sample_path)
 
@@ -717,11 +727,12 @@ def export_stock_report(db, user, filters):
     ws = wb.active
     ws.title = "Estoque"
     _metadata(ws, "Relatorio de estoque atual", user, filters)
-    ws.append(["SKU", "Descricao", "Unidade", "Categoria", "Localizacao", "Saldo atual", "Estoque minimo", "Ativo", "Status"])
+    ws.append(["SKU", "Descricao", "Unidade", "Grupo", "Categoria", "Localizacao", "Saldo atual", "Estoque minimo", "Ativo", "Status"])
 
     query = db.query(SKU).outerjoin(StockBalance)
     sku_filter = filters.get("sku")
     desc_filter = filters.get("descricao")
+    group = filters.get("grupo")
     category = filters.get("categoria")
     location = filters.get("localizacao")
     active = filters.get("active")
@@ -731,6 +742,8 @@ def export_stock_report(db, user, filters):
         query = query.filter(SKU.sku.ilike(f"%{sku_filter}%"))
     if desc_filter:
         query = query.filter(SKU.descricao.ilike(f"%{desc_filter}%"))
+    if group:
+        query = query.filter(SKU.grupo.ilike(f"%{group}%"))
     if category:
         query = query.filter(SKU.categoria.ilike(f"%{category}%"))
     if location:
@@ -756,6 +769,7 @@ def export_stock_report(db, user, filters):
             sku.sku,
             sku.descricao,
             sku.unidade,
+            sku.grupo,
             sku.categoria,
             sku.localizacao,
             decimal_to_str(saldo),

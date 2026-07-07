@@ -17,7 +17,7 @@
         <input type="file" name="file" accept=".xlsx" required>
     </label>
     <div class="note">
-        Colunas obrigatorias: SKU e DESCRICAO. O upload atualiza a descricao e altera saldo somente quando SALDO_ATUAL ou ESTOQUE estiver preenchido. Saldo em branco preserva o saldo atual do item. Se a planilha tiver erros, nada sera alterado.
+        Colunas obrigatorias: SKU e DESCRICAO. UNIDADE, GRUPO e CATEGORIA sao opcionais e, quando preenchidos, atualizam o cadastro. O saldo muda somente quando SALDO_ATUAL ou ESTOQUE estiver preenchido. Campos opcionais em branco preservam os dados atuais. Se a planilha tiver erros, nada sera alterado.
     </div>
     <button class="btn primary" type="submit">Atualizar SKUs pela planilha</button>
 </form>

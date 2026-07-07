@@ -36,11 +36,13 @@ def init_db():
     import models  # noqa: F401
 
     Base.metadata.create_all(bind=engine)
-    migrate_sqlite_schema()
+    migrate_sku_schema()
 
 
-def migrate_sqlite_schema():
+def migrate_sku_schema():
     if not Config.SQLALCHEMY_DATABASE_URI.startswith("sqlite"):
+        with engine.begin() as connection:
+            connection.execute(text("ALTER TABLE skus ADD COLUMN IF NOT EXISTS grupo VARCHAR(120)"))
         return
 
     with engine.connect().execution_options(isolation_level="AUTOCOMMIT") as connection:
@@ -48,6 +50,12 @@ def migrate_sqlite_schema():
             row[1]: row
             for row in connection.execute(text("PRAGMA table_info(skus)"))
         }
+        if "grupo" not in skus_columns:
+            connection.execute(text("ALTER TABLE skus ADD COLUMN grupo VARCHAR(120)"))
+            skus_columns = {
+                row[1]: row
+                for row in connection.execute(text("PRAGMA table_info(skus)"))
+            }
         estoque_minimo = skus_columns.get("estoque_minimo")
         if not estoque_minimo or not estoque_minimo[3]:
             return
@@ -60,6 +68,7 @@ def migrate_sqlite_schema():
                     sku VARCHAR(80) NOT NULL,
                     descricao VARCHAR(255) NOT NULL,
                     unidade VARCHAR(20),
+                    grupo VARCHAR(120),
                     categoria VARCHAR(120),
                     localizacao VARCHAR(120),
                     estoque_minimo NUMERIC(14, 3),
@@ -71,11 +80,11 @@ def migrate_sqlite_schema():
             """))
             connection.execute(text("""
                 INSERT INTO skus_new (
-                    id, sku, descricao, unidade, categoria, localizacao,
+                    id, sku, descricao, unidade, grupo, categoria, localizacao,
                     estoque_minimo, active, created_at, updated_at
                 )
                 SELECT
-                    id, sku, descricao, unidade, categoria, localizacao,
+                    id, sku, descricao, unidade, grupo, categoria, localizacao,
                     estoque_minimo, active, created_at, updated_at
                 FROM skus
             """))

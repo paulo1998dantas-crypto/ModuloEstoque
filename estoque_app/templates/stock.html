@@ -4,7 +4,7 @@
 <section class="page-head">
     <div>
         <h1>Consulta de estoque</h1>
-        <p>Filtros por SKU, descricao, categoria, localizacao e status.</p>
+        <p>Filtros por SKU, descricao, grupo, categoria, localizacao e status.</p>
     </div>
     {% if can_export %}
     <a class="btn secondary" href="{{ url_for('export_stock', **filters) }}">Exportar Excel</a>
@@ -14,6 +14,7 @@
 <form class="filter-bar multi" method="get">
     <input name="sku" value="{{ filters.sku }}" placeholder="SKU">
     <input name="descricao" value="{{ filters.descricao }}" placeholder="Descricao">
+    <input name="grupo" value="{{ filters.grupo }}" placeholder="Grupo">
     <input name="categoria" value="{{ filters.categoria }}" placeholder="Categoria">
     <input name="localizacao" value="{{ filters.localizacao }}" placeholder="Localizacao">
     <select name="active">
@@ -33,6 +34,7 @@
                     <th>SKU</th>
                     <th>Descricao</th>
                     <th>Un</th>
+                    <th>Grupo</th>
                     <th>Categoria</th>
                     <th>Localizacao</th>
                     <th>Saldo atual</th>
@@ -48,6 +50,7 @@
                     <td>{{ sku.sku }}</td>
                     <td>{{ sku.descricao }}</td>
                     <td>{{ sku.unidade or "" }}</td>
+                    <td>{{ sku.grupo or "" }}</td>
                     <td>{{ sku.categoria or "" }}</td>
                     <td>{{ sku.localizacao or "" }}</td>
                     <td class="num">{{ saldo|qty }}</td>
@@ -55,7 +58,7 @@
                     <td><span class="badge {{ status|lower }}">{{ status }}</span></td>
                 </tr>
                 {% else %}
-                <tr><td colspan="8" class="empty">Nenhum item encontrado.</td></tr>
+                <tr><td colspan="9" class="empty">Nenhum item encontrado.</td></tr>
                 {% endfor %}
             </tbody>
         </table>

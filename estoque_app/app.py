@@ -256,6 +256,8 @@ def stock_rows(database, filters):
         query = query.filter(SKU.sku.ilike(f"%{filters['sku']}%"))
     if filters.get("descricao"):
         query = query.filter(SKU.descricao.ilike(f"%{filters['descricao']}%"))
+    if filters.get("grupo"):
+        query = query.filter(SKU.grupo.ilike(f"%{filters['grupo']}%"))
     if filters.get("categoria"):
         query = query.filter(SKU.categoria.ilike(f"%{filters['categoria']}%"))
     if filters.get("localizacao"):
@@ -407,6 +409,7 @@ def sku_form(sku_id=None):
                 "sku": request.form.get("sku"),
                 "descricao": request.form.get("descricao"),
                 "unidade": request.form.get("unidade"),
+                "grupo": request.form.get("grupo"),
                 "categoria": request.form.get("categoria"),
                 "localizacao": request.form.get("localizacao"),
                 "estoque_minimo": request.form.get("estoque_minimo"),
@@ -419,6 +422,7 @@ def sku_form(sku_id=None):
                 sku.sku = normalize_sku(data["sku"])
                 sku.descricao = data["descricao"].strip()
                 sku.unidade = data["unidade"].strip() or None
+                sku.grupo = data["grupo"].strip() or None
                 sku.categoria = data["categoria"].strip() or None
                 sku.localizacao = data["localizacao"].strip() or None
                 sku.estoque_minimo = to_optional_decimal(data["estoque_minimo"])
@@ -475,6 +479,7 @@ def stock():
     filters = {
         "sku": request.args.get("sku", "").strip(),
         "descricao": request.args.get("descricao", "").strip(),
+        "grupo": request.args.get("grupo", "").strip(),
         "categoria": request.args.get("categoria", "").strip(),
         "localizacao": request.args.get("localizacao", "").strip(),
         "saldo_baixo": request.args.get("saldo_baixo", ""),
