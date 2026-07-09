@@ -268,6 +268,12 @@ def flash_local_update_result(label, result, success_category="success"):
             f"{result.get('files', 0)} arquivo(s).",
             success_category,
         )
+    if result.get("warnings"):
+        flash(f"{len(result['warnings'])} linha(s)/arquivo(s) ignorado(s) na atualizacao.", "warning")
+        for warning in result["warnings"][:10]:
+            flash(warning, "warning")
+        if len(result["warnings"]) > 10:
+            flash(f"Mais {len(result['warnings']) - 10} aviso(s) oculto(s).", "warning")
 
 
 def refresh_local_sources_quietly(database, include_bom=False):

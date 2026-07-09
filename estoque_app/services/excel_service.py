@@ -983,7 +983,7 @@ def import_bom_from_excel(db, file_obj):
 
 
 def import_bom_from_files(db, file_paths):
-    result = {"processed": 0, "items": 0, "deleted": 0, "files": 0, "errors": []}
+    result = {"processed": 0, "items": 0, "deleted": 0, "files": 0, "errors": [], "warnings": []}
     rows = []
     parent_ids = set()
     seen_pairs = {}
@@ -1003,9 +1003,9 @@ def import_bom_from_files(db, file_paths):
             result["files"] += 1
             rows.extend(parsed_rows)
             parent_ids.update(parsed_parent_ids)
-            result["errors"].extend(errors)
+            result["warnings"].extend(errors)
         except Exception as exc:
-            result["errors"].append(f"{path.name}: {exc}")
+            result["warnings"].append(f"{path.name}: {exc}")
 
     if not file_paths:
         result["errors"].append("Nenhuma planilha B.O.M encontrada na pasta local.")
