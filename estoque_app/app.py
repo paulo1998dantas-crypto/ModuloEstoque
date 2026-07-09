@@ -81,7 +81,10 @@ from services.estoque_service import (
     normalize_sku,
     open_inventory_session,
     optional_decimal_to_str,
+    pending_commitment_for_movement,
+    pending_commitments_by_sku,
     parse_backflush_rows,
+    register_consumption_from_commitment,
     register_movement,
     register_entry_with_backflush,
     reset_operational_data,
@@ -326,7 +329,14 @@ def stock_rows(database, filters):
     if filters.get("saldo_baixo") == "1":
         query = query.filter(SKU.estoque_minimo.isnot(None))
         query = query.filter(or_(StockBalance.saldo_atual <= SKU.estoque_minimo, StockBalance.saldo_atual.is_(None)))
-    return query.order_by(SKU.sku).all()
+    rows = query.order_by(SKU.sku).all()
+    pending_by_sku = pending_commitments_by_sku(database, [sku.id for sku in rows])
+    for sku in rows:
+        saldo_atual = to_decimal(sku.balance.saldo_atual if sku.balance else 0)
+        saldo_empenhado = pending_by_sku.get(sku.id, to_decimal(0))
+        sku.saldo_empenhado = saldo_empenhado
+        sku.saldo_disponivel = saldo_atual - saldo_empenhado
+    return rows
 
 
 @app.route("/")
@@ -993,7 +1003,35 @@ def movements():
         else:
             query = query.filter(Movement.tipo == tipo)
     rows = query.order_by(Movement.created_at.desc()).limit(500).all()
+    for movement in rows:
+        movement.pending_commitment = pending_commitment_for_movement(database, movement)
     return render_template("movements.html", movements=rows, tipo=tipo, can_export=user_can_export(database, user))
+
+
+@app.route("/movimentacoes/<int:movement_id>/baixar-empenho", methods=["POST"])
+@login_required
+def consume_commitment_route(movement_id):
+    database = db()
+    user = current_user()
+    movement = database.get(Movement, movement_id)
+    try:
+        baixa = register_consumption_from_commitment(
+            database,
+            movement,
+            request.form.get("quantidade", ""),
+            session["user_id"],
+            documento=request.form.get("documento", ""),
+            observacao=request.form.get("observacao", ""),
+            allow_negative=(user and user.role == "ADM") or get_setting_bool(database, "allow_negative_stock", False),
+        )
+        flash(
+            f"Baixa {baixa.id} gerada a partir do empenho {movement_id}: {decimal_to_str(baixa.quantidade)}.",
+            "success",
+        )
+    except Exception as exc:
+        database.rollback()
+        flash(f"Falha ao baixar empenho: {exc}", "danger")
+    return redirect(url_for("movements", tipo=request.form.get("tipo", "EMPENHO")))
 
 
 @app.route("/movimentacoes/<int:movement_id>/excluir", methods=["POST"])

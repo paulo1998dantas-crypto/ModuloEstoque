@@ -38,6 +38,8 @@
                     <th>Categoria</th>
                     <th>Localizacao</th>
                     <th>Saldo atual</th>
+                    <th>Empenhado</th>
+                    <th>Disponivel</th>
                     <th>Minimo</th>
                     <th>Status</th>
                 </tr>
@@ -54,11 +56,13 @@
                     <td>{{ sku.categoria or "" }}</td>
                     <td>{{ sku.localizacao or "" }}</td>
                     <td class="num">{{ saldo|qty }}</td>
+                    <td class="num">{{ sku.saldo_empenhado|qty }}</td>
+                    <td class="num">{{ sku.saldo_disponivel|qty }}</td>
                     <td class="num">{{ fmt_min(sku.estoque_minimo) or "" }}</td>
                     <td><span class="badge {{ status|lower }}">{{ status }}</span></td>
                 </tr>
                 {% else %}
-                <tr><td colspan="9" class="empty">Nenhum item encontrado.</td></tr>
+                <tr><td colspan="11" class="empty">Nenhum item encontrado.</td></tr>
                 {% endfor %}
             </tbody>
         </table>

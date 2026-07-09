@@ -1,6 +1,7 @@
 from decimal import Decimal, InvalidOperation
 
 from sqlalchemy import func
+from sqlalchemy.orm import aliased
 
 from models import (
     AppSetting,
@@ -17,6 +18,7 @@ from models import (
 
 
 QTY_SCALE = Decimal("0.001")
+COMMITMENT_TYPES = ("EMPENHO", "SAIDA")
 
 
 def to_decimal(value, default="0"):
@@ -181,7 +183,18 @@ def clear_dashboard_movement_cache(db):
     db.flush()
 
 
-def register_movement(db, sku, tipo, quantidade, usuario_id, documento="", observacao="", allow_negative=False, commit=True):
+def register_movement(
+    db,
+    sku,
+    tipo,
+    quantidade,
+    usuario_id,
+    documento="",
+    observacao="",
+    allow_negative=False,
+    commit=True,
+    related_movement_id=None,
+):
     if sku is None:
         raise ValueError("COD nao encontrado.")
     if tipo == "SAIDA":
@@ -219,6 +232,7 @@ def register_movement(db, sku, tipo, quantidade, usuario_id, documento="", obser
         saldo_anterior=saldo_anterior,
         saldo_posterior=saldo_posterior,
         usuario_id=usuario_id,
+        related_movement_id=related_movement_id,
         documento=documento or None,
         observacao=observacao or None,
     )
@@ -228,6 +242,86 @@ def register_movement(db, sku, tipo, quantidade, usuario_id, documento="", obser
     if commit:
         db.commit()
     return movement
+
+
+def pending_commitments_by_sku(db, sku_ids=None):
+    commitment_query = db.query(Movement.sku_id, func.coalesce(func.sum(Movement.quantidade), 0)).filter(
+        Movement.tipo.in_(COMMITMENT_TYPES)
+    )
+    if sku_ids is not None:
+        commitment_query = commitment_query.filter(Movement.sku_id.in_(sku_ids))
+    commitments = {
+        sku_id: to_decimal(total)
+        for sku_id, total in commitment_query.group_by(Movement.sku_id).all()
+    }
+    if not commitments:
+        return {}
+
+    parent = aliased(Movement)
+    baixas_query = (
+        db.query(parent.sku_id, func.coalesce(func.sum(Movement.quantidade), 0))
+        .join(parent, Movement.related_movement_id == parent.id)
+        .filter(Movement.tipo == "BAIXA", parent.tipo.in_(COMMITMENT_TYPES))
+    )
+    if sku_ids is not None:
+        baixas_query = baixas_query.filter(parent.sku_id.in_(sku_ids))
+    baixas = {
+        sku_id: to_decimal(total)
+        for sku_id, total in baixas_query.group_by(parent.sku_id).all()
+    }
+    return {
+        sku_id: max(total - baixas.get(sku_id, Decimal("0.000")), Decimal("0.000"))
+        for sku_id, total in commitments.items()
+    }
+
+
+def pending_commitment_for_movement(db, movement):
+    if movement is None or movement.tipo not in COMMITMENT_TYPES:
+        return Decimal("0.000")
+    baixado = (
+        db.query(func.coalesce(func.sum(Movement.quantidade), 0))
+        .filter(Movement.tipo == "BAIXA", Movement.related_movement_id == movement.id)
+        .scalar()
+    )
+    return max(to_decimal(movement.quantidade) - to_decimal(baixado), Decimal("0.000"))
+
+
+def register_consumption_from_commitment(
+    db,
+    commitment,
+    quantidade,
+    usuario_id,
+    documento="",
+    observacao="",
+    allow_negative=False,
+    commit=True,
+):
+    if commitment is None or commitment.tipo not in COMMITMENT_TYPES:
+        raise ValueError("Empenho nao encontrado.")
+    pending = pending_commitment_for_movement(db, commitment)
+    quantidade = pending if quantidade in (None, "") else to_decimal(quantidade)
+    if quantidade <= 0:
+        raise ValueError("Quantidade para baixa deve ser maior que zero.")
+    if quantidade > pending:
+        raise ValueError(
+            f"Baixa bloqueada: empenho possui somente {decimal_to_str(pending)} pendente."
+        )
+    document = documento or commitment.documento or f"BAIXA-EMPENHO-{commitment.id}"
+    note = f"Baixa vinculada ao empenho {commitment.id}."
+    if observacao:
+        note = f"{note} {observacao}"
+    return register_movement(
+        db,
+        commitment.sku,
+        "BAIXA",
+        quantidade,
+        usuario_id,
+        documento=document,
+        observacao=note,
+        allow_negative=allow_negative,
+        commit=commit,
+        related_movement_id=commitment.id,
+    )
 
 
 def bom_components_for_sku(db, sku):
@@ -336,6 +430,15 @@ def register_entry_with_backflush(
 def delete_movement(db, movement, allow_negative=False):
     if movement is None:
         raise ValueError("Movimentacao nao encontrada.")
+    if movement.tipo in COMMITMENT_TYPES:
+        has_related_baixa = (
+            db.query(Movement.id)
+            .filter(Movement.related_movement_id == movement.id, Movement.tipo == "BAIXA")
+            .first()
+            is not None
+        )
+        if has_related_baixa:
+            raise ValueError("Exclusao bloqueada: existe baixa vinculada a este empenho.")
 
     balance = ensure_balance(db, movement.sku)
     saldo_atual = to_decimal(balance.saldo_atual)

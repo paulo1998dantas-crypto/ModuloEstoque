@@ -39,11 +39,10 @@
                     <th>Qtd</th>
                     <th>Anterior</th>
                     <th>Posterior</th>
+                    <th>Vinculo</th>
                     <th>Documento</th>
                     <th>Observacao</th>
-                    {% if current_user.role == 'ADM' %}
                     <th>Acoes</th>
-                    {% endif %}
                 </tr>
             </thead>
             <tbody>
@@ -58,19 +57,33 @@
                     <td class="num">{{ mv.quantidade|qty }}</td>
                     <td class="num">{{ mv.saldo_anterior|qty }}</td>
                     <td class="num">{{ mv.saldo_posterior|qty }}</td>
+                    <td>
+                        {% if mv.tipo in ['EMPENHO', 'SAIDA'] %}
+                            Pendente: {{ mv.pending_commitment|qty }}
+                        {% elif mv.related_movement_id %}
+                            Empenho #{{ mv.related_movement_id }}
+                        {% endif %}
+                    </td>
                     <td>{{ mv.documento or "" }}</td>
                     <td>{{ mv.observacao or "" }}</td>
-                    {% if current_user.role == 'ADM' %}
                     <td>
-                        <form method="post" action="{{ url_for('delete_movement_route', movement_id=mv.id) }}" class="confirmable" data-confirm="Excluir a movimentacao {{ mv.id }} e reverter o efeito no saldo atual?">
-                            <input type="hidden" name="tipo" value="{{ tipo }}">
-                            <button class="btn small danger" type="submit">Excluir</button>
-                        </form>
+                        {% if mv.tipo in ['EMPENHO', 'SAIDA'] and mv.pending_commitment > 0 %}
+                            <form method="post" action="{{ url_for('consume_commitment_route', movement_id=mv.id) }}" class="button-row">
+                                <input type="hidden" name="tipo" value="{{ tipo or 'EMPENHO' }}">
+                                <input name="quantidade" inputmode="decimal" placeholder="{{ mv.pending_commitment|qty }}">
+                                <button class="btn small" type="submit">Baixar</button>
+                            </form>
+                        {% endif %}
+                        {% if current_user.role == 'ADM' %}
+                            <form method="post" action="{{ url_for('delete_movement_route', movement_id=mv.id) }}" class="confirmable" data-confirm="Excluir a movimentacao {{ mv.id }} e reverter o efeito no saldo atual?">
+                                <input type="hidden" name="tipo" value="{{ tipo }}">
+                                <button class="btn small danger" type="submit">Excluir</button>
+                            </form>
+                        {% endif %}
                     </td>
-                    {% endif %}
                 </tr>
                 {% else %}
-                <tr><td colspan="{{ 12 if current_user.role == 'ADM' else 11 }}" class="empty">Nenhuma movimentacao registrada.</td></tr>
+                <tr><td colspan="13" class="empty">Nenhuma movimentacao registrada.</td></tr>
                 {% endfor %}
             </tbody>
         </table>

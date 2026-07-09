@@ -18,6 +18,7 @@ from services.estoque_service import (
     get_sku_by_code,
     normalize_sku,
     optional_decimal_to_str,
+    pending_commitments_by_sku,
     register_movement,
     save_inventory_count,
     to_decimal,
@@ -1276,7 +1277,20 @@ def export_stock_report(db, user, filters):
     ws = wb.active
     ws.title = "Estoque"
     _metadata(ws, "Relatorio de estoque atual", user, filters)
-    ws.append(["COD", "Descricao", "Unidade", "Grupo", "Categoria", "Localizacao", "Saldo atual", "Estoque minimo", "Ativo", "Status"])
+    ws.append([
+        "COD",
+        "Descricao",
+        "Unidade",
+        "Grupo",
+        "Categoria",
+        "Localizacao",
+        "Saldo atual",
+        "Empenhado",
+        "Saldo disponivel",
+        "Estoque minimo",
+        "Ativo",
+        "Status",
+    ])
 
     query = db.query(SKU).outerjoin(StockBalance)
     sku_filter = filters.get("sku")
@@ -1305,8 +1319,12 @@ def export_stock_report(db, user, filters):
         query = query.filter(SKU.estoque_minimo.isnot(None))
         query = query.filter(or_(StockBalance.saldo_atual <= SKU.estoque_minimo, StockBalance.saldo_atual.is_(None)))
 
-    for sku in query.order_by(SKU.sku).all():
+    rows = query.order_by(SKU.sku).all()
+    pending_by_sku = pending_commitments_by_sku(db, [sku.id for sku in rows])
+    for sku in rows:
         saldo = sku.balance.saldo_atual if sku.balance else 0
+        empenhado = pending_by_sku.get(sku.id, to_decimal(0))
+        disponivel = to_decimal(saldo) - empenhado
         minimo = sku.estoque_minimo
         if to_decimal(saldo) <= 0:
             status = "ZERADO"
@@ -1322,6 +1340,8 @@ def export_stock_report(db, user, filters):
             sku.categoria,
             sku.localizacao,
             decimal_to_str(saldo),
+            decimal_to_str(empenhado),
+            decimal_to_str(disponivel),
             optional_decimal_to_str(sku.estoque_minimo),
             "Sim" if sku.active else "Nao",
             status,
@@ -1352,6 +1372,7 @@ def export_movements_report(db, user, tipo=None):
         "Quantidade",
         "Saldo anterior",
         "Saldo posterior",
+        "Empenho origem",
         "Documento",
         "Observacao",
     ])
@@ -1372,6 +1393,7 @@ def export_movements_report(db, user, tipo=None):
             decimal_to_str(mv.quantidade),
             decimal_to_str(mv.saldo_anterior),
             decimal_to_str(mv.saldo_posterior),
+            mv.related_movement_id or "",
             mv.documento,
             mv.observacao,
         ])

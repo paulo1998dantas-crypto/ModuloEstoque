@@ -78,12 +78,14 @@ class Movement(Base):
     saldo_anterior = Column(Numeric(14, 3), nullable=False)
     saldo_posterior = Column(Numeric(14, 3), nullable=False)
     usuario_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    related_movement_id = Column(Integer, ForeignKey("movements.id"), nullable=True, index=True)
     documento = Column(String(120), nullable=True)
     observacao = Column(Text, nullable=True)
     created_at = Column(DateTime, nullable=False, default=now_utc, index=True)
 
     sku = relationship("SKU", back_populates="movements")
     usuario = relationship("User", back_populates="movements")
+    related_movement = relationship("Movement", remote_side=[id], backref="related_movements")
 
 
 class DashboardMovementCache(Base):

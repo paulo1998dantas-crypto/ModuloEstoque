@@ -44,6 +44,8 @@ def migrate_sku_schema():
         with engine.begin() as connection:
             if "grupo" not in _table_columns(connection, "skus"):
                 connection.execute(text("ALTER TABLE skus ADD COLUMN grupo VARCHAR(120)"))
+            if "related_movement_id" not in _table_columns(connection, "movements"):
+                connection.execute(text("ALTER TABLE movements ADD COLUMN related_movement_id INTEGER"))
         return
 
     with engine.connect().execution_options(isolation_level="AUTOCOMMIT") as connection:
@@ -57,6 +59,12 @@ def migrate_sku_schema():
                 row[1]: row
                 for row in connection.execute(text("PRAGMA table_info(skus)"))
             }
+        movement_columns = {
+            row[1]: row
+            for row in connection.execute(text("PRAGMA table_info(movements)"))
+        }
+        if "related_movement_id" not in movement_columns:
+            connection.execute(text("ALTER TABLE movements ADD COLUMN related_movement_id INTEGER"))
         estoque_minimo = skus_columns.get("estoque_minimo")
         if not estoque_minimo or not estoque_minimo[3]:
             return
