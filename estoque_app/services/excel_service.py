@@ -344,9 +344,7 @@ def import_skus_from_local_master(db, file_obj):
             continue
 
         primary = _first_cell(ws, row_number, headers, LOCAL_SKU_PRIMARY_DESC_ALIASES)
-        secondary = _first_cell(ws, row_number, headers, LOCAL_SKU_SECONDARY_DESC_ALIASES)
-        suffix = _first_cell(ws, row_number, headers, LOCAL_SKU_SUFFIX_ALIASES)
-        descricao = _join_description(primary, secondary, suffix)
+        descricao = str(primary or "").strip()
         if not descricao:
             descricao = str(_first_cell(ws, row_number, headers, LOCAL_SKU_DESCRIPTION_ALIASES) or "").strip()
 
