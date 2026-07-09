@@ -1,7 +1,7 @@
 from contextlib import contextmanager
 from urllib.parse import urlsplit
 
-from sqlalchemy import create_engine, text
+from sqlalchemy import create_engine, inspect, text
 from sqlalchemy.orm import declarative_base, scoped_session, sessionmaker
 from sqlalchemy.pool import NullPool
 
@@ -42,7 +42,8 @@ def init_db():
 def migrate_sku_schema():
     if not Config.SQLALCHEMY_DATABASE_URI.startswith("sqlite"):
         with engine.begin() as connection:
-            connection.execute(text("ALTER TABLE skus ADD COLUMN IF NOT EXISTS grupo VARCHAR(120)"))
+            if "grupo" not in _table_columns(connection, "skus"):
+                connection.execute(text("ALTER TABLE skus ADD COLUMN grupo VARCHAR(120)"))
         return
 
     with engine.connect().execution_options(isolation_level="AUTOCOMMIT") as connection:
@@ -93,6 +94,13 @@ def migrate_sku_schema():
             connection.execute(text("CREATE UNIQUE INDEX IF NOT EXISTS ix_skus_sku ON skus (sku)"))
         finally:
             connection.execute(text("PRAGMA foreign_keys=ON"))
+
+
+def _table_columns(connection, table_name):
+    inspector = inspect(connection)
+    if not inspector.has_table(table_name):
+        return set()
+    return {column["name"] for column in inspector.get_columns(table_name)}
 
 
 @contextmanager
