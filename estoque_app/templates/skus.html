@@ -7,6 +7,9 @@
         <p>Base mestre de itens permitidos para movimentacao.</p>
     </div>
     <div class="actions">
+        <form method="post" action="{{ url_for('atualizar_skus_local') }}">
+            <button class="btn secondary" type="submit">Atualizar CODs</button>
+        </form>
         <a class="btn secondary" href="{{ url_for('import_skus') }}">Importar Excel</a>
         <a class="btn primary" href="{{ url_for('sku_form') }}">Novo COD</a>
     </div>
@@ -14,6 +17,7 @@
 
 <form class="filter-bar" method="get">
     <input name="q" value="{{ q }}" placeholder="Buscar por COD ou descricao">
+    <label class="check-inline"><input type="checkbox" name="mostrar_inativos" value="1" {% if mostrar_inativos == '1' %}checked{% endif %}> Mostrar inativos</label>
     <button class="btn" type="submit">Buscar</button>
 </form>
 

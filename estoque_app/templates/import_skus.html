@@ -7,9 +7,25 @@
         <p>Atualiza cadastro de itens sem apagar movimentacoes, inventarios ou saldos existentes.</p>
     </div>
     <div class="actions">
+        <form method="post" action="{{ url_for('atualizar_skus_local') }}">
+            <button class="btn secondary" type="submit">Atualizar CODs</button>
+        </form>
         <a class="btn secondary" href="{{ url_for('download_template', name='skus') }}">Template</a>
         <a class="btn secondary" href="{{ url_for('download_template', name='exemplo') }}">Dados exemplo</a>
     </div>
+</section>
+
+<section class="panel">
+    <div class="panel-head">
+        <h2>Base local</h2>
+        <span class="muted">Usa a planilha mestre configurada no computador local.</span>
+    </div>
+    <form method="post" action="{{ url_for('atualizar_skus_local') }}" class="form-grid">
+        <label>Caminho do arquivo 00. Cadastro
+            <input name="local_skus_source_path" value="{{ local_skus_source_path or '' }}" placeholder="C:\...\00. Cadastro R00 - Base de dados.xlsm">
+        </label>
+        <button class="btn primary" type="submit">Atualizar CODs pela base local</button>
+    </form>
 </section>
 
 <form method="post" enctype="multipart/form-data" class="panel form-grid">

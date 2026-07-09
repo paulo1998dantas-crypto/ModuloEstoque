@@ -6,13 +6,28 @@
         <h1>Importar B.O.M</h1>
         <p>Cadastre estruturas de produto para consumo automatico na entrada.</p>
     </div>
-    <a class="btn secondary" href="{{ url_for('download_template', name='bom') }}">Baixar modelo</a>
+    <div class="actions">
+        <form method="post" action="{{ url_for('atualizar_bom_local') }}">
+            <button class="btn primary" type="submit">Atualizar B.O.M</button>
+        </form>
+        <a class="btn secondary" href="{{ url_for('download_template', name='bom') }}">Baixar modelo</a>
+    </div>
+</section>
+
+<section class="panel">
+    <div class="panel-head">
+        <h2>Pasta local</h2>
+        <span class="muted">Busca todas as planilhas da pasta B.O.M configurada e subpastas.</span>
+    </div>
+    <form method="post" action="{{ url_for('atualizar_bom_local') }}" class="button-row">
+        <button class="btn primary" type="submit">Atualizar B.O.M pela pasta local</button>
+    </form>
 </section>
 
 <section class="split">
     <form method="post" enctype="multipart/form-data" class="panel form-grid">
         <label>Planilha Excel
-            <input type="file" name="file" accept=".xlsx,.xlsm,.xltx,.xltm" required>
+            <input type="file" name="file" accept=".xls,.xlsx,.xlsm,.xltx,.xltm" required>
         </label>
         <div class="note">
             Ao importar, as estruturas dos itens presentes na planilha sao substituidas. Itens que nao aparecem na planilha permanecem iguais.

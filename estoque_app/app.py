@@ -52,8 +52,19 @@ from services.excel_service import (
     import_inventory_counts_from_excel,
     import_label_jobs_from_excel,
     import_consumption_from_excel,
+    import_mass_material_movements,
     import_skus_from_excel,
     label_queue_summary,
+    mass_material_rows_from_form,
+    parse_mass_materials_from_excel,
+    skip_preparation_rows_for_consumption,
+)
+from services.local_sync_service import (
+    get_bom_source_dir,
+    get_skus_source_path,
+    set_local_source_paths,
+    update_bom_from_local_dir,
+    update_skus_from_local_file,
 )
 from services.estoque_service import (
     adjust_balance_to_count,
@@ -229,6 +240,46 @@ def can_print_sku(database, sku, user):
     return bool(user and user.role == "ADM" and get_setting_bool(database, "admin_can_print_inactive_sku", False))
 
 
+def flash_local_update_result(label, result, success_category="success"):
+    if result.get("skipped") and result.get("ok"):
+        flash(f"{label}: base local ja esta atualizada.", "info")
+        return
+    if result.get("errors"):
+        flash(f"{label}: atualizacao cancelada.", "danger")
+        for error in result["errors"][:10]:
+            flash(error, "warning")
+        if len(result["errors"]) > 10:
+            flash(f"Mais {len(result['errors']) - 10} erros ocultos.", "warning")
+        return
+    if label == "CODs":
+        flash(
+            "CODs atualizados pela base local: "
+            f"{result.get('created', 0)} criados, "
+            f"{result.get('updated', 0)} atualizados"
+            f"{', ' + str(result.get('status_updated')) + ' status revisado(s)' if result.get('status_updated') else ''}"
+            f"{' e ' + str(result.get('duplicates_skipped')) + ' duplicado(s) ignorado(s)' if result.get('duplicates_skipped') else ''}.",
+            success_category,
+        )
+    else:
+        flash(
+            "B.O.M atualizada pela pasta local: "
+            f"{result.get('processed', 0)} componente(s), "
+            f"{result.get('items', 0)} item(ns), "
+            f"{result.get('files', 0)} arquivo(s).",
+            success_category,
+        )
+
+
+def refresh_local_sources_quietly(database, include_bom=False):
+    try:
+        update_skus_from_local_file(database, force=False)
+        if include_bom:
+            update_bom_from_local_dir(database, force=False)
+    except Exception as exc:
+        database.rollback()
+        app.logger.warning("Atualizacao local automatica ignorada: %s", exc)
+
+
 def can_access_label_job(job, user):
     return bool(user and (user.role == "ADM" or job.usuario_id == user.id))
 
@@ -373,6 +424,11 @@ def settings():
         set_setting(database, "operator_can_export", "true" if request.form.get("operator_can_export") else "false")
         set_setting(database, "admin_can_print_inactive_sku", "true" if request.form.get("admin_can_print_inactive_sku") else "false")
         set_setting(database, "default_printer_name", request.form.get("default_printer_name", "").strip())
+        set_local_source_paths(
+            database,
+            request.form.get("local_skus_source_path", "").strip(),
+            request.form.get("local_bom_source_dir", "").strip(),
+        )
         flash("Configuracoes salvas.", "success")
         return redirect(url_for("settings"))
     values = {
@@ -380,6 +436,8 @@ def settings():
         "operator_can_export": get_setting_bool(database, "operator_can_export", True),
         "admin_can_print_inactive_sku": get_setting_bool(database, "admin_can_print_inactive_sku", False),
         "default_printer_name": configured_printer_name(database),
+        "local_skus_source_path": str(get_skus_source_path(database)),
+        "local_bom_source_dir": str(get_bom_source_dir(database)),
     }
     return render_template("settings.html", values=values)
 
@@ -389,11 +447,34 @@ def settings():
 @roles_required("ADM")
 def skus():
     database = db()
+    refresh_local_sources_quietly(database)
     term = request.args.get("q", "").strip()
+    show_inactive = request.args.get("mostrar_inativos") == "1"
     query = database.query(SKU)
     if term:
         query = query.filter(or_(SKU.sku.ilike(f"%{term}%"), SKU.descricao.ilike(f"%{term}%")))
-    return render_template("skus.html", skus=query.order_by(SKU.sku).limit(500).all(), q=term)
+    if not show_inactive:
+        query = query.filter(SKU.active.is_(True))
+    return render_template(
+        "skus.html",
+        skus=query.order_by(SKU.sku).limit(500).all(),
+        q=term,
+        mostrar_inativos="1" if show_inactive else "",
+    )
+
+
+@app.route("/atualizar_skus", methods=["POST"])
+@app.route("/skus/atualizar-local", methods=["POST"])
+@login_required
+@roles_required("ADM")
+def atualizar_skus_local():
+    database = db()
+    source_path = request.form.get("local_skus_source_path", "").strip()
+    if source_path:
+        set_local_source_paths(database, source_path, str(get_bom_source_dir(database)))
+    result = update_skus_from_local_file(database, force=True)
+    flash_local_update_result("CODs", result)
+    return redirect(request.referrer or url_for("skus"))
 
 
 @app.route("/skus/novo", methods=["GET", "POST"])
@@ -442,12 +523,12 @@ def sku_form(sku_id=None):
 @login_required
 @roles_required("ADM")
 def import_skus():
+    database = db()
     if request.method == "POST":
         file = request.files.get("file")
         if not file or not file.filename.lower().endswith(".xlsx"):
             flash("Envie um arquivo .xlsx.", "danger")
             return redirect(url_for("import_skus"))
-        database = db()
         try:
             result = import_skus_from_excel(database, file)
         except Exception as exc:
@@ -469,7 +550,7 @@ def import_skus():
                 "success",
             )
         return redirect(url_for("import_skus"))
-    return render_template("import_skus.html")
+    return render_template("import_skus.html", local_skus_source_path=str(get_skus_source_path(database)))
 
 
 @app.route("/estoque")
@@ -505,6 +586,7 @@ def export_stock():
 @login_required
 def entrada():
     database = db()
+    refresh_local_sources_quietly(database, include_bom=True)
     sku = None
     sku_code = request.args.get("sku", "").strip()
     backflush = None
@@ -580,7 +662,7 @@ def import_bom():
     result = None
     if request.method == "POST":
         file = request.files.get("file")
-        if not file or not file.filename.lower().endswith((".xlsx", ".xlsm", ".xltx", ".xltm")):
+        if not file or not file.filename.lower().endswith((".xls", ".xlsx", ".xlsm", ".xltx", ".xltm")):
             flash("Envie uma planilha Excel valida.", "danger")
             return redirect(url_for("import_bom"))
         database = db()
@@ -600,6 +682,16 @@ def import_bom():
             )
             return redirect(url_for("import_bom"))
     return render_template("bom_import.html", result=result)
+
+
+@app.route("/bom/atualizar-local", methods=["POST"])
+@login_required
+@roles_required("ADM")
+def atualizar_bom_local():
+    database = db()
+    result = update_bom_from_local_dir(database, force=True)
+    flash_local_update_result("B.O.M", result)
+    return redirect(request.referrer or url_for("import_bom"))
 
 
 @app.route("/saida", methods=["GET", "POST"])
@@ -641,14 +733,32 @@ def import_commitments():
     database = db()
     result = None
     if request.method == "POST":
-        file = request.files.get("file")
-        if not file or not file.filename:
-            flash("Selecione uma planilha Excel para importar.", "danger")
-            return redirect(url_for("import_commitments"))
         try:
-            result = import_commitments_from_excel(
+            if request.form.get("action") == "confirm_mass_materials":
+                rows = mass_material_rows_from_form(request.form)
+            else:
+                file = request.files.get("file")
+                if not file or not file.filename:
+                    flash("Selecione uma planilha Excel para importar.", "danger")
+                    return redirect(url_for("import_commitments"))
+                preview = parse_mass_materials_from_excel(file)
+                if preview["errors"]:
+                    result = {"errors": preview["errors"]}
+                    flash("A planilha possui erros. Nenhum empenho foi registrado.", "danger")
+                    return render_template("commitment_import.html", result=result)
+                if preview["missing_quantities"]:
+                    return render_template(
+                        "commitment_import.html",
+                        result=None,
+                        preview=preview,
+                        documento=request.form.get("documento", ""),
+                        observacao=request.form.get("observacao", ""),
+                    )
+                rows = preview["rows"]
+            result = import_mass_material_movements(
                 database,
-                file,
+                rows,
+                "EMPENHO",
                 session["user_id"],
                 documento=request.form.get("documento", ""),
                 observacao=request.form.get("observacao", ""),
@@ -656,8 +766,13 @@ def import_commitments():
             if result["errors"]:
                 flash("A planilha possui erros. Nenhum empenho foi registrado.", "danger")
             else:
+                detail = (
+                    f" Conjuntos ignorados: {result.get('skipped_assemblies', 0)}."
+                    if result.get("skipped_assemblies")
+                    else ""
+                )
                 flash(
-                    f"Empenhos importados: {result['processed']} linha(s), total empenhado {result['total_committed']}.",
+                    f"Empenhos importados: {result['processed']} item(ns), total empenhado {result['total_committed']}.{detail}",
                     "success",
                 )
                 return redirect(url_for("import_commitments"))
@@ -671,26 +786,53 @@ def import_commitments():
 @login_required
 def baixa():
     database = db()
+    user = current_user()
     result = None
     if request.method == "POST":
-        file = request.files.get("file")
-        if not file or not file.filename:
-            flash("Selecione uma planilha Excel para importar.", "danger")
-            return redirect(url_for("baixa"))
         try:
-            result = import_consumption_from_excel(
+            if request.form.get("action") == "confirm_mass_materials":
+                rows = mass_material_rows_from_form(request.form)
+            else:
+                file = request.files.get("file")
+                if not file or not file.filename:
+                    flash("Selecione uma planilha Excel para importar.", "danger")
+                    return redirect(url_for("baixa"))
+                preview = parse_mass_materials_from_excel(file)
+                if preview["errors"]:
+                    result = {"errors": preview["errors"]}
+                    flash("A planilha possui erros. Nenhuma baixa foi registrada.", "danger")
+                    return render_template("consumption_import.html", result=result)
+                preview = skip_preparation_rows_for_consumption(preview)
+                if preview["missing_quantities"]:
+                    return render_template(
+                        "consumption_import.html",
+                        result=None,
+                        preview=preview,
+                        documento=request.form.get("documento", ""),
+                        observacao=request.form.get("observacao", ""),
+                    )
+                rows = preview["rows"]
+            result = import_mass_material_movements(
                 database,
-                file,
+                rows,
+                "BAIXA",
                 session["user_id"],
                 documento=request.form.get("documento", ""),
                 observacao=request.form.get("observacao", ""),
-                allow_negative=get_setting_bool(database, "allow_negative_stock", False),
+                allow_negative=(user and user.role == "ADM") or get_setting_bool(database, "allow_negative_stock", False),
             )
             if result["errors"]:
                 flash("A planilha possui erros. Nenhuma baixa foi registrada.", "danger")
             else:
+                detail = (
+                    f" Conjuntos ignorados: {result.get('skipped_assemblies', 0)}."
+                    if result.get("skipped_assemblies")
+                    else ""
+                )
+                if result.get("skipped_preparation"):
+                    detail = f"{detail} Preparacao ignorada: {result.get('skipped_preparation')} linha(s)."
                 flash(
-                    f"Baixa importada: {result['processed']} linha(s), total consumido {result['total_consumed']}.",
+                    f"Baixa importada: {result['processed']} item(ns), total consumido {result['total_consumed']}.{detail}",
                     "success",
                 )
                 return redirect(url_for("baixa"))

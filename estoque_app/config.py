@@ -15,6 +15,18 @@ TEMPLATES_ZPL_DIR = BASE_DIR / "templates_zpl"
 DB_PATH = DATA_DIR / "estoque.db"
 LABEL_TEMPLATE_PATH = TEMPLATES_ZPL_DIR / "etiqueta_base.zpl"
 BUNDLED_LABEL_TEMPLATE_PATH = APP_ROOT / "templates_zpl" / "etiqueta_base.zpl"
+DEFAULT_SKUS_FILENAME = Path(
+    os.environ.get(
+        "ESTOQUE_SKUS_SOURCE_FILE",
+        r"C:\Users\PRODUCAO-2.0\J I MONTADORA DE VEICULOS ESPECIAIS LTDA\JI Montadora - 02 Produção\01 Controle de Produção\01 - Projeto Cadastro\00. Cadastro R00 - Base de dados.xlsm",
+    )
+)
+DEFAULT_BOM_DIR = Path(
+    os.environ.get(
+        "ESTOQUE_BOM_SOURCE_DIR",
+        r"C:\Users\PRODUCAO-2.0\J I MONTADORA DE VEICULOS ESPECIAIS LTDA\JI Montadora - 02 Produção\01 Controle de Produção\01 - Projeto Cadastro\02 - B.O.M",
+    )
+)
 
 for directory in (DATA_DIR, EXPORTS_DIR, BACKUPS_DIR, LOGS_DIR, TEMPLATES_ZPL_DIR):
     directory.mkdir(parents=True, exist_ok=True)

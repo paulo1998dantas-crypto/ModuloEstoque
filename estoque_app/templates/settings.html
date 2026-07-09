@@ -14,7 +14,7 @@
 <form method="post" class="panel form-grid">
     <label class="check-row">
         <input type="checkbox" name="allow_negative_stock" {% if values.allow_negative_stock %}checked{% endif %}>
-        Permitir saldo negativo em baixas
+        Permitir saldo negativo em baixas para OPERADOR
     </label>
     <label class="check-row">
         <input type="checkbox" name="operator_can_export" {% if values.operator_can_export %}checked{% endif %}>
@@ -28,8 +28,31 @@
         Nome da impressora Zebra no Windows
         <input name="default_printer_name" value="{{ values.default_printer_name }}">
     </label>
+    <label>
+        Arquivo Base CODs
+        <input name="local_skus_source_path" value="{{ values.local_skus_source_path }}">
+    </label>
+    <label>
+        Pasta Base B.O.M
+        <input name="local_bom_source_dir" value="{{ values.local_bom_source_dir }}">
+    </label>
     <button class="btn primary" type="submit">Salvar configuracoes</button>
 </form>
+
+<section class="panel">
+    <div class="panel-head">
+        <h2>Bases locais</h2>
+        <span class="muted">Atualizacao manual usando os caminhos salvos acima.</span>
+    </div>
+    <div class="button-row">
+        <form method="post" action="{{ url_for('atualizar_skus_local') }}">
+            <button class="btn secondary" type="submit">Atualizar CODs</button>
+        </form>
+        <form method="post" action="{{ url_for('atualizar_bom_local') }}">
+            <button class="btn secondary" type="submit">Atualizar B.O.M</button>
+        </form>
+    </div>
+</section>
 
 <section class="panel danger-zone">
     <div>

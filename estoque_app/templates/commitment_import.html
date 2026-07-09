@@ -4,7 +4,7 @@
 <section class="page-head">
     <div>
         <h1>Importar saldo empenhado</h1>
-        <p>Importe a planilha com COD, unidade de medida e saldo empenhado inicial.</p>
+        <p>Importe a requisicao da OS ou uma planilha com COD/CODIGO e quantidade empenhada.</p>
     </div>
     <a class="btn secondary" href="{{ url_for('download_template', name='empenhos') }}">Baixar modelo</a>
 </section>
@@ -12,7 +12,7 @@
 <section class="split">
     <form method="post" enctype="multipart/form-data" class="panel form-grid">
         <label>Planilha Excel
-            <input type="file" name="file" accept=".xlsx,.xlsm,.xltx,.xltm" required>
+            <input type="file" name="file" accept=".xls,.xlsx,.xlsm,.xltx,.xltm" required>
         </label>
         <label>Documento / referencia
             <input name="documento" placeholder="Opcional">
@@ -29,9 +29,9 @@
             <table>
                 <thead>
                     <tr>
-                        <th>COD</th>
+                        <th>COD / CODIGO</th>
                         <th>UNIDADE_DE_MEDIDA</th>
-                        <th>SALDO_EMPENHADO</th>
+                        <th>SALDO_EMPENHADO / QTD</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -74,5 +74,53 @@
         </table>
     </div>
 </section>
+{% endif %}
+
+{% if preview and preview.missing_quantities %}
+<div class="modal-backdrop">
+    <section class="modal-panel">
+        <div class="panel-head">
+            <h2>Confirmar quantidades do empenho</h2>
+            <span class="badge alerta">{{ preview.missing_quantities|length }}</span>
+        </div>
+        <p class="muted">Preencha as quantidades vazias antes de gerar o empenho. A referencia sera o NUMERO_OS da planilha.</p>
+        <form method="post" class="form-grid">
+            <input type="hidden" name="action" value="confirm_mass_materials">
+            <input type="hidden" name="documento" value="{{ documento or '' }}">
+            <input type="hidden" name="observacao" value="{{ observacao or '' }}">
+            <div class="table-wrap">
+                <table>
+                    <thead><tr><th>Linha</th><th>OS</th><th>CODIGO</th><th>Descricao</th><th>Setor</th><th>Un</th><th>Quantidade</th></tr></thead>
+                    <tbody>
+                        {% for row in preview.rows %}
+                        <tr {% if not row.missing_quantity %}hidden{% endif %}>
+                            <td>
+                                {{ row.linha }}
+                                <input type="hidden" name="linha" value="{{ row.linha }}">
+                                <input type="hidden" name="numero_os" value="{{ row.numero_os }}">
+                                <input type="hidden" name="item_os" value="{{ row.item_os }}">
+                                <input type="hidden" name="codigo" value="{{ row.codigo }}">
+                                <input type="hidden" name="descricao" value="{{ row.descricao }}">
+                                <input type="hidden" name="unidade" value="{{ row.unidade }}">
+                                <input type="hidden" name="setor" value="{{ row.setor }}">
+                            </td>
+                            <td>{{ row.numero_os }}</td>
+                            <td>{{ row.codigo }}</td>
+                            <td>{{ row.descricao }}</td>
+                            <td>{{ row.setor }}</td>
+                            <td>{{ row.unidade }}</td>
+                            <td><input name="quantidade" value="{{ row.quantidade }}" inputmode="decimal" {% if row.missing_quantity %}required autofocus{% endif %}></td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            <div class="button-row">
+                <a class="btn secondary" href="{{ url_for('import_commitments') }}">Cancelar</a>
+                <button class="btn primary" type="submit">Confirmar empenho</button>
+            </div>
+        </form>
+    </section>
+</div>
 {% endif %}
 {% endblock %}
