@@ -16,6 +16,7 @@ from services.estoque_service import (
     decimal_to_str,
     ensure_balance,
     get_sku_by_code,
+    movement_available_snapshots,
     normalize_sku,
     optional_decimal_to_str,
     pending_commitments_by_sku,
@@ -1371,7 +1372,7 @@ def export_movements_report(db, user, tipo=None):
         "Tipo",
         "Quantidade",
         "Saldo anterior",
-        "Saldo posterior",
+        "Saldo posterior disponivel",
         "Empenho origem",
         "Documento",
         "Observacao",
@@ -1381,7 +1382,9 @@ def export_movements_report(db, user, tipo=None):
         query = query.filter(Movement.tipo.in_(tipo))
     elif tipo:
         query = query.filter(Movement.tipo == tipo)
-    for mv in query.order_by(Movement.created_at.desc()).all():
+    rows = query.order_by(Movement.created_at.desc()).all()
+    available_snapshots = movement_available_snapshots(db, rows)
+    for mv in rows:
         tipo_display = "EMPENHO" if mv.tipo == "SAIDA" else mv.tipo
         ws.append([
             mv.id,
@@ -1392,7 +1395,7 @@ def export_movements_report(db, user, tipo=None):
             tipo_display,
             decimal_to_str(mv.quantidade),
             decimal_to_str(mv.saldo_anterior),
-            decimal_to_str(mv.saldo_posterior),
+            decimal_to_str(available_snapshots.get(mv.id, mv.saldo_posterior)),
             mv.related_movement_id or "",
             mv.documento,
             mv.observacao,

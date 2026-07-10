@@ -286,6 +286,32 @@ def pending_commitment_for_movement(db, movement):
     return max(to_decimal(movement.quantidade) - to_decimal(baixado), Decimal("0.000"))
 
 
+def movement_available_snapshots(db, movements):
+    movement_ids = {movement.id for movement in movements if movement and movement.id}
+    if not movement_ids:
+        return {}
+    sku_ids = {movement.sku_id for movement in movements if movement and movement.sku_id}
+    snapshots = {}
+    pending_by_sku = {sku_id: Decimal("0.000") for sku_id in sku_ids}
+    history = (
+        db.query(Movement)
+        .filter(Movement.sku_id.in_(sku_ids))
+        .order_by(Movement.created_at.asc(), Movement.id.asc())
+        .all()
+    )
+    for movement in history:
+        sku_id = movement.sku_id
+        pending = pending_by_sku.get(sku_id, Decimal("0.000"))
+        if movement.tipo in COMMITMENT_TYPES:
+            pending += to_decimal(movement.quantidade)
+        elif movement.tipo == "BAIXA" and movement.related_movement_id:
+            pending = max(pending - to_decimal(movement.quantidade), Decimal("0.000"))
+        pending_by_sku[sku_id] = pending
+        if movement.id in movement_ids:
+            snapshots[movement.id] = to_decimal(movement.saldo_posterior) - pending
+    return snapshots
+
+
 def register_consumption_from_commitment(
     db,
     commitment,

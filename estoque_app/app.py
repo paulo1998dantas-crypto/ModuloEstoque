@@ -81,6 +81,7 @@ from services.estoque_service import (
     normalize_sku,
     open_inventory_session,
     optional_decimal_to_str,
+    movement_available_snapshots,
     pending_commitment_for_movement,
     pending_commitments_by_sku,
     parse_backflush_rows,
@@ -1003,8 +1004,10 @@ def movements():
         else:
             query = query.filter(Movement.tipo == tipo)
     rows = query.order_by(Movement.created_at.desc()).limit(500).all()
+    available_snapshots = movement_available_snapshots(database, rows)
     for movement in rows:
         movement.pending_commitment = pending_commitment_for_movement(database, movement)
+        movement.saldo_posterior_disponivel = available_snapshots.get(movement.id, to_decimal(movement.saldo_posterior))
     return render_template("movements.html", movements=rows, tipo=tipo, can_export=user_can_export(database, user))
 
 

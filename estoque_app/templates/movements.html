@@ -38,7 +38,7 @@
                     <th>Tipo</th>
                     <th>Qtd</th>
                     <th>Anterior</th>
-                    <th>Posterior</th>
+                    <th>Posterior disp.</th>
                     <th>Vinculo</th>
                     <th>Documento</th>
                     <th>Observacao</th>
@@ -56,7 +56,7 @@
                     <td><span class="badge {{ mv.tipo|lower }}">{{ movement_label(mv.tipo) }}</span></td>
                     <td class="num">{{ mv.quantidade|qty }}</td>
                     <td class="num">{{ mv.saldo_anterior|qty }}</td>
-                    <td class="num">{{ mv.saldo_posterior|qty }}</td>
+                    <td class="num">{{ mv.saldo_posterior_disponivel|qty }}</td>
                     <td>
                         {% if mv.tipo in ['EMPENHO', 'SAIDA'] %}
                             Pendente: {{ mv.pending_commitment|qty }}
