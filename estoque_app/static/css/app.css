@@ -21,6 +21,10 @@
     box-sizing: border-box;
 }
 
+[hidden] {
+    display: none !important;
+}
+
 html,
 body {
     min-height: 100%;
@@ -953,6 +957,31 @@ textarea:focus {
 .modal-panel .table-wrap {
     max-height: 430px;
     overflow: auto;
+}
+
+.compact-modal {
+    width: min(620px, 100%);
+}
+
+.detail-grid {
+    display: grid;
+    grid-template-columns: 140px minmax(0, 1fr);
+    gap: 8px 12px;
+    padding: 10px;
+    margin: 10px 0;
+    border: 1px solid var(--line);
+    border-radius: 4px;
+    background: #f8fafc;
+}
+
+.detail-grid span {
+    color: var(--muted);
+    font-weight: 850;
+}
+
+.detail-grid strong {
+    min-width: 0;
+    overflow-wrap: anywhere;
 }
 
 @media (max-width: 980px) {

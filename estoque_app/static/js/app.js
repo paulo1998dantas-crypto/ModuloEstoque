@@ -286,6 +286,67 @@ function initBackflushBom() {
     }
 }
 
+function initCommitmentConsumptionModal() {
+    const modal = document.querySelector("[data-commitment-modal]");
+    const modalForm = document.querySelector("[data-commitment-modal-form]");
+    if (!modal || !modalForm) return;
+
+    const setText = (selector, value) => {
+        const target = modal.querySelector(selector);
+        if (target) target.textContent = value || "-";
+    };
+
+    const close = () => {
+        modal.hidden = true;
+    };
+
+    document.querySelectorAll("[data-commitment-consumption]").forEach(form => {
+        form.addEventListener("submit", event => {
+            event.preventDefault();
+            const quantityInput = form.querySelector("input[name='quantidade']");
+            const requestedQty = quantityInput && quantityInput.value.trim()
+                ? quantityInput.value.trim()
+                : form.dataset.commitmentPending;
+
+            modalForm.action = form.action;
+            const typeInput = modalForm.querySelector("[data-modal-commitment-type]");
+            const qtyInput = modalForm.querySelector("[data-modal-commitment-qty]");
+            const documentInput = modalForm.querySelector("[data-modal-commitment-consumption-document]");
+            const noteInput = modalForm.querySelector("[data-modal-commitment-consumption-note]");
+
+            if (typeInput) typeInput.value = form.querySelector("input[name='tipo']")?.value || "EMPENHO";
+            if (qtyInput) qtyInput.value = requestedQty || "";
+            if (documentInput) documentInput.value = form.dataset.commitmentDocument || "";
+            if (noteInput) noteInput.value = "";
+
+            setText("[data-modal-commitment-id]", `#${form.dataset.commitmentId || ""}`);
+            setText("[data-modal-commitment-date]", form.dataset.commitmentDate);
+            setText("[data-modal-commitment-sku]", form.dataset.commitmentSku);
+            setText("[data-modal-commitment-description]", form.dataset.commitmentDescription);
+            setText("[data-modal-commitment-quantity]", form.dataset.commitmentQuantity);
+            setText("[data-modal-commitment-pending]", form.dataset.commitmentPending);
+            setText("[data-modal-commitment-document]", form.dataset.commitmentDocument);
+            setText("[data-modal-commitment-note]", form.dataset.commitmentNote);
+
+            modal.hidden = false;
+            if (qtyInput) {
+                qtyInput.focus();
+                qtyInput.select();
+            }
+        });
+    });
+
+    modal.querySelectorAll("[data-close-commitment-modal]").forEach(button => {
+        button.addEventListener("click", close);
+    });
+    modal.addEventListener("click", event => {
+        if (event.target === modal) close();
+    });
+    document.addEventListener("keydown", event => {
+        if (event.key === "Escape" && !modal.hidden) close();
+    });
+}
+
 document.addEventListener("DOMContentLoaded", () => {
     focusScanField();
 
@@ -306,4 +367,5 @@ document.addEventListener("DOMContentLoaded", () => {
     initSingleLocalPrint();
     initInventoryDiff();
     initBackflushBom();
+    initCommitmentConsumptionModal();
 });

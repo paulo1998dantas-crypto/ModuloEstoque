@@ -68,7 +68,15 @@
                     <td>{{ mv.observacao or "" }}</td>
                     <td>
                         {% if mv.tipo in ['EMPENHO', 'SAIDA'] and mv.pending_commitment > 0 %}
-                            <form method="post" action="{{ url_for('consume_commitment_route', movement_id=mv.id) }}" class="button-row">
+                            <form method="post" action="{{ url_for('consume_commitment_route', movement_id=mv.id) }}" class="button-row" data-commitment-consumption
+                                data-commitment-id="{{ mv.id }}"
+                                data-commitment-sku="{{ mv.sku.sku }}"
+                                data-commitment-description="{{ mv.sku.descricao }}"
+                                data-commitment-quantity="{{ mv.quantidade|qty }}"
+                                data-commitment-pending="{{ mv.pending_commitment|qty }}"
+                                data-commitment-document="{{ mv.documento or '' }}"
+                                data-commitment-note="{{ mv.observacao or '' }}"
+                                data-commitment-date="{{ mv.created_at|dt }}">
                                 <input type="hidden" name="tipo" value="{{ tipo or 'EMPENHO' }}">
                                 <input name="quantidade" inputmode="decimal" placeholder="{{ mv.pending_commitment|qty }}">
                                 <button class="btn small" type="submit">Baixar</button>
@@ -89,4 +97,36 @@
         </table>
     </div>
 </section>
+
+<div class="modal-backdrop" data-commitment-modal hidden>
+    <div class="modal-panel compact-modal" role="dialog" aria-modal="true" aria-labelledby="commitment-modal-title">
+        <h2 id="commitment-modal-title">Confirmar baixa do empenho</h2>
+        <div class="detail-grid">
+            <span>Empenho</span><strong data-modal-commitment-id></strong>
+            <span>Data</span><strong data-modal-commitment-date></strong>
+            <span>COD</span><strong data-modal-commitment-sku></strong>
+            <span>Descricao</span><strong data-modal-commitment-description></strong>
+            <span>Qtd empenhada</span><strong data-modal-commitment-quantity></strong>
+            <span>Pendente</span><strong data-modal-commitment-pending></strong>
+            <span>Referencia</span><strong data-modal-commitment-document></strong>
+            <span>Observacao</span><strong data-modal-commitment-note></strong>
+        </div>
+        <form method="post" data-commitment-modal-form class="form-grid">
+            <input type="hidden" name="tipo" data-modal-commitment-type>
+            <label>Quantidade para baixa
+                <input name="quantidade" inputmode="decimal" data-modal-commitment-qty>
+            </label>
+            <label>Referencia da baixa
+                <input name="documento" data-modal-commitment-consumption-document>
+            </label>
+            <label>Observacao da baixa
+                <textarea name="observacao" rows="2" data-modal-commitment-consumption-note></textarea>
+            </label>
+            <div class="button-row">
+                <button class="btn primary" type="submit">Confirmar baixa</button>
+                <button class="btn secondary" type="button" data-close-commitment-modal>Cancelar</button>
+            </div>
+        </form>
+    </div>
+</div>
 {% endblock %}
