@@ -667,7 +667,6 @@ textarea:focus {
 
 .badge.baixo,
 .badge.baixa,
-.badge.empenho,
 .badge.erro,
 .badge.danger,
 .badge.saida {
@@ -678,6 +677,7 @@ textarea:focus {
 .badge.zerado,
 .badge.pendente,
 .badge.inventario,
+.badge.empenho,
 .badge.ajuste {
     background: #fff4dc;
     color: var(--warning);
