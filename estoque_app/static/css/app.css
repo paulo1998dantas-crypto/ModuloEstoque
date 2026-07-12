@@ -660,15 +660,17 @@ textarea:focus {
 
 .badge.ok,
 .badge.entrada,
-.badge.baixa,
 .badge.impresso {
     background: #e6f6ed;
     color: var(--success);
 }
 
 .badge.baixo,
+.badge.baixa,
+.badge.empenho,
 .badge.erro,
-.badge.danger {
+.badge.danger,
+.badge.saida {
     background: #fff0ee;
     color: var(--danger);
 }
@@ -676,8 +678,6 @@ textarea:focus {
 .badge.zerado,
 .badge.pendente,
 .badge.inventario,
-.badge.empenho,
-.badge.saida,
 .badge.ajuste {
     background: #fff4dc;
     color: var(--warning);
