@@ -805,10 +805,28 @@ def baixa():
     database = db()
     user = current_user()
     result = None
+    sku = None
+    sku_code = request.args.get("sku", "").strip()
     if request.method == "POST":
         try:
             if request.form.get("action") == "confirm_mass_materials":
                 rows = mass_material_rows_from_form(request.form)
+            elif request.form.get("action") == "manual_baixa":
+                sku = get_sku_by_code(database, request.form.get("sku"), active_only=True)
+                if not sku:
+                    raise ValueError("COD nao cadastrado ou inativo. Baixa bloqueada.")
+                baixa_manual = register_movement(
+                    database,
+                    sku,
+                    "BAIXA",
+                    request.form.get("quantidade"),
+                    session["user_id"],
+                    documento=request.form.get("documento", ""),
+                    observacao=request.form.get("observacao", ""),
+                    allow_negative=(user and user.role == "ADM") or get_setting_bool(database, "allow_negative_stock", False),
+                )
+                flash(f"Baixa manual registrada: {decimal_to_str(baixa_manual.quantidade)} de {sku.sku}.", "success")
+                return redirect(url_for("baixa", sku=sku.sku))
             else:
                 file = request.files.get("file")
                 if not file or not file.filename:
@@ -855,8 +873,13 @@ def baixa():
                 return redirect(url_for("baixa"))
         except Exception as exc:
             database.rollback()
-            flash(f"Falha ao importar planilha: {exc}", "danger")
-    return render_template("consumption_import.html", result=result)
+            flash(f"Falha ao registrar baixa: {exc}", "danger")
+            sku_code = request.form.get("sku", sku_code)
+    if sku_code:
+        sku = get_sku_by_code(database, sku_code, active_only=True)
+        if not sku:
+            flash("COD nao cadastrado ou inativo. Baixa bloqueada.", "danger")
+    return render_template("consumption_import.html", result=result, sku=sku, sku_code=sku_code)
 
 
 @app.route("/inventario-mobile")

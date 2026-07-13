@@ -4,13 +4,51 @@
 <section class="page-head">
     <div>
         <h1>Baixa por consumo real</h1>
-        <p>Importe a requisicao da OS ou uma planilha com COD/CODIGO e quantidade consumida.</p>
+        <p>Registre uma baixa manual por COD ou importe a requisicao da OS em massa.</p>
     </div>
     <a class="btn secondary" href="{{ url_for('download_template', name='baixa') }}">Baixar modelo</a>
 </section>
 
+<section class="scan-layout">
+    <form method="get" class="panel scan-panel">
+        <label class="scan-label">Ler COD para baixa
+            <input class="scan-input" name="sku" value="{{ sku_code or '' }}" data-autofocus autocomplete="off" placeholder="Bipe o codigo de barras">
+        </label>
+        <button class="btn primary large" type="submit">Buscar COD</button>
+    </form>
+
+    <form method="post" class="panel form-grid">
+        <input type="hidden" name="action" value="manual_baixa">
+        {% if sku %}
+        <div class="item-summary">
+            <span>{{ sku.sku }}</span>
+            <strong>{{ sku.descricao }}</strong>
+            <small>Saldo atual: {{ (sku.balance.saldo_atual if sku.balance else 0)|qty }} {{ sku.unidade or "" }}</small>
+        </div>
+        <input type="hidden" name="sku" value="{{ sku.sku }}">
+        <label>Quantidade para baixa
+            <input name="quantidade" inputmode="decimal" required autofocus>
+        </label>
+        <label>Documento / referencia
+            <input name="documento">
+        </label>
+        <label>Observacao
+            <textarea name="observacao" rows="3"></textarea>
+        </label>
+        <button class="btn primary large" type="submit">Confirmar baixa manual</button>
+        {% else %}
+        <div class="empty-state">
+            <strong>Aguardando leitura de COD</strong>
+            <p>O item precisa estar cadastrado e ativo para registrar a baixa manual.</p>
+        </div>
+        {% endif %}
+    </form>
+</section>
+
 <section class="split">
     <form method="post" enctype="multipart/form-data" class="panel form-grid">
+        <input type="hidden" name="action" value="import_file">
+        <h2>Baixa em massa</h2>
         <label>Planilha Excel
             <input type="file" name="file" accept=".xls,.xlsx,.xlsm,.xltx,.xltm" required>
         </label>
