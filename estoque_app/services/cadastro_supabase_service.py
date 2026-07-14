@@ -387,8 +387,8 @@ def sync_bom_from_cadastro(db, force=False):
             rows_by_pair[pair] = BomComponent(
                 item_sku_id=parent.id,
                 component_sku_id=component.id,
-                descricao=_clean(row.get("component_descricao")) or component.descricao,
-                unidade=_clean(row.get("unidade")) or component.unidade,
+                descricao=component.descricao or _clean(row.get("component_descricao")),
+                unidade=component.unidade or _clean(row.get("unidade")),
                 quantidade=quantidade,
             )
 
