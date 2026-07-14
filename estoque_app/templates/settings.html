@@ -28,28 +28,25 @@
         Nome da impressora Zebra no Windows
         <input name="default_printer_name" value="{{ values.default_printer_name }}">
     </label>
-    <label>
-        Arquivo Base CODs
-        <input name="local_skus_source_path" value="{{ values.local_skus_source_path }}">
-    </label>
-    <label>
-        Pasta Base B.O.M
-        <input name="local_bom_source_dir" value="{{ values.local_bom_source_dir }}">
-    </label>
     <button class="btn primary" type="submit">Salvar configuracoes</button>
 </form>
 
 <section class="panel">
     <div class="panel-head">
-        <h2>Bases locais</h2>
-        <span class="muted">Atualizacao manual usando os caminhos salvos acima.</span>
+        <h2>Cadastro online</h2>
+        <span class="badge {{ 'ok' if cadastro_status.enabled and cadastro_status.configured else 'erro' }}">
+            {{ "Supabase conectado" if cadastro_status.enabled and cadastro_status.configured else "Supabase pendente" }}
+        </span>
     </div>
+    <p class="muted">
+        CODs e B.O.M sao sincronizados com o ModuloCadastro. Caminhos locais de planilha e pasta nao sao mais usados.
+    </p>
     <div class="button-row">
         <form method="post" action="{{ url_for('atualizar_skus_local') }}">
-            <button class="btn secondary" type="submit">Atualizar CODs</button>
+            <button class="btn secondary" type="submit">Sincronizar CODs</button>
         </form>
         <form method="post" action="{{ url_for('atualizar_bom_local') }}">
-            <button class="btn secondary" type="submit">Atualizar B.O.M</button>
+            <button class="btn secondary" type="submit">Sincronizar B.O.M</button>
         </form>
     </div>
 </section>

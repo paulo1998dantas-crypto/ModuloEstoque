@@ -1,40 +1,26 @@
 {% extends "base.html" %}
-{% block title %}Importar CODs - Estoque{% endblock %}
+{% block title %}Sincronizar CODs - Estoque{% endblock %}
 {% block content %}
 <section class="page-head">
     <div>
-        <h1>Atualizar CODs por Excel</h1>
-        <p>Atualiza cadastro de itens sem apagar movimentacoes, inventarios ou saldos existentes.</p>
+        <h1>Sincronizar CODs</h1>
+        <p>Atualiza a base de itens do estoque a partir do ModuloCadastro.</p>
     </div>
-    <div class="actions">
-        <form method="post" action="{{ url_for('atualizar_skus_local') }}">
-            <button class="btn secondary" type="submit">Atualizar CODs</button>
-        </form>
-        <a class="btn secondary" href="{{ url_for('download_template', name='skus') }}">Template</a>
-        <a class="btn secondary" href="{{ url_for('download_template', name='exemplo') }}">Dados exemplo</a>
-    </div>
+    <form method="post">
+        <button class="btn primary" type="submit">Sincronizar agora</button>
+    </form>
 </section>
 
 <section class="panel">
     <div class="panel-head">
-        <h2>Base local</h2>
-        <span class="muted">Usa a planilha mestre configurada no computador local.</span>
+        <h2>Cadastro Supabase</h2>
+        <span class="badge {{ 'ok' if cadastro_status.enabled and cadastro_status.configured else 'erro' }}">
+            {{ "Conectado" if cadastro_status.enabled and cadastro_status.configured else "Pendente" }}
+        </span>
     </div>
-    <form method="post" action="{{ url_for('atualizar_skus_local') }}" class="form-grid">
-        <label>Caminho do arquivo 00. Cadastro
-            <input name="local_skus_source_path" value="{{ local_skus_source_path or '' }}" placeholder="C:\...\00. Cadastro R00 - Base de dados.xlsm">
-        </label>
-        <button class="btn primary" type="submit">Atualizar CODs pela base local</button>
-    </form>
+    <p class="muted">
+        A importacao por planilha foi substituida pela sincronizacao online com a tabela cadastro_registros.
+        Saldos e movimentacoes permanecem na base do ModuloEstoque.
+    </p>
 </section>
-
-<form method="post" enctype="multipart/form-data" class="panel form-grid">
-    <label>Arquivo .xlsx
-        <input type="file" name="file" accept=".xlsx" required>
-    </label>
-    <div class="note">
-        Colunas obrigatorias: COD e DESCRICAO. UNIDADE, GRUPO e CATEGORIA sao opcionais e, quando preenchidos, atualizam o cadastro. O saldo muda somente quando SALDO_ATUAL ou ESTOQUE estiver preenchido. Campos opcionais em branco preservam os dados atuais. Planilhas antigas continuam aceitas. Se a planilha tiver erros, nada sera alterado.
-    </div>
-    <button class="btn primary" type="submit">Atualizar CODs pela planilha</button>
-</form>
 {% endblock %}

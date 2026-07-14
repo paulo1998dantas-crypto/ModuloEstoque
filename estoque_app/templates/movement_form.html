@@ -10,7 +10,7 @@
     {% if not is_entry %}
     <a class="btn secondary" href="{{ url_for('import_commitments') }}">Importar empenhos</a>
     {% elif current_user.role == 'ADM' %}
-    <a class="btn secondary" href="{{ url_for('import_bom') }}">Importar B.O.M</a>
+    <a class="btn secondary" href="{{ url_for('import_bom') }}">Sincronizar B.O.M</a>
     {% endif %}
 </section>
 

@@ -1,79 +1,68 @@
 {% extends "base.html" %}
-{% block title %}Importar B.O.M - Estoque{% endblock %}
+{% block title %}B.O.M - Estoque{% endblock %}
 {% block content %}
 <section class="page-head">
     <div>
-        <h1>Importar B.O.M</h1>
-        <p>Cadastre estruturas de produto para consumo automatico na entrada.</p>
+        <h1>B.O.M</h1>
+        <p>Estruturas de produto sincronizadas com o ModuloCadastro.</p>
     </div>
     <div class="actions">
         <form method="post" action="{{ url_for('atualizar_bom_local') }}">
-            <button class="btn primary" type="submit">Atualizar B.O.M</button>
+            <button class="btn primary" type="submit">Sincronizar B.O.M</button>
         </form>
-        <a class="btn secondary" href="{{ url_for('download_template', name='bom') }}">Baixar modelo</a>
     </div>
 </section>
 
 <section class="panel">
     <div class="panel-head">
-        <h2>Pasta local</h2>
-        <span class="muted">Busca todas as planilhas da pasta B.O.M configurada e subpastas.</span>
+        <h2>Origem da B.O.M</h2>
+        <span class="badge {{ 'ok' if cadastro_status.enabled and cadastro_status.configured else 'erro' }}">
+            {{ "Supabase conectado" if cadastro_status.enabled and cadastro_status.configured else "Supabase pendente" }}
+        </span>
     </div>
-    <form method="post" action="{{ url_for('atualizar_bom_local') }}" class="button-row">
-        <button class="btn primary" type="submit">Atualizar B.O.M pela pasta local</button>
-    </form>
+    <p class="muted">
+        O estoque consome as estruturas oficiais das tabelas cadastro_bom_componentes e cadastro_registros.
+        Linhas pendentes de revisao no cadastro, como item pai ou componente em branco, ficam evidentes no
+        ModuloCadastro e sao ignoradas aqui para proteger as baixas automaticas.
+    </p>
 </section>
 
-<section class="split">
-    <form method="post" enctype="multipart/form-data" class="panel form-grid">
-        <label>Planilha Excel
-            <input type="file" name="file" accept=".xls,.xlsx,.xlsm,.xltx,.xltm" required>
-        </label>
-        <div class="note">
-            Ao importar, as estruturas dos itens presentes na planilha sao substituidas. Itens que nao aparecem na planilha permanecem iguais.
-        </div>
-        <button class="btn primary large" type="submit">Importar B.O.M</button>
-    </form>
-
-    <section class="panel">
-        <h2>Layout da planilha</h2>
-        <div class="table-wrap">
-            <table>
-                <thead>
-                    <tr>
-                        <th>ITEM_CODIGO</th>
-                        <th>COMPONENTE_CODIGO</th>
-                        <th>DESCRICAO</th>
-                        <th>UNIDADE</th>
-                        <th>QUANTIDADE</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    <tr>
-                        <td>PROD-0001</td>
-                        <td>PAR-0001</td>
-                        <td>Parafuso sextavado M8 x 30 zincado</td>
-                        <td>UN</td>
-                        <td class="num">4</td>
-                    </tr>
-                    <tr>
-                        <td>PROD-0001</td>
-                        <td>CAB-0012</td>
-                        <td>Cabo eletrico flexivel 2,5 mm preto</td>
-                        <td>M</td>
-                        <td class="num">2,5</td>
-                    </tr>
-                </tbody>
-            </table>
-        </div>
-    </section>
-</section>
-
-{% if result and result.errors %}
+{% if result %}
 <section class="panel">
     <div class="panel-head">
-        <h2>Erros encontrados</h2>
-        <span class="badge erro">{{ result.errors|length }}</span>
+        <h2>Resultado da sincronizacao</h2>
+        <span class="badge {{ 'erro' if result.errors else 'ok' }}">
+            {{ "Com erros" if result.errors else "Concluida" }}
+        </span>
+    </div>
+    <div class="table-wrap">
+        <table>
+            <thead>
+                <tr>
+                    <th>Componentes</th>
+                    <th>Itens pai</th>
+                    <th>Substituidos</th>
+                    <th>Avisos</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td class="num">{{ result.processed }}</td>
+                    <td class="num">{{ result.items }}</td>
+                    <td class="num">{{ result.deleted }}</td>
+                    <td class="num">{{ result.warnings|length if result.warnings else 0 }}</td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+</section>
+{% endif %}
+
+{% if result and (result.errors or result.warnings) %}
+<section class="panel">
+    <div class="panel-head">
+        <h2>Pendencias ignoradas no estoque</h2>
+        <span class="badge erro">{{ (result.errors|length) + (result.warnings|length if result.warnings else 0) }}</span>
     </div>
     <div class="table-wrap">
         <table>
@@ -84,9 +73,10 @@
             </thead>
             <tbody>
                 {% for error in result.errors %}
-                <tr>
-                    <td>{{ error }}</td>
-                </tr>
+                <tr><td>{{ error }}</td></tr>
+                {% endfor %}
+                {% for warning in result.warnings %}
+                <tr><td>{{ warning }}</td></tr>
                 {% endfor %}
             </tbody>
         </table>

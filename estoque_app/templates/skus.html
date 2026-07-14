@@ -4,15 +4,26 @@
 <section class="page-head">
     <div>
         <h1>Cadastro de CODs</h1>
-        <p>Base mestre de itens permitidos para movimentacao.</p>
+        <p>Base mestre sincronizada com o ModuloCadastro no Supabase.</p>
     </div>
     <div class="actions">
         <form method="post" action="{{ url_for('atualizar_skus_local') }}">
-            <button class="btn secondary" type="submit">Atualizar CODs</button>
+            <button class="btn primary" type="submit">Sincronizar Cadastro</button>
         </form>
-        <a class="btn secondary" href="{{ url_for('import_skus') }}">Importar Excel</a>
-        <a class="btn primary" href="{{ url_for('sku_form') }}">Novo COD</a>
     </div>
+</section>
+
+<section class="panel">
+    <div class="panel-head">
+        <h2>Origem dos CODs</h2>
+        <span class="badge {{ 'ok' if cadastro_status.enabled and cadastro_status.configured else 'erro' }}">
+            {{ "Supabase conectado" if cadastro_status.enabled and cadastro_status.configured else "Supabase pendente" }}
+        </span>
+    </div>
+    <p class="muted">
+        Esta tela usa os cadastros oficiais do ModuloCadastro. A sincronizacao atualiza descricoes, grupos,
+        categorias, unidades e status sem alterar saldos, movimentacoes ou historico do estoque.
+    </p>
 </section>
 
 <form class="filter-bar" method="get">

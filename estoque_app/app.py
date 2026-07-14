@@ -47,24 +47,20 @@ from services.excel_service import (
     export_movements_report,
     export_stock_report,
     import_commitments_from_excel,
-    import_bom_from_excel,
     import_inventory_balance_additions_from_excel,
     import_inventory_counts_from_excel,
     import_label_jobs_from_excel,
     import_consumption_from_excel,
     import_mass_material_movements,
-    import_skus_from_excel,
     label_queue_summary,
     mass_material_rows_from_form,
     parse_mass_materials_from_excel,
     skip_preparation_rows_for_consumption,
 )
-from services.local_sync_service import (
-    get_bom_source_dir,
-    get_skus_source_path,
-    set_local_source_paths,
-    update_bom_from_local_dir,
-    update_skus_from_local_file,
+from services.cadastro_supabase_service import (
+    status as cadastro_supabase_status,
+    sync_catalog_from_cadastro,
+    sync_skus_from_cadastro,
 )
 from services.estoque_service import (
     adjust_balance_to_count,
@@ -246,7 +242,7 @@ def can_print_sku(database, sku, user):
 
 def flash_local_update_result(label, result, success_category="success"):
     if result.get("skipped") and result.get("ok"):
-        flash(f"{label}: base local ja esta atualizada.", "info")
+        flash(f"{label}: cadastro online sem alteracoes recentes para sincronizar.", "info")
         return
     if result.get("errors"):
         flash(f"{label}: atualizacao cancelada.", "danger")
@@ -257,7 +253,7 @@ def flash_local_update_result(label, result, success_category="success"):
         return
     if label == "CODs":
         flash(
-            "CODs atualizados pela base local: "
+            "CODs sincronizados pelo Cadastro Supabase: "
             f"{result.get('created', 0)} criados, "
             f"{result.get('updated', 0)} atualizados"
             f"{', ' + str(result.get('status_updated')) + ' status revisado(s)' if result.get('status_updated') else ''}"
@@ -266,10 +262,10 @@ def flash_local_update_result(label, result, success_category="success"):
         )
     else:
         flash(
-            "B.O.M atualizada pela pasta local: "
+            "B.O.M sincronizada pelo Cadastro Supabase: "
             f"{result.get('processed', 0)} componente(s), "
             f"{result.get('items', 0)} item(ns), "
-            f"{result.get('files', 0)} arquivo(s).",
+            f"{result.get('deleted', 0)} linha(s) antiga(s) substituida(s).",
             success_category,
         )
     if result.get("warnings"):
@@ -282,12 +278,10 @@ def flash_local_update_result(label, result, success_category="success"):
 
 def refresh_local_sources_quietly(database, include_bom=False):
     try:
-        update_skus_from_local_file(database, force=False)
-        if include_bom:
-            update_bom_from_local_dir(database, force=False)
+        sync_catalog_from_cadastro(database, include_bom=include_bom, force=False)
     except Exception as exc:
         database.rollback()
-        app.logger.warning("Atualizacao local automatica ignorada: %s", exc)
+        app.logger.warning("Sincronizacao automatica com Cadastro Supabase ignorada: %s", exc)
 
 
 def can_access_label_job(job, user):
@@ -441,11 +435,6 @@ def settings():
         set_setting(database, "operator_can_export", "true" if request.form.get("operator_can_export") else "false")
         set_setting(database, "admin_can_print_inactive_sku", "true" if request.form.get("admin_can_print_inactive_sku") else "false")
         set_setting(database, "default_printer_name", request.form.get("default_printer_name", "").strip())
-        set_local_source_paths(
-            database,
-            request.form.get("local_skus_source_path", "").strip(),
-            request.form.get("local_bom_source_dir", "").strip(),
-        )
         flash("Configuracoes salvas.", "success")
         return redirect(url_for("settings"))
     values = {
@@ -453,10 +442,8 @@ def settings():
         "operator_can_export": get_setting_bool(database, "operator_can_export", True),
         "admin_can_print_inactive_sku": get_setting_bool(database, "admin_can_print_inactive_sku", False),
         "default_printer_name": configured_printer_name(database),
-        "local_skus_source_path": str(get_skus_source_path(database)),
-        "local_bom_source_dir": str(get_bom_source_dir(database)),
     }
-    return render_template("settings.html", values=values)
+    return render_template("settings.html", values=values, cadastro_status=cadastro_supabase_status())
 
 
 @app.route("/skus")
@@ -477,6 +464,7 @@ def skus():
         skus=query.order_by(SKU.sku).limit(500).all(),
         q=term,
         mostrar_inativos="1" if show_inactive else "",
+        cadastro_status=cadastro_supabase_status(),
     )
 
 
@@ -486,10 +474,7 @@ def skus():
 @roles_required("ADM")
 def atualizar_skus_local():
     database = db()
-    source_path = request.form.get("local_skus_source_path", "").strip()
-    if source_path:
-        set_local_source_paths(database, source_path, str(get_bom_source_dir(database)))
-    result = update_skus_from_local_file(database, force=True)
+    result = sync_skus_from_cadastro(database, force=True)
     flash_local_update_result("CODs", result)
     return redirect(request.referrer or url_for("skus"))
 
@@ -542,32 +527,10 @@ def sku_form(sku_id=None):
 def import_skus():
     database = db()
     if request.method == "POST":
-        file = request.files.get("file")
-        if not file or not file.filename.lower().endswith(".xlsx"):
-            flash("Envie um arquivo .xlsx.", "danger")
-            return redirect(url_for("import_skus"))
-        try:
-            result = import_skus_from_excel(database, file)
-        except Exception as exc:
-            database.rollback()
-            flash(f"Falha ao importar planilha: {exc}", "danger")
-            return redirect(url_for("import_skus"))
-        if result["errors"]:
-            flash("Importacao cancelada. A base atual nao foi alterada.", "danger")
-            for error in result["errors"][:10]:
-                flash(error, "warning")
-            if len(result["errors"]) > 10:
-                flash(f"Mais {len(result['errors']) - 10} erros ocultos.", "warning")
-        else:
-            flash(
-                "CODs atualizados com sucesso: "
-                f"{result['created']} criados, "
-                f"{result['updated']} atualizados e "
-                f"{result['balances_updated']} saldo(s) alterado(s).",
-                "success",
-            )
+        result = sync_skus_from_cadastro(database, force=True)
+        flash_local_update_result("CODs", result)
         return redirect(url_for("import_skus"))
-    return render_template("import_skus.html", local_skus_source_path=str(get_skus_source_path(database)))
+    return render_template("import_skus.html", cadastro_status=cadastro_supabase_status())
 
 
 @app.route("/estoque")
@@ -678,27 +641,26 @@ def entrada():
 def import_bom():
     result = None
     if request.method == "POST":
-        file = request.files.get("file")
-        if not file or not file.filename.lower().endswith((".xls", ".xlsx", ".xlsm", ".xltx", ".xltm")):
-            flash("Envie uma planilha Excel valida.", "danger")
-            return redirect(url_for("import_bom"))
         database = db()
         try:
-            result = import_bom_from_excel(database, file)
+            sku_result, result = sync_catalog_from_cadastro(database, include_bom=True, force=True)
         except Exception as exc:
             database.rollback()
-            flash(f"Falha ao importar B.O.M: {exc}", "danger")
+            flash(f"Falha ao sincronizar B.O.M: {exc}", "danger")
+            return redirect(url_for("import_bom"))
+        if sku_result.get("errors"):
+            flash_local_update_result("CODs", sku_result)
             return redirect(url_for("import_bom"))
         if result["errors"]:
-            flash("Importacao cancelada. Nenhuma estrutura B.O.M foi alterada.", "danger")
+            flash("Sincronizacao cancelada. Nenhuma estrutura B.O.M foi alterada.", "danger")
         else:
             flash(
-                f"B.O.M importada: {result['processed']} componente(s) em "
+                f"B.O.M sincronizada: {result['processed']} componente(s) em "
                 f"{result['items']} item(ns). Estruturas antigas substituidas: {result['deleted']}.",
                 "success",
             )
             return redirect(url_for("import_bom"))
-    return render_template("bom_import.html", result=result)
+    return render_template("bom_import.html", result=result, cadastro_status=cadastro_supabase_status())
 
 
 @app.route("/bom/atualizar-local", methods=["POST"])
@@ -706,7 +668,10 @@ def import_bom():
 @roles_required("ADM")
 def atualizar_bom_local():
     database = db()
-    result = update_bom_from_local_dir(database, force=True)
+    sku_result, result = sync_catalog_from_cadastro(database, include_bom=True, force=True)
+    if sku_result.get("errors"):
+        flash_local_update_result("CODs", sku_result)
+        return redirect(request.referrer or url_for("import_bom"))
     flash_local_update_result("B.O.M", result)
     return redirect(request.referrer or url_for("import_bom"))
 
