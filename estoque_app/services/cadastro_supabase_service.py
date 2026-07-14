@@ -221,14 +221,17 @@ def _row_to_sku_data(row):
     )
     grupo = _first_value(values, ["grupo", "prefixo"]) or _group_from_sku(sku)
     categoria = _clean(row.get("category_label"))
-    status_value = _first_value(values, ["status", "situacao", "situacao_cadastro"])
+    status_value = row.get("ativo")
+    active = bool(status_value) if isinstance(status_value, bool) else _status_to_active(
+        _first_value(values, ["status", "situacao", "situacao_cadastro"])
+    )
     return {
         "sku": sku,
         "descricao": descricao or sku,
         "unidade": unidade,
         "grupo": grupo,
         "categoria": categoria,
-        "active": _status_to_active(status_value),
+        "active": active,
     }
 
 
@@ -257,7 +260,7 @@ def sync_skus_from_cadastro(db, force=False):
 
     rows = _all_rows(
         REGISTRATIONS_TABLE,
-        "sku,category_label,descricao_primaria,descricao_secundaria,sufixo,unidade,field_values,updated_at",
+        "sku,category_label,descricao_primaria,descricao_secundaria,sufixo,unidade,ativo,field_values,updated_at",
         "sku.asc",
     )
     seen = set()
