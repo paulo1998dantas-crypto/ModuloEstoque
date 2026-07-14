@@ -206,7 +206,7 @@ def _row_to_sku_data(row):
         row.get("descricao_secundaria"),
         row.get("sufixo"),
     )
-    unidade = _first_value(
+    unidade = _clean(row.get("unidade")) or _first_value(
         values,
         [
             "unidade",
@@ -257,7 +257,7 @@ def sync_skus_from_cadastro(db, force=False):
 
     rows = _all_rows(
         REGISTRATIONS_TABLE,
-        "sku,category_label,descricao_primaria,descricao_secundaria,sufixo,field_values,updated_at",
+        "sku,category_label,descricao_primaria,descricao_secundaria,sufixo,unidade,field_values,updated_at",
         "sku.asc",
     )
     seen = set()
