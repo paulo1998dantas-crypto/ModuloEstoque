@@ -163,6 +163,13 @@ def _compact_description(*parts):
     return " ".join(_clean(part) for part in parts if _clean(part))
 
 
+def _limit_text(value, max_length):
+    text = _clean(value)
+    if max_length and len(text) > max_length:
+        return text[:max_length]
+    return text
+
+
 def _group_from_sku(sku):
     return {
         "10": "10 - INSUMO",
@@ -201,11 +208,7 @@ def _status_to_active(value):
 def _row_to_sku_data(row):
     sku = normalize_sku(row.get("sku"))
     values = row.get("field_values") if isinstance(row.get("field_values"), dict) else {}
-    descricao = _compact_description(
-        row.get("descricao_primaria"),
-        row.get("descricao_secundaria"),
-        row.get("sufixo"),
-    )
+    descricao = _clean(row.get("descricao_primaria")) or _clean(row.get("descricao_secundaria")) or sku
     unidade = _clean(row.get("unidade")) or _first_value(
         values,
         [
@@ -227,10 +230,10 @@ def _row_to_sku_data(row):
     )
     return {
         "sku": sku,
-        "descricao": descricao or sku,
-        "unidade": unidade,
-        "grupo": grupo,
-        "categoria": categoria,
+        "descricao": _limit_text(descricao or sku, 255),
+        "unidade": _limit_text(unidade, 20),
+        "grupo": _limit_text(grupo, 120),
+        "categoria": _limit_text(categoria, 120),
         "active": active,
     }
 
