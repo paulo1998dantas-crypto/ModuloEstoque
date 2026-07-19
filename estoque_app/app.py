@@ -45,6 +45,7 @@ from services.excel_service import (
     export_inventory_preview,
     export_inventory_report,
     export_movements_report,
+    export_pending_commitments_report,
     export_stock_report,
     import_commitments_from_excel,
     import_inventory_balance_additions_from_excel,
@@ -52,9 +53,11 @@ from services.excel_service import (
     import_label_jobs_from_excel,
     import_consumption_from_excel,
     import_mass_material_movements,
+    import_pending_commitment_consumptions,
     label_queue_summary,
     mass_material_rows_from_form,
     parse_mass_materials_from_excel,
+    parse_pending_commitment_consumptions_from_excel,
     skip_preparation_rows_for_consumption,
 )
 from services.cadastro_supabase_service import (
@@ -797,6 +800,32 @@ def baixa():
                 if not file or not file.filename:
                     flash("Selecione uma planilha Excel para importar.", "danger")
                     return redirect(url_for("baixa"))
+                pending_preview = parse_pending_commitment_consumptions_from_excel(file)
+                if pending_preview is not None:
+                    if pending_preview["errors"]:
+                        result = {"errors": pending_preview["errors"]}
+                        flash("A planilha possui erros. Nenhuma baixa foi registrada.", "danger")
+                        return render_template("consumption_import.html", result=result)
+                    result = import_pending_commitment_consumptions(
+                        database,
+                        pending_preview["rows"],
+                        session["user_id"],
+                        documento=request.form.get("documento", ""),
+                        observacao=request.form.get("observacao", ""),
+                        allow_negative=(user and user.role == "ADM")
+                        or get_setting_bool(database, "allow_negative_stock", False),
+                    )
+                    if result["errors"]:
+                        flash("A planilha possui erros. Nenhuma baixa foi registrada.", "danger")
+                    else:
+                        flash(
+                            f"Baixa de empenhos importada: {result['processed']} item(ns), "
+                            f"total baixado {result['total_consumed']}.",
+                            "success",
+                        )
+                        return redirect(url_for("baixa"))
+                    return render_template("consumption_import.html", result=result)
+                file.stream.seek(0)
                 preview = parse_mass_materials_from_excel(file)
                 if preview["errors"]:
                     result = {"errors": preview["errors"]}
@@ -1069,6 +1098,8 @@ def export_report(tipo):
         path = export_movements_report(database, user, "ENTRADA")
     elif tipo in {"empenhos", "saidas"}:
         path = export_movements_report(database, user, ["EMPENHO", "SAIDA"])
+    elif tipo == "empenhos_pendentes":
+        path = export_pending_commitments_report(database, user)
     elif tipo == "baixas":
         path = export_movements_report(database, user, "BAIXA")
     elif tipo == "movimentacoes":

@@ -6,7 +6,10 @@
         <h1>Baixa por consumo real</h1>
         <p>Registre uma baixa manual por COD ou importe a requisicao da OS em massa.</p>
     </div>
-    <a class="btn secondary" href="{{ url_for('download_template', name='baixa') }}">Baixar modelo</a>
+    <div class="button-row">
+        <a class="btn secondary" href="{{ url_for('export_report', tipo='empenhos_pendentes') }}">Exportar empenhos pendentes</a>
+        <a class="btn secondary" href="{{ url_for('download_template', name='baixa') }}">Baixar modelo</a>
+    </div>
 </section>
 
 <section class="scan-layout">
@@ -63,6 +66,7 @@
 
     <section class="panel">
         <h2>Layout da planilha</h2>
+        <p class="muted">Para baixar empenhos, exporte os pendentes acima, analise o arquivo e preencha a coluna EMPENHO somente nas linhas desejadas. O ID_EMPENHO vincula cada baixa a reserva original.</p>
         <div class="table-wrap">
             <table>
                 <thead>

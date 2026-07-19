@@ -19,7 +19,9 @@ from services.estoque_service import (
     movement_available_snapshots,
     normalize_sku,
     optional_decimal_to_str,
+    pending_commitment_for_movement,
     pending_commitments_by_sku,
+    register_consumption_from_commitment,
     register_movement,
     save_inventory_count,
     to_decimal,
@@ -111,6 +113,16 @@ MASS_MATERIAL_QTY_ALIASES = [
     "QUANTIDADE_CONSUMIDA",
     "QUANTIDADE_EMPENHADA",
 ]
+PENDING_COMMITMENT_ID_ALIASES = ["ID_EMPENHO", "EMPENHO_ID"]
+PENDING_COMMITMENT_CONSUMPTION_QTY_ALIASES = [
+    "EMPENHO",
+    "BAIXA_EMPENHO",
+    "QUANTIDADE_BAIXA",
+    "QTD_BAIXA",
+    "QUANTIDADE_PARA_BAIXA",
+]
+PENDING_COMMITMENT_DOCUMENT_ALIASES = ["DOCUMENTO_BAIXA", "REFERENCIA_BAIXA"]
+PENDING_COMMITMENT_NOTE_ALIASES = ["OBSERVACAO_BAIXA", "OBS_BAIXA"]
 
 
 def _normalize_header(value):
@@ -685,6 +697,152 @@ def parse_mass_materials_from_excel(file_obj):
     if not rows and not errors:
         errors.append("Nenhum CODIGO encontrado na planilha.")
     return {"rows": rows, "missing_quantities": missing_quantities, "errors": errors}
+
+
+def _positive_integer(value):
+    text = str(value or "").strip()
+    if not re.fullmatch(r"\d+(?:[.,]0+)?", text):
+        raise ValueError("ID_EMPENHO invalido.")
+    return int(text.replace(",", ".").split(".", 1)[0])
+
+
+def parse_pending_commitment_consumptions_from_excel(file_obj):
+    """Le o relatorio de pendencias retornado pelo usuario para baixa vinculada.
+
+    Retorna None quando o arquivo nao possui ID_EMPENHO, permitindo que a rota
+    mantenha compatibilidade com os layouts antigos de baixa em massa.
+    """
+    wb = _load_workbook_for_read(file_obj)
+    ws = wb["Empenhos pendentes"] if "Empenhos pendentes" in wb.sheetnames else wb.active
+    headers = {}
+    header_row = 1
+    id_header = None
+    for row_number in range(1, min(ws.max_row, 25) + 1):
+        candidate = _headers_at_row(ws, row_number)
+        candidate_id = _first_header(candidate, PENDING_COMMITMENT_ID_ALIASES)
+        if candidate_id:
+            headers = candidate
+            header_row = row_number
+            id_header = candidate_id
+            break
+    if not id_header:
+        return None
+
+    qty_header = _first_header(headers, PENDING_COMMITMENT_CONSUMPTION_QTY_ALIASES)
+    if not qty_header:
+        raise ValueError(
+            "Coluna EMPENHO ausente. Use a mesma planilha exportada em Empenhos pendentes."
+        )
+
+    rows = []
+    errors = []
+    for row_number in range(header_row + 1, ws.max_row + 1):
+        raw_id = _cell(ws, row_number, headers, id_header)
+        raw_qty = _cell(ws, row_number, headers, qty_header)
+        if not _has_quantity(raw_id) and not _has_quantity(raw_qty):
+            continue
+        if not _has_quantity(raw_id):
+            errors.append(f"Linha {row_number}: ID_EMPENHO e obrigatorio.")
+            continue
+        if not _has_quantity(raw_qty):
+            continue
+        try:
+            movement_id = _positive_integer(raw_id)
+            qty = to_decimal(raw_qty)
+            if qty <= 0:
+                raise ValueError("Quantidade deve ser maior que zero.")
+        except Exception as exc:
+            errors.append(f"Linha {row_number}: {exc}")
+            continue
+        rows.append(
+            {
+                "linha": row_number,
+                "movement_id": movement_id,
+                "codigo": normalize_sku(_first_existing_cell(ws, row_number, headers, ["COD", "CODIGO", "SKU"], "")),
+                "quantidade": qty,
+                "documento": str(
+                    _first_existing_cell(ws, row_number, headers, PENDING_COMMITMENT_DOCUMENT_ALIASES, "") or ""
+                ).strip(),
+                "observacao": str(
+                    _first_existing_cell(ws, row_number, headers, PENDING_COMMITMENT_NOTE_ALIASES, "") or ""
+                ).strip(),
+            }
+        )
+
+    if not rows and not errors:
+        errors.append("Preencha a coluna EMPENHO em pelo menos uma linha para realizar a baixa.")
+    return {"rows": rows, "errors": errors}
+
+
+def import_pending_commitment_consumptions(
+    db,
+    rows,
+    user_id,
+    documento="",
+    observacao="",
+    allow_negative=False,
+):
+    result = {"processed": 0, "total_consumed": "0", "errors": []}
+    validated = []
+    seen_ids = set()
+
+    for row in rows:
+        movement_id = row.get("movement_id")
+        try:
+            if movement_id in seen_ids:
+                raise ValueError("ID_EMPENHO duplicado na planilha.")
+            seen_ids.add(movement_id)
+            commitment = (
+                db.query(Movement)
+                .filter(Movement.id == movement_id)
+                .with_for_update()
+                .one_or_none()
+            )
+            if commitment is None or commitment.tipo not in {"EMPENHO", "SAIDA"}:
+                raise ValueError("Empenho nao encontrado.")
+            code = normalize_sku(row.get("codigo"))
+            if code and code != normalize_sku(commitment.sku.sku):
+                raise ValueError(
+                    f"COD {code} nao corresponde ao empenho, que pertence ao COD {commitment.sku.sku}."
+                )
+            qty = to_decimal(row.get("quantidade"))
+            pending = pending_commitment_for_movement(db, commitment)
+            if qty <= 0:
+                raise ValueError("Quantidade deve ser maior que zero.")
+            if qty > pending:
+                raise ValueError(
+                    f"Quantidade {decimal_to_str(qty)} excede o saldo pendente {decimal_to_str(pending)}."
+                )
+            validated.append((row, commitment, qty))
+        except Exception as exc:
+            result["errors"].append(f"Linha {row.get('linha')}: empenho {movement_id or ''} - {exc}")
+
+    if result["errors"]:
+        db.rollback()
+        return result
+
+    total = to_decimal(0)
+    try:
+        for row, commitment, qty in validated:
+            register_consumption_from_commitment(
+                db,
+                commitment,
+                qty,
+                user_id,
+                documento=row.get("documento") or documento,
+                observacao=row.get("observacao") or observacao,
+                allow_negative=allow_negative,
+                commit=False,
+            )
+            result["processed"] += 1
+            total += qty
+        db.commit()
+        result["total_consumed"] = decimal_to_str(total)
+    except Exception as exc:
+        db.rollback()
+        result["processed"] = 0
+        result["errors"].append(str(exc))
+    return result
 
 
 def mass_material_rows_from_form(form):
@@ -1406,6 +1564,77 @@ def export_movements_report(db, user, tipo=None):
     else:
         prefix = f"relatorio_{tipo.lower() if tipo else 'movimentacoes'}"
     return _save_report(wb, prefix)
+
+
+def export_pending_commitments_report(db, user):
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Empenhos pendentes"
+    _metadata(
+        ws,
+        "Empenhos pendentes para analise e baixa",
+        user,
+        "Preencha somente a coluna EMPENHO nas linhas que deseja baixar e importe este mesmo arquivo na tela Baixa.",
+    )
+    headers = [
+        "ID_EMPENHO",
+        "DATA_EMPENHO",
+        "COD",
+        "DESCRICAO",
+        "UNIDADE",
+        "QUANTIDADE_EMPENHADA",
+        "SALDO_PENDENTE",
+        "DOCUMENTO_EMPENHO",
+        "OBSERVACAO_EMPENHO",
+        "EMPENHO",
+        "DOCUMENTO_BAIXA",
+        "OBSERVACAO_BAIXA",
+    ]
+    ws.append(headers)
+    header_row = ws.max_row
+
+    commitments = (
+        db.query(Movement)
+        .filter(Movement.tipo.in_(["EMPENHO", "SAIDA"]))
+        .order_by(Movement.created_at.asc(), Movement.id.asc())
+        .all()
+    )
+    for commitment in commitments:
+        pending = pending_commitment_for_movement(db, commitment)
+        if pending <= 0:
+            continue
+        ws.append(
+            [
+                commitment.id,
+                commitment.created_at,
+                commitment.sku.sku,
+                commitment.sku.descricao,
+                commitment.sku.unidade or "",
+                float(to_decimal(commitment.quantidade)),
+                float(pending),
+                commitment.documento or "",
+                commitment.observacao or "",
+                "",
+                "",
+                "",
+            ]
+        )
+
+    header_fill = PatternFill("solid", fgColor="1F6FEB")
+    input_fill = PatternFill("solid", fgColor="FFF2CC")
+    for cell in ws[header_row]:
+        cell.font = Font(color="FFFFFF", bold=True)
+        cell.fill = header_fill
+    for row_number in range(header_row + 1, ws.max_row + 1):
+        ws.cell(row_number, 2).number_format = "dd/mm/yyyy hh:mm"
+        for column in (6, 7, 10):
+            ws.cell(row_number, column).number_format = "0.000"
+        for column in (10, 11, 12):
+            ws.cell(row_number, column).fill = input_fill
+    ws.freeze_panes = f"A{header_row + 1}"
+    ws.auto_filter.ref = f"A{header_row}:L{max(header_row, ws.max_row)}"
+    _autosize(ws)
+    return _save_report(wb, "empenhos_pendentes")
 
 
 def export_inventory_report(db, user, session_id=None):

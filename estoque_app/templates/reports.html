@@ -22,6 +22,10 @@
         <strong>Empenhos</strong>
         <span>Reservas lancadas pela operacao.</span>
     </a>
+    <a class="report-card" href="{{ url_for('export_report', tipo='empenhos_pendentes') }}">
+        <strong>Empenhos pendentes</strong>
+        <span>Exporte, analise e preencha a coluna EMPENHO para retornar a planilha na tela Baixa.</span>
+    </a>
     <a class="report-card" href="{{ url_for('export_report', tipo='baixas') }}">
         <strong>Baixas</strong>
         <span>Consumo real importado por planilha.</span>
