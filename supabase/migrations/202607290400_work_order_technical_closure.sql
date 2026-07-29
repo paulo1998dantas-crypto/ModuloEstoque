@@ -2,6 +2,10 @@
 -- Não altera o status produtivo, não remove cards e não movimenta estoque.
 -- Migration aditiva e idempotente.
 
+begin;
+set local lock_timeout = '5s';
+set local statement_timeout = '60s';
+
 alter table if exists public.erp_work_orders
     add column if not exists technical_status text not null default 'ABERTA',
     add column if not exists technical_closed_at timestamptz null,
@@ -30,3 +34,5 @@ comment on column public.erp_work_orders.technical_status is
     'Conclusão técnica registrada em Suprimentos. Não altera o fluxo produtivo do MES.';
 comment on column public.erp_work_orders.technical_closed_at is
     'Data/hora da conclusão técnica usada para auditoria e coluna ARQUIVADO do relatório.';
+
+commit;

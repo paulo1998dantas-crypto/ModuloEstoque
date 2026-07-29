@@ -1,6 +1,10 @@
 -- Estados complementares da O.C. sem alterar saldo, movimentos ou o status
 -- físico de recebimento. Migration aditiva e idempotente.
 
+begin;
+set local lock_timeout = '5s';
+set local statement_timeout = '60s';
+
 alter table if exists public.erp_purchase_orders
     add column if not exists technical_status text not null default 'ABERTA',
     add column if not exists technical_closed_at timestamptz null,
@@ -46,3 +50,5 @@ comment on column public.erp_purchase_orders.technical_status is
     'Conclusão técnica pelo PCP/Compras. Não gera movimento e não altera o estado físico.';
 comment on column public.erp_purchase_orders.financial_status is
     'Conclusão financeira, permitida somente após recebimento físico total. Não gera movimento.';
+
+commit;

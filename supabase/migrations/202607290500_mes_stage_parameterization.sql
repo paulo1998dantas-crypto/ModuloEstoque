@@ -1,6 +1,10 @@
 -- Parametrização explícita das etapas antes da ativação da O.S. no MES.
 -- Migração estritamente aditiva: não altera status, saldos ou apontamentos existentes.
 
+begin;
+set local lock_timeout = '5s';
+set local statement_timeout = '60s';
+
 alter table if exists public.erp_work_orders
     add column if not exists stage_configuration_status text;
 
@@ -67,3 +71,5 @@ comment on column public.erp_work_orders.stage_configuration_status is
 
 comment on column public.erp_work_order_stages.parametrizado is
     'Distingue ? (não parametrizada) de uma etapa canonicamente PENDENTE.';
+
+commit;

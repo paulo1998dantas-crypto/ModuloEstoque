@@ -2,6 +2,10 @@
 -- Não cria, altera ou estorna movimentos de estoque.
 -- Migration aditiva e idempotente.
 
+begin;
+set local lock_timeout = '5s';
+set local statement_timeout = '60s';
+
 create table if not exists public.erp_purchase_order_financial_entries (
     id uuid primary key default gen_random_uuid(),
     purchase_order_id uuid not null references public.erp_purchase_orders(id),
@@ -68,3 +72,5 @@ comment on table public.erp_purchase_order_financial_entries is
     'Histórico de baixas financeiras parciais/completas. Nunca movimenta saldo físico.';
 comment on column public.erp_purchase_order_financial_entries.closes_balance is
     'Indica que a baixa encerra o saldo financeiro, inclusive quando o valor real diverge do pedido.';
+
+commit;
