@@ -1,0 +1,221 @@
+{% extends "base.html" %}
+{% block title %}Inspeção de Recebimento - Estoque{% endblock %}
+{% block content %}
+<style>
+  .erp-receipts{max-width:1500px;margin:0 auto;padding:18px 20px 28px}
+  .erp-head{display:flex;justify-content:space-between;align-items:flex-start;gap:16px;margin-bottom:14px}
+  .erp-head h2{margin:0;font-size:1.45rem}.erp-head p{margin:4px 0 0;color:#64748b;font-size:.88rem}
+  .erp-actions{display:flex;gap:8px}.erp-metrics{display:grid;grid-template-columns:repeat(4,minmax(150px,1fr));gap:9px;margin-bottom:12px}
+  .erp-metric{border:1px solid #dce4ed;border-radius:7px;background:#fff;padding:10px 12px}
+  .erp-metric span{display:block;color:#64748b;font-size:.68rem;font-weight:700;text-transform:uppercase;letter-spacing:.04em}
+  .erp-metric strong{display:block;margin-top:3px;font-size:1.25rem;color:#172033}
+  .erp-panel{border:1px solid #dce4ed;border-radius:7px;background:#fff;overflow:hidden}
+  .erp-toolbar{display:flex;align-items:end;gap:9px;padding:10px 12px;background:#f8fafc;border-bottom:1px solid #dce4ed;flex-wrap:wrap}
+  .erp-field{display:flex;flex-direction:column;gap:3px}.erp-field label{font-size:.7rem;font-weight:700;color:#526174}
+  .erp-field input,.erp-field select{height:34px;border:1px solid #cbd5e1;border-radius:5px;background:#fff;padding:5px 9px;font-size:.82rem}
+  .erp-search{min-width:340px;flex:1}.erp-table-wrap{max-height:590px;overflow:auto}
+  .erp-table{width:100%;border-collapse:collapse;font-size:.79rem}.erp-table th{position:sticky;top:0;z-index:1;background:#eef3f8;color:#475569;text-transform:uppercase;font-size:.65rem;letter-spacing:.04em}
+  .erp-table th,.erp-table td{padding:8px 10px;border-bottom:1px solid #e8edf3;text-align:left;vertical-align:middle}
+  .erp-table tbody tr:hover{background:#f8fbfd}.erp-table .num{text-align:right;font-variant-numeric:tabular-nums}
+  .erp-order{font-size:.88rem;color:#123d6a}.erp-supplier{font-weight:650}.erp-muted{color:#718096}.erp-destination{max-width:210px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .erp-badge{display:inline-flex;align-items:center;border-radius:999px;padding:3px 7px;background:#dbeafe;color:#1d4ed8;font-size:.65rem;font-weight:800}
+  .erp-badge.warn{background:#fff3cd;color:#865d00}.erp-badge.good{background:#dcfce7;color:#166534}
+  .erp-empty{text-align:center;padding:34px;color:#64748b}.erp-message{margin:10px 0;padding:9px 11px;border-radius:5px;background:#eaf7f3;color:#075d57;font-size:.82rem}
+  .erp-message.error{background:#fff0f0;color:#b42318}
+  .receipt-dialog{width:min(1420px,97vw);max-height:94vh;border:0;border-radius:9px;padding:0;box-shadow:0 24px 80px #0f172a55}
+  .receipt-dialog::backdrop{background:#0f172a99}.receipt-modal-head{display:flex;justify-content:space-between;align-items:center;padding:12px 16px;background:#123d6a;color:#fff}
+  .receipt-modal-head h3{margin:0;font-size:1.05rem}.receipt-modal-head small{display:block;margin-top:2px;color:#cbdbea}
+  .receipt-close{border:1px solid #ffffff55!important;background:transparent!important;color:#fff!important;padding:5px 9px!important}
+  .receipt-body{padding:12px 14px;overflow:auto;max-height:calc(94vh - 116px)}.receipt-general{display:grid;grid-template-columns:170px 170px 1fr;gap:9px;margin-bottom:10px}
+  .receipt-general input{width:100%;height:34px;border:1px solid #cbd5e1;border-radius:5px;padding:5px 8px}
+  .receipt-lines{display:flex;flex-direction:column;gap:8px}.receipt-line{border:1px solid #dce4ed;border-radius:6px;padding:9px;background:#fff}
+  .receipt-line-head{display:grid;grid-template-columns:55px 150px 1fr 120px;gap:9px;align-items:center;margin-bottom:7px}
+  .receipt-line-title{font-weight:750;color:#172033}.receipt-line-description{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .receipt-grid{display:grid;grid-template-columns:repeat(6,minmax(100px,1fr));gap:7px}
+  .receipt-grid .erp-field input,.receipt-grid .erp-field select{width:100%;min-width:0}.receipt-grid .wide{grid-column:span 2}.receipt-grid .checks{display:flex;align-items:center;gap:12px;padding-top:18px}
+  .receipt-grid .checks label{font-size:.72rem;white-space:nowrap}.receipt-footer{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:10px 14px;border-top:1px solid #dce4ed;background:#f8fafc}
+  .receipt-summary{font-size:.78rem;color:#526174}.receipt-footer-actions{display:flex;gap:8px}
+  @media(max-width:900px){.erp-metrics{grid-template-columns:repeat(2,1fr)}.erp-head{flex-direction:column}.erp-search{min-width:100%}.receipt-general{grid-template-columns:1fr}.receipt-line-head{grid-template-columns:50px 1fr}.receipt-line-description{grid-column:1/-1}.receipt-grid{grid-template-columns:repeat(2,1fr)}}
+</style>
+
+<main class="erp-receipts">
+  <div class="erp-head">
+    <div><h2>Inspeção de Recebimento</h2><p>Consulte as O.C. pendentes, confira os materiais recebidos e registre o resultado da inspeção.</p></div>
+    <div class="erp-actions"><a class="btn btn-secondary btn-sm" href="{{ url_for('erp_purchase_inspection_report') }}">Exportar Compras + Inspeção</a><button class="btn btn-secondary btn-sm" type="button" onclick="loadOrders()">Atualizar</button></div>
+  </div>
+
+  <section class="erp-metrics">
+    <div class="erp-metric"><span>O.C. abertas</span><strong id="metric-orders">—</strong></div>
+    <div class="erp-metric"><span>Linhas pendentes</span><strong id="metric-lines">—</strong></div>
+    <div class="erp-metric"><span>Sem SKU vinculado</span><strong id="metric-unlinked">—</strong></div>
+    <div class="erp-metric"><span>Resultados da busca</span><strong id="metric-filtered">—</strong></div>
+  </section>
+
+  <section class="erp-panel">
+    <div class="erp-toolbar">
+      <div class="erp-field erp-search"><label for="receipt-search">Buscar</label><input id="receipt-search" type="search" placeholder="Número do pedido, fornecedor, item ou destino" oninput="renderOrders()"></div>
+      <div class="erp-field"><label for="receipt-category">Categoria</label><select id="receipt-category" onchange="renderOrders()"><option value="">Todas</option><option value="GERAL">Geral</option><option value="BANCOS">Bancos</option></select></div>
+      <div class="erp-field"><label for="receipt-link">Vínculo SKU</label><select id="receipt-link" onchange="renderOrders()"><option value="">Todos</option><option value="linked">Com SKU</option><option value="unlinked">Com pendência de SKU</option></select></div>
+      <button class="btn btn-secondary btn-sm" type="button" onclick="clearFilters()">Limpar</button>
+    </div>
+    <div class="erp-table-wrap">
+      <table class="erp-table">
+        <thead><tr><th>O.C.</th><th>Fornecedor</th><th>Categoria</th><th>Necessidade</th><th>Destino</th><th class="num">Itens</th><th>Pendente</th><th>SKU</th><th>Status</th><th></th></tr></thead>
+        <tbody id="orders-table"></tbody>
+      </table>
+      <div id="orders-empty" class="erp-empty" hidden>Nenhuma pendência encontrada para os filtros selecionados.</div>
+    </div>
+  </section>
+  <div id="result" hidden></div>
+</main>
+
+<dialog id="receipt-dialog" class="receipt-dialog">
+  <div class="receipt-modal-head">
+    <div><h3 id="receipt-title">Receber O.C.</h3><small id="receipt-subtitle"></small></div>
+    <button class="btn receipt-close" type="button" onclick="closeReceipt()">Fechar</button>
+  </div>
+  <div class="receipt-body">
+    <div class="receipt-general">
+      <div class="erp-field"><label for="receipt-nf">Nota fiscal</label><input id="receipt-nf" autocomplete="off"></div>
+      <div class="erp-field"><label for="receipt-date">Data do recebimento</label><input id="receipt-date" type="date"></div>
+      <div class="erp-field"><label for="receipt-note">Observações gerais</label><input id="receipt-note"></div>
+    </div>
+    <div id="receipt-lines" class="receipt-lines"></div>
+  </div>
+  <div class="receipt-footer">
+    <div id="receipt-summary" class="receipt-summary"></div>
+    <div class="receipt-footer-actions"><button class="btn btn-secondary" type="button" onclick="closeReceipt()">Cancelar</button><button id="confirm-receipt" class="btn btn-success" type="button" onclick="prepareReceipt()">Confirmar recebimento</button></div>
+  </div>
+</dialog>
+
+<template id="receipt-line-template">
+  <section class="receipt-line">
+    <div class="receipt-line-head">
+      <div class="receipt-line-title"></div><div class="receipt-sku"></div><div class="receipt-line-description"></div><div class="receipt-pending"></div>
+    </div>
+    <div class="receipt-grid">
+      <div class="erp-field"><label>Qtd. física</label><input class="physical" type="number" min="0" step="0.001"></div>
+      <div class="erp-field"><label>Aprovada</label><input class="approved" type="number" min="0" step="0.001"></div>
+      <div class="erp-field"><label>Condicional</label><input class="conditional" type="number" min="0" step="0.001" value="0"></div>
+      <div class="erp-field"><label>Rejeitada</label><input class="rejected" type="number" min="0" step="0.001" value="0"></div>
+      <div class="erp-field"><label>Inspeção</label><select class="inspection"><option value="A">A — Aprovado</option><option value="AC">AC — Condicional</option><option value="D">D — Devolver</option></select></div>
+      <div class="erp-field"><label>Valor unit. real</label><input class="value" type="number" min="0" step="0.01"></div>
+      <div class="erp-field"><label>Validade certificado</label><input class="certificate-expiry" type="date"></div>
+      <div class="checks"><label><input class="certificate-required" type="checkbox"> Cert. exigido</label><label><input class="certificate-presented" type="checkbox"> Apresentado</label></div>
+      <div class="erp-field wide"><label>Divergência / observação</label><input class="reason"></div>
+    </div>
+  </section>
+</template>
+
+<script>
+  const state={orders:[],filtered:[],active:null};
+  const number=v=>Number(v||0);
+  const qty=v=>new Intl.NumberFormat('pt-BR',{maximumFractionDigits:3}).format(number(v));
+  const date=v=>{
+    if(!v)return '—';
+    const parsed=new Date(`${String(v).slice(0,10)}T12:00:00`);
+    return Number.isNaN(parsed.getTime())?'—':parsed.toLocaleDateString('pt-BR');
+  };
+  const escapeHtml=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  const normalize=v=>String(v??'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase();
+
+  function groupOrders(lines){
+    const grouped=new Map();
+    for(const line of lines){
+      if(!grouped.has(line.id)) grouped.set(line.id,{id:line.id,numero_oc:line.numero_oc,categoria:line.categoria,fornecedor_nome:line.fornecedor_nome,status:line.status,data_necessidade:line.data_necessidade,destino:line.destino,valor_total_pedido:line.valor_total_pedido,lines:[]});
+      grouped.get(line.id).lines.push(line);
+    }
+    return [...grouped.values()];
+  }
+  function unitSummary(order){
+    const totals={};
+    for(const line of order.lines){const unit=line.unidade||'UN';totals[unit]=(totals[unit]||0)+number(line.quantidade_pendente);}
+    return Object.entries(totals).map(([unit,total])=>`${qty(total)} ${unit}`).join(' · ');
+  }
+  function hasUnlinked(order){return order.lines.some(line=>!line.sku_id);}
+  function renderMetrics(){
+    const lineCount=state.orders.reduce((sum,order)=>sum+order.lines.length,0);
+    const unlinked=state.orders.reduce((sum,order)=>sum+order.lines.filter(line=>!line.sku_id).length,0);
+    document.getElementById('metric-orders').textContent=state.orders.length;
+    document.getElementById('metric-lines').textContent=lineCount;
+    document.getElementById('metric-unlinked').textContent=unlinked;
+    document.getElementById('metric-filtered').textContent=state.filtered.length;
+  }
+  function renderOrders(){
+    const term=normalize(document.getElementById('receipt-search').value),category=document.getElementById('receipt-category').value,link=document.getElementById('receipt-link').value;
+    state.filtered=state.orders.filter(order=>{
+      const searchable=normalize([order.numero_oc,order.fornecedor_nome,order.destino,...order.lines.flatMap(line=>[line.sku_codigo,line.descricao_original])].join(' '));
+      return (!term||searchable.includes(term))&&(!category||order.categoria===category)&&(!link||(link==='unlinked'?hasUnlinked(order):!hasUnlinked(order)));
+    });
+    const tbody=document.getElementById('orders-table'),empty=document.getElementById('orders-empty');
+    tbody.innerHTML=state.filtered.map(order=>{
+      const unlinked=order.lines.filter(line=>!line.sku_id).length;
+      const skuLabel=unlinked?`<span class="erp-badge warn">${unlinked} sem vínculo</span>`:`<span class="erp-badge good">Vinculados</span>`;
+      return `<tr><td><strong class="erp-order">${escapeHtml(order.numero_oc)}</strong></td><td class="erp-supplier">${escapeHtml(order.fornecedor_nome||'—')}</td><td>${escapeHtml(order.categoria||'GERAL')}</td><td>${date(order.data_necessidade)}</td><td class="erp-destination" title="${escapeHtml(order.destino||'')}">${escapeHtml(order.destino||'—')}</td><td class="num">${order.lines.length}</td><td><strong>${escapeHtml(unitSummary(order))}</strong></td><td>${skuLabel}</td><td><span class="erp-badge">${escapeHtml(String(order.status||'').replaceAll('_',' '))}</span></td><td><button class="btn btn-primary btn-sm" type="button" onclick="openReceipt('${order.id}')">Abrir</button></td></tr>`;
+    }).join('');
+    empty.hidden=state.filtered.length!==0;renderMetrics();
+  }
+  async function loadOrders(){
+    showMessage('Carregando pendências...');
+    try{
+      const response=await fetch('/api/erp/receipts/pending'),body=await response.json();
+      if(!response.ok) throw new Error(body.error||'Falha ao carregar pendências.');
+      state.orders=groupOrders(body.orders||[]);state.orders.sort((a,b)=>String(a.data_necessidade||'9999').localeCompare(String(b.data_necessidade||'9999'))||String(a.numero_oc).localeCompare(String(b.numero_oc),'pt-BR',{numeric:true}));
+      renderOrders();hideMessage();
+    }catch(error){showMessage(error.message,true);}
+  }
+  function clearFilters(){document.getElementById('receipt-search').value='';document.getElementById('receipt-category').value='';document.getElementById('receipt-link').value='';renderOrders();}
+  function openReceipt(id){
+    state.active=state.orders.find(order=>order.id===id);if(!state.active)return;
+    document.getElementById('receipt-title').textContent=`Receber O.C. ${state.active.numero_oc}`;
+    document.getElementById('receipt-subtitle').textContent=`${state.active.fornecedor_nome||'Fornecedor não informado'} · ${state.active.lines.length} linha(s) pendente(s)`;
+    document.getElementById('receipt-nf').value='';document.getElementById('receipt-note').value='';document.getElementById('receipt-date').value=new Date().toISOString().slice(0,10);
+    const holder=document.getElementById('receipt-lines');holder.innerHTML='';
+    for(const line of state.active.lines){
+      const node=document.getElementById('receipt-line-template').content.cloneNode(true),card=node.querySelector('.receipt-line'),pending=number(line.quantidade_pendente);
+      card.dataset.lineId=line.line_id;card.dataset.skuId=line.sku_id||'';card.dataset.pending=String(pending);
+      card.querySelector('.receipt-line-title').textContent=`Linha ${line.numero_linha}`;
+      card.querySelector('.receipt-sku').innerHTML=line.sku_id?`<span class="erp-badge good">${escapeHtml(line.sku_codigo||`SKU ${line.sku_id}`)}</span>`:'<span class="erp-badge warn">Sem SKU</span>';
+      card.querySelector('.receipt-line-description').textContent=line.descricao_original||'Item sem descrição';
+      card.querySelector('.receipt-pending').innerHTML=`Pendente: <strong>${qty(pending)} ${escapeHtml(line.unidade||'')}</strong>`;
+      card.querySelector('.physical').value=pending;card.querySelector('.approved').value=line.sku_id?pending:0;card.querySelector('.value').value=number(line.valor_unitario_pedido);
+      for(const input of card.querySelectorAll('input,select')) input.addEventListener('input',updateReceiptSummary);
+      holder.append(node);
+    }
+    updateReceiptSummary();document.getElementById('receipt-dialog').showModal();
+  }
+  function closeReceipt(){document.getElementById('receipt-dialog').close();state.active=null;}
+  function linePayload(card){
+    const get=selector=>card.querySelector(selector);
+    return {purchase_order_line_id:card.dataset.lineId,quantidade_fisica:get('.physical').value,quantidade_aprovada:get('.approved').value,quantidade_condicional:get('.conditional').value,quantidade_rejeitada:get('.rejected').value,resultado_inspecao:get('.inspection').value,valor_unitario_real:get('.value').value,certificado_exigido:get('.certificate-required').checked,certificado_apresentado:get('.certificate-presented').checked,validade_certificado:get('.certificate-expiry').value||null,justificativa_divergencia:get('.reason').value};
+  }
+  function updateReceiptSummary(){
+    const cards=[...document.querySelectorAll('#receipt-lines .receipt-line')],totals=cards.reduce((sum,card)=>{const line=linePayload(card);sum.physical+=number(line.quantidade_fisica);sum.approved+=number(line.quantidade_aprovada);sum.conditional+=number(line.quantidade_condicional);sum.rejected+=number(line.quantidade_rejeitada);return sum;},{physical:0,approved:0,conditional:0,rejected:0});
+    document.getElementById('receipt-summary').textContent=`Física ${qty(totals.physical)} · Aprovada ${qty(totals.approved)} · Condicional ${qty(totals.conditional)} · Rejeitada ${qty(totals.rejected)}`;
+  }
+  function prepareReceipt(){
+    const cards=[...document.querySelectorAll('#receipt-lines .receipt-line')],issues=[];
+    for(const card of cards){
+      const line=linePayload(card),expected=number(card.dataset.pending),physical=number(line.quantidade_fisica),distributed=number(line.quantidade_aprovada)+number(line.quantidade_condicional)+number(line.quantidade_rejeitada);
+      if(physical>expected)issues.push(`Linha ${card.dataset.lineId.slice(0,8)}: quantidade acima do saldo.`);
+      if(Math.abs(physical-distributed)>.0001)issues.push(`Linha ${card.dataset.lineId.slice(0,8)}: física diferente da soma da inspeção.`);
+      if(number(line.quantidade_aprovada)>0&&!card.dataset.skuId)issues.push(`Linha ${card.dataset.lineId.slice(0,8)}: aprovada sem SKU vinculado.`);
+    }
+    const nf=document.getElementById('receipt-nf').value.trim();if(!nf)issues.push('Número da nota fiscal não informado.');
+    if(issues.length&&!confirm(`Divergências encontradas:\n\n• ${issues.join('\n• ')}\n\nDeseja tentar confirmar mesmo assim?`))return;
+    receive(cards);
+  }
+  async function receive(cards){
+    const button=document.getElementById('confirm-receipt');button.disabled=true;button.textContent='Confirmando...';
+    const activeNumber=state.active.numero_oc,payload={purchase_order_id:state.active.id,fornecedor_nome:state.active.fornecedor_nome,numero_nf:document.getElementById('receipt-nf').value.trim(),data_recebimento:document.getElementById('receipt-date').value||null,observacoes:document.getElementById('receipt-note').value.trim(),idempotency_key:crypto.randomUUID(),lines:cards.map(linePayload)};
+    try{
+      const response=await fetch('/api/erp/receipts/confirm',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)}),body=await response.json();
+      if(!response.ok)throw new Error(body.error||'Não foi possível confirmar o recebimento.');
+      closeReceipt();await loadOrders();showMessage(`Recebimento da O.C. ${activeNumber} confirmado com sucesso.`);
+    }catch(error){showMessage(error.message,true);}finally{button.disabled=false;button.textContent='Confirmar recebimento';}
+  }
+  function showMessage(text,error=false){const box=document.getElementById('result');box.hidden=false;box.className=error?'erp-message error':'erp-message';box.textContent=text;}
+  function hideMessage(){document.getElementById('result').hidden=true;}
+  loadOrders();
+</script>
+{% endblock %}

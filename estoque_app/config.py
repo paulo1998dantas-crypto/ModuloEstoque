@@ -76,7 +76,9 @@ def build_database_url():
     if database_url.startswith("postgresql+psycopg://"):
         parts = urlsplit(database_url)
         query = dict(parse_qsl(parts.query, keep_blank_values=True))
-        query.setdefault("sslmode", "require")
+        # Supabase requires SSL; the explicit override supports the isolated
+        # Docker database used by the integration test suite.
+        query.setdefault("sslmode", os.environ.get("ESTOQUE_DB_SSLMODE", "require"))
         database_url = urlunsplit((parts.scheme, parts.netloc, parts.path, urlencode(query), parts.fragment))
 
     return database_url
