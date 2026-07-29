@@ -85,7 +85,7 @@ create table if not exists public.erp_work_order_status_history (
 );
 create table if not exists public.erp_work_order_stages (
     id uuid primary key default gen_random_uuid(), work_order_id uuid not null references public.erp_work_orders(id), stage_code text not null,
-    aplicavel boolean not null default true, status text not null default 'PENDENTE' check (status in ('NÃO_APLICÁVEL','PENDENTE','LIBERADA','EM_ANDAMENTO','CONCLUÍDA','BLOQUEADA')),
+    aplicavel boolean not null default true, status text not null default 'PENDENTE' check (status in ('NÃO_APLICÁVEL','PENDENTE','LIBERADA','EM_ANDAMENTO','CONCLUÍDA')),
     ordem integer not null, semana_planejada text null, data_planejada date null, responsavel text null, localizacao text null, inicio timestamptz null, termino timestamptz null, observacoes text not null default '', bloqueio_motivo text not null default '', unique(work_order_id, stage_code)
 );
 create table if not exists public.erp_work_order_stage_events (
