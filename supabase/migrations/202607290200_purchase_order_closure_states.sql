@@ -2,8 +2,8 @@
 -- físico de recebimento. Migration aditiva e idempotente.
 
 begin;
-set local lock_timeout = '5s';
-set local statement_timeout = '60s';
+set local lock_timeout = 5000;
+set local statement_timeout = 60000;
 
 alter table if exists public.erp_purchase_orders
     add column if not exists technical_status text not null default 'ABERTA',

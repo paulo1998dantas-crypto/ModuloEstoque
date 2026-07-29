@@ -2,8 +2,8 @@
 -- Migração estritamente aditiva: não altera status, saldos ou apontamentos existentes.
 
 begin;
-set local lock_timeout = '5s';
-set local statement_timeout = '60s';
+set local lock_timeout = 5000;
+set local statement_timeout = 60000;
 
 alter table if exists public.erp_work_orders
     add column if not exists stage_configuration_status text;

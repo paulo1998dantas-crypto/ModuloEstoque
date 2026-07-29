@@ -2,8 +2,8 @@
 -- Os frontends não acessam estas tabelas diretamente; usam backends autenticados.
 -- Aditiva e idempotente. Não cria políticas permissivas para anon/authenticated.
 begin;
-set local lock_timeout = '5s';
-set local statement_timeout = '60s';
+set local lock_timeout = 5000;
+set local statement_timeout = 60000;
 
 do $$
 declare

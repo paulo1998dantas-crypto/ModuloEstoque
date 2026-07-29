@@ -3,8 +3,8 @@
 -- Migration aditiva e idempotente.
 
 begin;
-set local lock_timeout = '5s';
-set local statement_timeout = '60s';
+set local lock_timeout = 5000;
+set local statement_timeout = 60000;
 
 create table if not exists public.erp_purchase_order_financial_entries (
     id uuid primary key default gen_random_uuid(),
