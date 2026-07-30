@@ -35,6 +35,16 @@ class IdempotencyUiContractTest(unittest.TestCase):
         self.assertIn("state.receiptKeys.delete(activeId)", template)
         self.assertNotIn("idempotency_key:crypto.randomUUID()", template)
 
+    def test_commitment_form_always_receives_a_draft(self):
+        """The shared movement template reads entry_draft in both modes."""
+        source = (ROOT / "estoque_app" / "app.py").read_text(encoding="utf-8")
+        start = source.index("def saida():")
+        end = source.index('@app.route("/empenhos/importar"', start)
+        route = source[start:end]
+
+        self.assertIn("entry_draft = {}", route)
+        self.assertIn("entry_draft=entry_draft", route)
+
 
 if __name__ == "__main__":
     unittest.main()

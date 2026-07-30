@@ -1078,6 +1078,10 @@ def saida():
     database = db()
     sku = None
     sku_code = request.args.get("sku", "").strip()
+    # O template também é usado pela entrada e sempre espera um rascunho.
+    # Inicializá-lo aqui impede que a tela de empenho falhe antes de registrar
+    # qualquer movimentação e preserva os campos quando houver validação.
+    entry_draft = {}
     idempotency_key = (
         str(request.form.get("idempotency_key") or "").strip()
         or f"stock-commitment:{uuid4()}"
@@ -1108,6 +1112,12 @@ def saida():
             database.rollback()
             flash(str(exc), "danger")
             sku_code = request.form.get("sku", "")
+            entry_draft = {
+                "sku": sku_code,
+                "quantidade": request.form.get("quantidade", ""),
+                "documento": request.form.get("documento", ""),
+                "observacao": request.form.get("observacao", ""),
+            }
     if sku_code:
         sku = get_sku_by_code(database, sku_code, active_only=True)
         if not sku:
@@ -1118,6 +1128,7 @@ def saida():
         sku=sku,
         sku_code=sku_code,
         idempotency_key=idempotency_key,
+        entry_draft=entry_draft,
     )
 
 
