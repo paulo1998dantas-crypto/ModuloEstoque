@@ -10,6 +10,7 @@ from sqlalchemy import (
     String,
     Text,
     UniqueConstraint,
+    Uuid,
 )
 from sqlalchemy.orm import relationship
 
@@ -82,8 +83,8 @@ class Movement(Base):
     documento = Column(String(120), nullable=True)
     observacao = Column(Text, nullable=True)
     source_type = Column(String(40), nullable=True, index=True)
-    source_id = Column(String(36), nullable=True, index=True)
-    source_line_id = Column(String(36), nullable=True, index=True)
+    source_id = Column(Uuid(as_uuid=False), nullable=True, index=True)
+    source_line_id = Column(Uuid(as_uuid=False), nullable=True, index=True)
     idempotency_key = Column(String(160), nullable=True, unique=True, index=True)
     created_at = Column(DateTime, nullable=False, default=now_utc, index=True)
 
