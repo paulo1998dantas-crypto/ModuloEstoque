@@ -4,6 +4,10 @@
 -- receive any operational transaction.  The guard aborts instead of deleting
 -- an order that already has a receipt or financial entry.
 
+begin;
+set local lock_timeout = '5s';
+set local statement_timeout = '2min';
+
 do $$
 declare
     used_orders integer;
@@ -53,3 +57,5 @@ where line.purchase_order_id = purchase_order.id
 
 delete from public.erp_purchase_orders
 where idempotency_key like 'suprimentos-oc:%';
+
+commit;

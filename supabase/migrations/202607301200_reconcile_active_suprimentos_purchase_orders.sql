@@ -8,6 +8,10 @@
 --   * repeated execution does not duplicate orders or lines;
 --   * visible O.C. numbers are not treated as primary keys.
 
+begin;
+set local lock_timeout = '5s';
+set local statement_timeout = '2min';
+
 do $$
 declare
     invalid_documents integer;
@@ -203,3 +207,5 @@ where document.tipo = 'oc'
          and audit.entity_id = purchase_order.id
          and audit.action = 'RECONCILIADA_ORIGEM_SUPRIMENTOS'
   );
+
+commit;
