@@ -91,4 +91,7 @@ class Config:
     DEFAULT_ADMIN_PASSWORD = os.environ.get("ESTOQUE_ADMIN_PASSWORD", "admin123")
     LABEL_TEMPLATE_PATH = LABEL_TEMPLATE_PATH
     DEFAULT_PRINTER_NAME = os.environ.get("ZEBRA_PRINTER_NAME", "")
+    # The local default keeps the desktop validation flow connected.  Render
+    # overrides it with the public Suprimentos address.
+    ERP_SUPRIMENTOS_URL = os.environ.get("ERP_SUPRIMENTOS_URL", "http://127.0.0.1:5001").rstrip("/")
     MAX_CONTENT_LENGTH = 20 * 1024 * 1024

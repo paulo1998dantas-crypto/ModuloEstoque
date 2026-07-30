@@ -69,6 +69,9 @@ PERMISSION_DEFINITIONS = {
     "suprimentos.work_order.schedule": ("suprimentos", "Programar e reprogramar O.S."),
     "suprimentos.work_order.technical_close": ("suprimentos", "Concluir ou reabrir O.S."),
     "suprimentos.work_order.import": ("suprimentos", "Importar e reconciliar O.S."),
+    "suprimentos.production_order.view": ("suprimentos", "Consultar ordens de producao"),
+    "suprimentos.production_order.manage": ("suprimentos", "Criar e administrar ordens de producao"),
+    "suprimentos.production_order.execute": ("suprimentos", "Empenhar e concluir ordens de producao"),
     "suprimentos.master_data.manage": ("suprimentos", "Administrar dados mestres auxiliares"),
     "suprimentos.system.admin": ("suprimentos", "Administrar o modulo"),
     "mes.dashboard.read": ("mes", "Consultar visoes do MES"),
@@ -107,6 +110,8 @@ ROLE_PERMISSION_MAP = {
         "suprimentos.dashboard.view",
         "suprimentos.purchase.view",
         "suprimentos.work_order.view",
+        "suprimentos.production_order.view",
+        "suprimentos.production_order.execute",
     }
     | _MES_OPERATOR,
     "COMPRADOR": _STOCK_READ
@@ -118,6 +123,7 @@ ROLE_PERMISSION_MAP = {
         "suprimentos.purchase.cancel",
         "suprimentos.purchase.export",
         "suprimentos.work_order.view",
+        "suprimentos.production_order.view",
     }
     | _MES_OPERATOR,
     "FINANCEIRO": _STOCK_READ
@@ -127,6 +133,7 @@ ROLE_PERMISSION_MAP = {
         "suprimentos.purchase.financial_close",
         "suprimentos.purchase.export",
         "suprimentos.work_order.view",
+        "suprimentos.production_order.view",
     },
     "PCP": set(PERMISSION_DEFINITIONS)
     - {

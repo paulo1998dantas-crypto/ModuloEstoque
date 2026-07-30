@@ -214,6 +214,7 @@ def inject_globals():
         "erp_feature_enabled": erp_feature_enabled(),
         "movement_context_enabled": movement_context_feature_enabled(),
         "po_suggestion_enabled": po_suggestion_enabled(),
+        "production_orders_url": f"{Config.ERP_SUPRIMENTOS_URL}/erp/ordens-producao",
         "fmt_qty": decimal_to_str,
         "fmt_min": optional_decimal_to_str,
         "movement_label": movement_label,

@@ -16,9 +16,15 @@
             <a class="btn secondary" href="{{ url_for('import_bom') }}">Sincronizar B.O.M</a>
             {% endif %}
         {% else %}
+        {% if erp_feature_enabled and can('suprimentos.production_order.execute') %}
+        <a class="btn primary" href="{{ production_orders_url }}" target="_blank" rel="noopener">Ordens de Producao / Serralheria</a>
+        {% endif %}
         <a class="btn secondary" href="{{ url_for('import_commitments') }}">Importar empenhos</a>
         {% endif %}
     </div>
+    {% if not is_entry and erp_feature_enabled and can('suprimentos.production_order.execute') %}
+    <p class="muted">Para transformar um SKU em outro, abra a Ordem de Producao: ela gera o empenho vinculado e evita uma baixa manual desconectada.</p>
+    {% endif %}
 </section>
 
 <section class="scan-layout">
