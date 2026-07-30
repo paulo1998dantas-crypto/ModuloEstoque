@@ -9,8 +9,10 @@
     </div>
     <div class="actions">
         {% if is_entry %}
+        {% if erp_feature_enabled and can('estoque.inspection.receive') %}
         <a class="btn primary" href="{{ url_for('erp_receipts_screen') }}">Inspeção de Recebimento</a>
-            {% if current_user.role == 'ADM' %}
+        {% endif %}
+            {% if can('estoque.import') %}
             <a class="btn secondary" href="{{ url_for('import_bom') }}">Sincronizar B.O.M</a>
             {% endif %}
         {% else %}
@@ -29,6 +31,7 @@
 
     <form method="post" class="panel form-grid">
         {% if sku %}
+        <input type="hidden" name="idempotency_key" value="{{ idempotency_key }}">
         <div class="item-summary">
             <span>{{ sku.sku }}</span>
             <strong>{{ sku.descricao }}</strong>
@@ -36,13 +39,30 @@
         </div>
         <input type="hidden" name="sku" value="{{ sku.sku }}">
         <label>Quantidade
-            <input name="quantidade" inputmode="decimal" required autofocus>
+            <input name="quantidade" inputmode="decimal" value="{{ entry_draft.quantidade or '' }}" required autofocus>
         </label>
-        <label>{{ "Documento / nota" if is_entry else "Chassi, OS, setor ou referencia do empenho" }}
-            <input name="documento">
+        {% if not is_entry and movement_context_enabled %}
+        <fieldset class="context-fields" data-work-order-picker>
+            <legend>Destino do empenho</legend>
+            <p class="muted">Selecione uma O.S. ativa ou informe setor/referência. O vínculo por O.S. será exibido também em Suprimentos.</p>
+            <label>O.S. ou chassi ativo
+                <input type="hidden" name="work_order_id" data-work-order-id>
+                <input autocomplete="off" data-work-order-autocomplete placeholder="Digite O.S., ITEM, chassi ou cliente">
+                <div class="autocomplete-results" data-work-order-results hidden></div>
+            </label>
+            <label>Setor
+                <input name="setor" placeholder="Ex.: ESTOQUE, PRODUÇÃO, ENGENHARIA">
+            </label>
+            <label>Referência livre
+                <input name="reference_text" placeholder="Use quando não houver O.S. ou setor">
+            </label>
+        </fieldset>
+        {% endif %}
+        <label>{{ "Documento / nota" if is_entry else "Documento interno (opcional)" }}
+            <input name="documento" value="{{ entry_draft.documento or '' }}">
         </label>
         <label>Observacao
-            <textarea name="observacao" rows="3"></textarea>
+            <textarea name="observacao" rows="3">{{ entry_draft.observacao or '' }}</textarea>
         </label>
         <button class="btn primary large" type="submit">
             Confirmar {{ "entrada" if is_entry else "empenho" }}
@@ -69,10 +89,13 @@
 
         <form method="post" class="form-grid">
             <input type="hidden" name="confirm_backflush" value="1">
+            <input type="hidden" name="idempotency_key" value="{{ backflush.idempotency_key }}">
             <input type="hidden" name="sku" value="{{ sku.sku }}">
             <input type="hidden" name="quantidade" value="{{ backflush.quantidade }}">
             <input type="hidden" name="documento" value="{{ backflush.documento }}">
             <input type="hidden" name="observacao" value="{{ backflush.observacao }}">
+            <input type="hidden" name="entry_origin" value="{{ backflush.entry_origin or '' }}">
+            <input type="hidden" name="manual_reason" value="{{ backflush.manual_reason or '' }}">
 
             <div class="table-wrap">
                 <table data-bom-table>
@@ -105,6 +128,85 @@
                 <button class="btn secondary" type="button" data-add-bom-row>Adicionar componente</button>
                 <button class="btn primary large" type="submit">Confirmar entrada e backflush</button>
             </div>
+        </form>
+    </section>
+</div>
+{% endif %}
+
+{% if po_prompt %}
+<div class="modal-backdrop">
+    <section class="modal-panel">
+        <div class="panel-head">
+            <div>
+                <h2>Há pedido de compra pendente para este COD</h2>
+                <p class="muted">
+                    Confirme se a entrada de {{ entry_draft.quantidade }} de
+                    <strong>{{ sku.sku }} — {{ sku.descricao }}</strong> pertence a uma das O.C. abaixo.
+                </p>
+            </div>
+            <a class="btn secondary" href="{{ url_for('entrada', sku=sku.sku) }}">Cancelar</a>
+        </div>
+
+        <form method="post" class="form-grid">
+            <input type="hidden" name="entry_origin" value="PURCHASE_ORDER">
+            <input type="hidden" name="idempotency_key" value="{{ entry_draft.idempotency_key }}">
+            <input type="hidden" name="sku" value="{{ entry_draft.sku }}">
+            <input type="hidden" name="quantidade" value="{{ entry_draft.quantidade }}">
+            <input type="hidden" name="documento" value="{{ entry_draft.documento }}">
+            <input type="hidden" name="observacao" value="{{ entry_draft.observacao }}">
+            <div class="table-wrap">
+                <table>
+                    <thead>
+                        <tr>
+                            <th></th>
+                            <th>O.C.</th>
+                            <th>Fornecedor</th>
+                            <th>Linha</th>
+                            <th>Pendente</th>
+                            <th>Necessidade</th>
+                            <th>Destino</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for candidate in po_prompt.candidates %}
+                        <tr>
+                            <td>
+                                <input
+                                    type="radio"
+                                    name="purchase_order_line_id"
+                                    value="{{ candidate.purchase_order_line_id }}"
+                                    {% if loop.first %}checked{% endif %}
+                                    required
+                                >
+                            </td>
+                            <td><strong>{{ candidate.numero_oc }}</strong></td>
+                            <td>{{ candidate.fornecedor_nome or "—" }}</td>
+                            <td>{{ candidate.numero_linha }}</td>
+                            <td>{{ candidate.quantidade_pendente|qty }} {{ candidate.unidade or "" }}</td>
+                            <td>{{ candidate.data_necessidade or "—" }}</td>
+                            <td>{{ candidate.destino or "—" }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            <button class="btn primary large" type="submit">
+                Vincular e abrir Inspeção de Recebimento
+            </button>
+        </form>
+
+        <hr>
+        <form method="post" class="form-grid">
+            <input type="hidden" name="entry_origin" value="MANUAL">
+            <input type="hidden" name="idempotency_key" value="{{ entry_draft.idempotency_key }}">
+            <input type="hidden" name="sku" value="{{ entry_draft.sku }}">
+            <input type="hidden" name="quantidade" value="{{ entry_draft.quantidade }}">
+            <input type="hidden" name="documento" value="{{ entry_draft.documento }}">
+            <input type="hidden" name="observacao" value="{{ entry_draft.observacao }}">
+            <label>Motivo para não vincular a uma O.C.
+                <textarea name="manual_reason" rows="2" required></textarea>
+            </label>
+            <button class="btn danger" type="submit">Registrar como entrada manual</button>
         </form>
     </section>
 </div>

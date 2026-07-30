@@ -22,6 +22,7 @@
 
     <form method="post" class="panel form-grid">
         <input type="hidden" name="action" value="manual_baixa">
+        <input type="hidden" name="idempotency_key" value="{{ idempotency_key }}">
         {% if sku %}
         <div class="item-summary">
             <span>{{ sku.sku }}</span>
@@ -32,6 +33,23 @@
         <label>Quantidade para baixa
             <input name="quantidade" inputmode="decimal" required autofocus>
         </label>
+        {% if movement_context_enabled %}
+        <fieldset class="context-fields" data-work-order-picker>
+            <legend>Destino da baixa</legend>
+            <p class="muted">Selecione uma O.S. ativa ou informe setor/referência.</p>
+            <label>O.S. ou chassi ativo
+                <input type="hidden" name="work_order_id" data-work-order-id>
+                <input autocomplete="off" data-work-order-autocomplete placeholder="Digite O.S., ITEM, chassi ou cliente">
+                <div class="autocomplete-results" data-work-order-results hidden></div>
+            </label>
+            <label>Setor
+                <input name="setor" placeholder="Ex.: ESTOQUE, PRODUÇÃO, ENGENHARIA">
+            </label>
+            <label>Referência livre
+                <input name="reference_text" placeholder="Use quando não houver O.S. ou setor">
+            </label>
+        </fieldset>
+        {% endif %}
         <label>Documento / referencia
             <input name="documento">
         </label>

@@ -313,11 +313,15 @@ function initCommitmentConsumptionModal() {
             const qtyInput = modalForm.querySelector("[data-modal-commitment-qty]");
             const documentInput = modalForm.querySelector("[data-modal-commitment-consumption-document]");
             const noteInput = modalForm.querySelector("[data-modal-commitment-consumption-note]");
+            const idempotencyInput = modalForm.querySelector("[data-modal-idempotency-key]");
 
             if (typeInput) typeInput.value = form.querySelector("input[name='tipo']")?.value || "EMPENHO";
             if (qtyInput) qtyInput.value = requestedQty || "";
             if (documentInput) documentInput.value = form.dataset.commitmentDocument || "";
             if (noteInput) noteInput.value = "";
+            if (idempotencyInput) {
+                idempotencyInput.value = form.dataset.idempotencyKey || "";
+            }
 
             setText("[data-modal-commitment-id]", `#${form.dataset.commitmentId || ""}`);
             setText("[data-modal-commitment-date]", form.dataset.commitmentDate);
@@ -326,7 +330,25 @@ function initCommitmentConsumptionModal() {
             setText("[data-modal-commitment-quantity]", form.dataset.commitmentQuantity);
             setText("[data-modal-commitment-pending]", form.dataset.commitmentPending);
             setText("[data-modal-commitment-document]", form.dataset.commitmentDocument);
+            setText("[data-modal-commitment-context]", form.dataset.commitmentContext);
             setText("[data-modal-commitment-note]", form.dataset.commitmentNote);
+
+            const picker = modalForm.querySelector("[data-work-order-picker]");
+            if (picker) {
+                const selectedId = picker.querySelector("[data-work-order-id]");
+                const search = picker.querySelector("[data-work-order-autocomplete]");
+                const results = picker.querySelector("[data-work-order-results]");
+                const correction = picker.querySelector("input[name='correct_context']");
+                if (selectedId) selectedId.value = "";
+                if (search) search.value = "";
+                if (results) {
+                    results.hidden = true;
+                    results.replaceChildren();
+                }
+                if (correction) correction.checked = false;
+                picker.querySelectorAll("input[name='setor'], input[name='reference_text'], input[name='context_reason']")
+                    .forEach(input => { input.value = ""; });
+            }
 
             modal.hidden = false;
             if (qtyInput) {
@@ -344,6 +366,80 @@ function initCommitmentConsumptionModal() {
     });
     document.addEventListener("keydown", event => {
         if (event.key === "Escape" && !modal.hidden) close();
+    });
+}
+
+function initWorkOrderPickers() {
+    document.querySelectorAll("[data-work-order-picker]").forEach(picker => {
+        const search = picker.querySelector("[data-work-order-autocomplete]");
+        const selectedId = picker.querySelector("[data-work-order-id]");
+        const results = picker.querySelector("[data-work-order-results]");
+        if (!search || !selectedId || !results) return;
+
+        let timer = null;
+        let controller = null;
+        const close = () => {
+            results.hidden = true;
+        };
+        const render = workOrders => {
+            results.replaceChildren();
+            if (!workOrders.length) {
+                const empty = document.createElement("div");
+                empty.className = "autocomplete-empty";
+                empty.textContent = "Nenhuma O.S. ativa encontrada.";
+                results.append(empty);
+            } else {
+                workOrders.forEach(workOrder => {
+                    const button = document.createElement("button");
+                    button.type = "button";
+                    button.className = "autocomplete-option";
+                    button.textContent = workOrder.label;
+                    button.addEventListener("click", () => {
+                        selectedId.value = workOrder.work_order_id;
+                        search.value = workOrder.label;
+                        picker.querySelector("input[name='correct_context']")?.setAttribute("data-selected", "1");
+                        close();
+                    });
+                    results.append(button);
+                });
+            }
+            results.hidden = false;
+        };
+        const load = async () => {
+            const query = search.value.trim();
+            selectedId.value = "";
+            if (!query) {
+                close();
+                return;
+            }
+            if (controller) controller.abort();
+            controller = new AbortController();
+            try {
+                const response = await fetch(
+                    `/api/erp/work-orders/active?q=${encodeURIComponent(query)}&limit=20`,
+                    {signal: controller.signal}
+                );
+                const payload = await response.json();
+                if (!response.ok || payload.ok === false) {
+                    throw new Error(payload.error || "Falha ao consultar O.S. ativas.");
+                }
+                render(payload.work_orders || []);
+            } catch (error) {
+                if (error.name !== "AbortError") {
+                    render([]);
+                }
+            }
+        };
+        search.addEventListener("input", () => {
+            clearTimeout(timer);
+            timer = setTimeout(load, 180);
+        });
+        search.addEventListener("focus", () => {
+            if (search.value.trim() && !selectedId.value) load();
+        });
+        document.addEventListener("click", event => {
+            if (!picker.contains(event.target)) close();
+        });
     });
 }
 
@@ -367,5 +463,6 @@ document.addEventListener("DOMContentLoaded", () => {
     initSingleLocalPrint();
     initInventoryDiff();
     initBackflushBom();
+    initWorkOrderPickers();
     initCommitmentConsumptionModal();
 });

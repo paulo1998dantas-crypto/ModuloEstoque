@@ -3,7 +3,7 @@ from datetime import datetime
 from decimal import Decimal
 from uuid import uuid4
 
-from sqlalchemy import text
+from sqlalchemy import Uuid, bindparam, text
 
 from models import Movement, SKU
 from services.estoque_service import get_sku_by_code, register_movement, to_decimal
@@ -127,6 +127,157 @@ def pending_purchase_orders(db):
         where o.status in ('EMITIDA','PARCIALMENTE_RECEBIDA')
           and l.quantidade_pedida > l.quantidade_recebida
         order by o.data_necessidade nulls last,o.numero_oc,l.numero_linha"""))]
+
+
+def pending_purchase_order_lines_by_sku(db, sku_id=None, sku_code=""):
+    normalized_code = str(sku_code or "").strip().upper()
+    if not sku_id and not normalized_code:
+        return []
+    rows = db.execute(
+        text(
+            """
+            select o.id as purchase_order_id,o.numero_oc,o.fornecedor_nome,
+                   o.data_emissao,o.data_necessidade,o.destino,o.status,
+                   l.id as purchase_order_line_id,l.numero_linha,l.sku_id,
+                   l.sku_codigo,l.descricao_original,l.unidade,
+                   l.quantidade_pedida,l.quantidade_recebida,
+                   (l.quantidade_pedida-l.quantidade_recebida)
+                       as quantidade_pendente,
+                   l.valor_unitario_pedido
+              from erp_purchase_orders o
+              join erp_purchase_order_lines l on l.purchase_order_id=o.id
+             where o.status in ('EMITIDA','PARCIALMENTE_RECEBIDA')
+               and l.quantidade_pedida > l.quantidade_recebida
+               and (
+                    (:sku_id is not null and l.sku_id=:sku_id)
+                    or (
+                        l.sku_id is null
+                        and :sku_code <> ''
+                        and upper(trim(coalesce(l.sku_codigo,'')))=:sku_code
+                    )
+               )
+             order by o.data_necessidade nulls last,o.numero_oc,l.numero_linha
+            """
+        ),
+        {"sku_id": sku_id, "sku_code": normalized_code},
+    ).mappings()
+    return [dict(row) for row in rows]
+
+
+def active_work_orders(db, query="", limit=20):
+    query = str(query or "").strip()
+    safe_limit = max(1, min(int(limit or 20), 50))
+    pattern = f"%{query}%"
+    rows = db.execute(
+        text(
+            """
+            select w.id as work_order_id,w.numero_os,w.status,w.cliente_nome,
+                   e.item_number,v.chassi,v.marca,v.modelo,v.versao
+              from erp_work_orders w
+              join erp_vehicle_entries e on e.id=w.vehicle_entry_id
+              join erp_vehicles v on v.id=e.vehicle_id
+             where w.status in ('ATIVA','EM_PRODUÇÃO','EM_PRODUCAO')
+               and coalesce(w.technical_status,'ABERTA')='ABERTA'
+               and (
+                    :query=''
+                    or upper(coalesce(w.numero_os,'')) like upper(:pattern)
+                    or cast(e.item_number as text) like :pattern
+                    or upper(coalesce(v.chassi,'')) like upper(:pattern)
+                    or upper(substr(coalesce(v.chassi,''),-8)) like upper(:pattern)
+                    or upper(coalesce(w.cliente_nome,'')) like upper(:pattern)
+               )
+             order by e.item_number desc
+             limit :limit
+            """
+        ),
+        {"query": query, "pattern": pattern, "limit": safe_limit},
+    ).mappings()
+    options = []
+    for raw in rows:
+        row = dict(raw)
+        vehicle = " ".join(
+            str(row.get(field) or "").strip()
+            for field in ("marca", "modelo", "versao")
+            if str(row.get(field) or "").strip()
+        )
+        chassis = str(row.get("chassi") or "")
+        row["chassi_exibicao"] = chassis[-8:] if chassis else ""
+        row["veiculo"] = vehicle
+        row["label"] = (
+            f"O.S. {row.get('numero_os') or row.get('item_number')} · "
+            f"{row['chassi_exibicao'] or 'sem chassi'} · "
+            f"{row.get('cliente_nome') or vehicle or 'sem cliente'}"
+        )
+        options.append(row)
+    return options
+
+
+def work_order_materials(db, work_order_id):
+    work_order = _row(
+        db.execute(
+            text(
+                """
+                select w.id,w.numero_os,e.item_number,v.chassi
+                  from erp_work_orders w
+                  join erp_vehicle_entries e on e.id=w.vehicle_entry_id
+                  join erp_vehicles v on v.id=e.vehicle_id
+                 where w.id=:id
+                """
+            ).bindparams(bindparam("id", type_=Uuid(as_uuid=False))),
+            {"id": work_order_id},
+        ).first()
+    )
+    if not work_order:
+        raise ValueError("O.S. nao encontrada.")
+    rows = [
+        _row(row)
+        for row in db.execute(
+            text(
+                """
+                select m.sku_id,s.sku as sku_codigo,s.descricao,s.unidade,
+                       coalesce(sum(case when m.tipo in ('EMPENHO','SAIDA')
+                                         then m.quantidade else 0 end),0)
+                           as quantidade_empenhada,
+                       coalesce(sum(case when m.tipo='BAIXA'
+                                         then m.quantidade else 0 end),0)
+                           as quantidade_baixada,
+                       coalesce(sum(case when m.tipo in ('EMPENHO','SAIDA')
+                                         then m.quantidade else 0 end),0)
+                       - coalesce(sum(case when m.tipo='BAIXA'
+                                           then m.quantidade else 0 end),0)
+                           as saldo_empenhado_bruto
+                  from movements m
+                  join skus s on s.id=m.sku_id
+                 where m.work_order_id=:id
+                    and coalesce(m.movement_status,'ATIVA')='ATIVA'
+                    and m.tipo in ('EMPENHO','SAIDA','BAIXA')
+                  group by m.sku_id,s.sku,s.descricao,s.unidade
+                 order by s.sku
+                """
+            ).bindparams(bindparam("id", type_=Uuid(as_uuid=False))),
+            {"id": work_order_id},
+        ).all()
+    ]
+    for row in rows:
+        row["saldo_empenhado"] = max(
+            Decimal(str(row.pop("saldo_empenhado_bruto"))),
+            Decimal("0"),
+        )
+    totals = {
+        "quantidade_empenhada": sum(
+            (Decimal(str(row["quantidade_empenhada"])) for row in rows),
+            Decimal("0"),
+        ),
+        "quantidade_baixada": sum(
+            (Decimal(str(row["quantidade_baixada"])) for row in rows),
+            Decimal("0"),
+        ),
+        "saldo_empenhado": sum(
+            (Decimal(str(row["saldo_empenhado"])) for row in rows),
+            Decimal("0"),
+        ),
+    }
+    return {"work_order": work_order, "totals": totals, "lines": rows}
 
 
 def purchase_orders_dashboard(db, limit=1000):
@@ -456,18 +607,56 @@ def register_purchase_order_financial_entry(db, order_id, actor, data):
 def confirm_receipt(db, data, actor, user_id):
     key=str(data.get("idempotency_key") or "").strip()
     if not key: raise ValueError("idempotency_key e obrigatoria.")
-    existing=_row(db.execute(text("select id from erp_goods_receipts where idempotency_key=:key"),{"key":key}).first())
-    if existing: return {"id":str(existing['id']),"replayed":True}
+    po_id=data.get("purchase_order_id")
+    existing=_row(db.execute(text("select id,purchase_order_id from erp_goods_receipts where idempotency_key=:key"),{"key":key}).first())
+    if existing:
+        if str(existing.get("purchase_order_id") or "") != str(po_id or ""):
+            raise ValueError(
+                "Chave de idempotencia ja utilizada por outro recebimento."
+            )
+        return {"id":str(existing['id']),"replayed":True}
     lines=data.get("lines") or []
     if not lines: raise ValueError("Informe ao menos uma linha de recebimento.")
-    receipt_id=_id(); po_id=data.get("purchase_order_id")
+    receipt_id=_id()
+    if po_id:
+        order = _row(db.execute(text("""
+            select id,status from erp_purchase_orders where id=:id for update
+        """), {"id": po_id}).first())
+        if not order:
+            raise ValueError("O.C. nao encontrada.")
+        # Recheck after locking the order: two retries with the same command
+        # key may both pass the optimistic lookup above, but only one can hold
+        # this row lock at a time.
+        existing = _row(
+            db.execute(
+                text(
+                    "select id,purchase_order_id from erp_goods_receipts "
+                    "where idempotency_key=:key"
+                ),
+                {"key": key},
+            ).first()
+        )
+        if existing:
+            if str(existing.get("purchase_order_id") or "") != str(po_id or ""):
+                raise ValueError(
+                    "Chave de idempotencia ja utilizada por outro recebimento."
+                )
+            return {"id": str(existing["id"]), "replayed": True}
+        if order["status"] not in {"EMITIDA", "PARCIALMENTE_RECEBIDA"}:
+            raise ValueError("O.C. nao esta ativa para recebimento.")
     db.execute(text("""insert into erp_goods_receipts(id,purchase_order_id,origem,data_recebimento,fornecedor_nome,numero_nf,operador,observacoes,motivo_excecao,idempotency_key) values(:id,:po,:origem,:date,:supplier,:nf,:actor,:obs,:reason,:key)"""),{"id":receipt_id,"po":po_id,"origem":"PURCHASE_ORDER" if po_id else "MANUAL","date":data.get("data_recebimento") or datetime.utcnow(),"supplier":str(data.get("fornecedor_nome") or ""),"nf":str(data.get("numero_nf") or ""),"actor":actor,"obs":str(data.get("observacoes") or ""),"reason":str(data.get("motivo_excecao") or ""),"key":key})
-    for input_line in lines:
+    for line_index, input_line in enumerate(lines, start=1):
         po_line_id=input_line.get("purchase_order_line_id")
         po_line=None
         if po_line_id:
             po_line=_row(db.execute(text("select * from erp_purchase_order_lines where id=:id for update"),{"id":po_line_id}).first())
             if not po_line: raise ValueError("Linha da O.C. nao encontrada.")
+            if not po_id or str(po_line["purchase_order_id"]) != str(po_id):
+                raise ValueError("Linha informada nao pertence a O.C. selecionada.")
+            if Decimal(str(po_line["quantidade_pedida"])) <= Decimal(
+                str(po_line["quantidade_recebida"])
+            ):
+                raise ValueError("Linha da O.C. nao possui saldo pendente.")
         physical=to_decimal(input_line.get("quantidade_fisica")); approved=to_decimal(input_line.get("quantidade_aprovada")); conditional=to_decimal(input_line.get("quantidade_condicional")); rejected=to_decimal(input_line.get("quantidade_rejeitada"))
         result=str(input_line.get("resultado_inspecao") or "A").upper()
         if result not in {'A','AC','D'} or min(physical,approved,conditional,rejected)<0 or approved+conditional+rejected>physical: raise ValueError("Quantidades ou resultado de inspecao invalidos.")
@@ -477,15 +666,29 @@ def confirm_receipt(db, data, actor, user_id):
             input_line.get('sku_id') or (po_line and po_line['sku_id']),
             input_line.get('sku_codigo') or (po_line and po_line['sku_codigo']),
         )
+        if po_line and po_line.get("sku_id") and sku_id:
+            if int(po_line["sku_id"]) != int(sku_id):
+                raise ValueError("SKU recebido nao corresponde a linha da O.C.")
+        if (
+            po_line
+            and not po_line.get("sku_id")
+            and po_line.get("sku_codigo")
+            and sku_code
+            and str(po_line["sku_codigo"]).strip().upper()
+            != str(sku_code).strip().upper()
+        ):
+            raise ValueError("SKU recebido nao corresponde ao codigo da linha da O.C.")
         if approved and not sku_id: raise ValueError("SKU e obrigatorio para quantidade aprovada em estoque.")
         line_id=_id(); pending=(Decimal(str(po_line['quantidade_pedida']))-Decimal(str(po_line['quantidade_recebida']))) if po_line else Decimal('0')
         db.execute(text("""insert into erp_goods_receipt_lines(id,goods_receipt_id,purchase_order_line_id,sku_id,sku_codigo,quantidade_esperada,quantidade_recebida_anterior,saldo_pendente,quantidade_fisica,quantidade_aprovada,quantidade_condicional,quantidade_rejeitada,valor_unitario_pedido,valor_unitario_real,certificado_exigido,certificado_apresentado,validade_certificado,resultado_inspecao,justificativa_divergencia) values(:id,:receipt,:po_line,:sku_id,:sku_code,:expected,:previous,:pending,:physical,:approved,:conditional,:rejected,:ordered_value,:actual_value,:cert_required,:cert_presented,:cert_expiry,:result,:reason)"""),{"id":line_id,"receipt":receipt_id,"po_line":po_line_id,"sku_id":sku_id,"sku_code":sku_code,"expected":po_line['quantidade_pedida'] if po_line else 0,"previous":po_line['quantidade_recebida'] if po_line else 0,"pending":pending,"physical":physical,"approved":approved,"conditional":conditional,"rejected":rejected,"ordered_value":po_line['valor_unitario_pedido'] if po_line else 0,"actual_value":to_decimal(input_line.get('valor_unitario_real')),"cert_required":bool(input_line.get('certificado_exigido')),"cert_presented":bool(input_line.get('certificado_apresentado')),"cert_expiry":input_line.get('validade_certificado') or None,"result":result,"reason":str(input_line.get('justificativa_divergencia') or '')})
         movement=None
         if approved:
             sku=db.get(SKU,int(sku_id))
-            movement=register_movement(db,sku,'ENTRADA',approved,user_id,documento=str(data.get('numero_nf') or ''),observacao=f'Recebimento ERP {receipt_id}',commit=False)
-            movement.source_type='GOODS_RECEIPT'; movement.source_id=receipt_id; movement.source_line_id=line_id; movement.idempotency_key=f'{key}:{line_id}'
-        db.execute(text("insert into erp_stock_receipt_links(goods_receipt_line_id,movement_id,quantidade_disponivel,quantidade_quarentena,idempotency_key) values(:line,:movement,:available,:quarantine,:key)"),{"line":line_id,"movement":movement.id if movement else None,"available":approved,"quarantine":conditional,"key":f'{key}:{line_id}'})
+            movement_key = f"{key}:line:{po_line_id or sku_id}:{line_index}"
+            movement=register_movement(db,sku,'ENTRADA',approved,user_id,documento=str(data.get('numero_nf') or ''),observacao=f'Recebimento ERP {receipt_id}',commit=False,source_type='GOODS_RECEIPT',idempotency_key=movement_key)
+            movement.source_id=receipt_id; movement.source_line_id=line_id
+        link_key = f"{key}:line:{po_line_id or sku_id or line_index}:{line_index}"
+        db.execute(text("insert into erp_stock_receipt_links(goods_receipt_line_id,movement_id,quantidade_disponivel,quantidade_quarentena,idempotency_key) values(:line,:movement,:available,:quarantine,:key)"),{"line":line_id,"movement":movement.id if movement else None,"available":approved,"quarantine":conditional,"key":link_key})
         if po_line:
             # Rejeitado/devolvido foi inspecionado fisicamente, mas não atende
             # a quantidade do pedido. AC atende o pedido e permanece bloqueado

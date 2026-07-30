@@ -108,7 +108,7 @@
 </template>
 
 <script>
-  const state={orders:[],filtered:[],active:null};
+  const state={orders:[],filtered:[],active:null,deepLinkHandled:false,receiptKeys:new Map()};
   const number=v=>Number(v||0);
   const qty=v=>new Intl.NumberFormat('pt-BR',{maximumFractionDigits:3}).format(number(v));
   const date=v=>{
@@ -162,23 +162,36 @@
       if(!response.ok) throw new Error(body.error||'Falha ao carregar pendências.');
       state.orders=groupOrders(body.orders||[]);state.orders.sort((a,b)=>String(a.data_necessidade||'9999').localeCompare(String(b.data_necessidade||'9999'))||String(a.numero_oc).localeCompare(String(b.numero_oc),'pt-BR',{numeric:true}));
       renderOrders();hideMessage();
+      if(!state.deepLinkHandled){
+        state.deepLinkHandled=true;
+        const params=new URLSearchParams(window.location.search),orderId=params.get('order_id');
+        if(orderId){
+          openReceipt(orderId,params.get('line_id'),params.get('quantity'),params.get('document'));
+        }
+      }
     }catch(error){showMessage(error.message,true);}
   }
   function clearFilters(){document.getElementById('receipt-search').value='';document.getElementById('receipt-category').value='';document.getElementById('receipt-link').value='';renderOrders();}
-  function openReceipt(id){
+  function openReceipt(id,preferredLineId=null,preferredQuantity=null,preferredDocument=''){
     state.active=state.orders.find(order=>order.id===id);if(!state.active)return;
+    if(!state.receiptKeys.has(id))state.receiptKeys.set(id,crypto.randomUUID());
+    const visibleLines=preferredLineId
+      ?state.active.lines.filter(line=>String(line.line_id)===String(preferredLineId))
+      :state.active.lines;
+    if(!visibleLines.length){showMessage('A linha sugerida não está mais pendente nesta O.C.',true);return;}
     document.getElementById('receipt-title').textContent=`Receber O.C. ${state.active.numero_oc}`;
-    document.getElementById('receipt-subtitle').textContent=`${state.active.fornecedor_nome||'Fornecedor não informado'} · ${state.active.lines.length} linha(s) pendente(s)`;
-    document.getElementById('receipt-nf').value='';document.getElementById('receipt-note').value='';document.getElementById('receipt-date').value=new Date().toISOString().slice(0,10);
+    document.getElementById('receipt-subtitle').textContent=`${state.active.fornecedor_nome||'Fornecedor não informado'} · ${visibleLines.length} linha(s) selecionada(s)`;
+    document.getElementById('receipt-nf').value=preferredDocument||'';document.getElementById('receipt-note').value='';document.getElementById('receipt-date').value=new Date().toISOString().slice(0,10);
     const holder=document.getElementById('receipt-lines');holder.innerHTML='';
-    for(const line of state.active.lines){
+    for(const line of visibleLines){
       const node=document.getElementById('receipt-line-template').content.cloneNode(true),card=node.querySelector('.receipt-line'),pending=number(line.quantidade_pendente);
+      const suggested=preferredLineId&&preferredQuantity!==null&&preferredQuantity!==''?number(preferredQuantity):pending;
       card.dataset.lineId=line.line_id;card.dataset.skuId=line.sku_id||'';card.dataset.pending=String(pending);
       card.querySelector('.receipt-line-title').textContent=`Linha ${line.numero_linha}`;
       card.querySelector('.receipt-sku').innerHTML=line.sku_id?`<span class="erp-badge good">${escapeHtml(line.sku_codigo||`SKU ${line.sku_id}`)}</span>`:'<span class="erp-badge warn">Sem SKU</span>';
       card.querySelector('.receipt-line-description').textContent=line.descricao_original||'Item sem descrição';
       card.querySelector('.receipt-pending').innerHTML=`Pendente: <strong>${qty(pending)} ${escapeHtml(line.unidade||'')}</strong>`;
-      card.querySelector('.physical').value=pending;card.querySelector('.approved').value=line.sku_id?pending:0;card.querySelector('.value').value=number(line.valor_unitario_pedido);
+      card.querySelector('.physical').value=suggested;card.querySelector('.approved').value=line.sku_id?suggested:0;card.querySelector('.value').value=number(line.valor_unitario_pedido);
       for(const input of card.querySelectorAll('input,select')) input.addEventListener('input',updateReceiptSummary);
       holder.append(node);
     }
@@ -207,10 +220,11 @@
   }
   async function receive(cards){
     const button=document.getElementById('confirm-receipt');button.disabled=true;button.textContent='Confirmando...';
-    const activeNumber=state.active.numero_oc,payload={purchase_order_id:state.active.id,fornecedor_nome:state.active.fornecedor_nome,numero_nf:document.getElementById('receipt-nf').value.trim(),data_recebimento:document.getElementById('receipt-date').value||null,observacoes:document.getElementById('receipt-note').value.trim(),idempotency_key:crypto.randomUUID(),lines:cards.map(linePayload)};
+    const activeId=state.active.id,activeNumber=state.active.numero_oc,payload={purchase_order_id:activeId,fornecedor_nome:state.active.fornecedor_nome,numero_nf:document.getElementById('receipt-nf').value.trim(),data_recebimento:document.getElementById('receipt-date').value||null,observacoes:document.getElementById('receipt-note').value.trim(),idempotency_key:state.receiptKeys.get(activeId),lines:cards.map(linePayload)};
     try{
       const response=await fetch('/api/erp/receipts/confirm',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)}),body=await response.json();
       if(!response.ok)throw new Error(body.error||'Não foi possível confirmar o recebimento.');
+      state.receiptKeys.delete(activeId);
       closeReceipt();await loadOrders();showMessage(`Recebimento da O.C. ${activeNumber} confirmado com sucesso.`);
     }catch(error){showMessage(error.message,true);}finally{button.disabled=false;button.textContent='Confirmar recebimento';}
   }

@@ -364,6 +364,54 @@ class ErpSkuResolutionTest(unittest.TestCase):
         self.assertEqual(0, receipt_count)
         self.assertEqual(0, self.db.query(Movement).count())
 
+    def test_confirm_receipt_rejects_line_from_another_purchase_order(self):
+        first = create_purchase_order(
+            self.db,
+            self._payload(str(uuid4()), "MAT-001"),
+            "comprador-teste",
+        )
+        second = create_purchase_order(
+            self.db,
+            self._payload(str(uuid4()), "MAT-001"),
+            "comprador-teste",
+        )
+        second_line = self._line(second["id"])
+        receipt_key = str(uuid4())
+
+        with self.assertRaisesRegex(ValueError, "nao pertence a O.C."):
+            confirm_receipt(
+                self.db,
+                {
+                    "idempotency_key": receipt_key,
+                    "purchase_order_id": first["id"],
+                    "lines": [
+                        {
+                            "purchase_order_line_id": second_line["id"],
+                            "quantidade_fisica": 1,
+                            "quantidade_aprovada": 1,
+                            "quantidade_condicional": 0,
+                            "quantidade_rejeitada": 0,
+                            "resultado_inspecao": "A",
+                        }
+                    ],
+                },
+                "almoxarife-teste",
+                self.user_id,
+            )
+        self.db.rollback()
+
+        self.assertEqual(
+            0,
+            self.db.execute(
+                text(
+                    "select count(*) from erp_goods_receipts "
+                    "where idempotency_key=:key"
+                ),
+                {"key": receipt_key},
+            ).scalar_one(),
+        )
+        self.assertEqual(0, self.db.query(Movement).count())
+
 
 if __name__ == "__main__":
     unittest.main()

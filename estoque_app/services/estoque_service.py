@@ -1,12 +1,15 @@
+import os
 from decimal import Decimal, InvalidOperation
+from uuid import uuid4
 
-from sqlalchemy import func
+from sqlalchemy import Uuid, bindparam, func, text
 from sqlalchemy.orm import aliased
 
 from models import (
     AppSetting,
     BomComponent,
     DashboardMovementCache,
+    ErpMovementReferenceHistory,
     InventoryCount,
     InventorySession,
     LabelPrintJob,
@@ -19,6 +22,18 @@ from models import (
 
 QTY_SCALE = Decimal("0.001")
 COMMITMENT_TYPES = ("EMPENHO", "SAIDA")
+ACTIVE_MOVEMENT_STATUS = "ATIVA"
+VALID_CONTEXT_KINDS = {"WORK_ORDER", "SETOR", "REFERENCIA", "LEGACY"}
+
+
+def movement_context_enabled():
+    return os.environ.get("ERP_MOVEMENT_CONTEXT_ENABLED", "false").strip().lower() in {
+        "1",
+        "true",
+        "yes",
+        "sim",
+        "on",
+    }
 
 
 def to_decimal(value, default="0"):
@@ -46,6 +61,15 @@ def decimal_to_str(value):
 
 def optional_decimal_to_str(value):
     return "" if value is None else decimal_to_str(value)
+
+
+def append_manual_entry_exception(observation, reason):
+    observation = str(observation or "").strip()
+    reason = str(reason or "").strip()
+    note = f"Excecao de entrada manual: {reason}"
+    if not reason or note in observation:
+        return observation
+    return " | ".join(value for value in (observation, note) if value)
 
 
 def get_setting(db, key, default=""):
@@ -90,6 +114,169 @@ def ensure_balance(db, sku):
     db.add(balance)
     db.flush()
     return balance
+
+
+def resolve_movement_context(
+    db,
+    work_order_id=None,
+    setor="",
+    reference_text="",
+    require_context=False,
+    active_work_order_only=True,
+):
+    work_order_id = str(work_order_id or "").strip() or None
+    setor = str(setor or "").strip()
+    reference_text = str(reference_text or "").strip()
+    work_order = None
+    if work_order_id:
+        status_filter = (
+            """
+            and w.status in ('ATIVA','EM_PRODUÇÃO','EM_PRODUCAO')
+            and coalesce(w.technical_status,'ABERTA')='ABERTA'
+            """
+            if active_work_order_only
+            else ""
+        )
+        work_order = db.execute(
+            text(
+                f"""
+                select w.id,w.numero_os,w.status,e.item_number,v.chassi
+                  from erp_work_orders w
+                  join erp_vehicle_entries e on e.id=w.vehicle_entry_id
+                  join erp_vehicles v on v.id=e.vehicle_id
+                 where w.id=:id
+                   {status_filter}
+                 limit 1
+                """
+            ).bindparams(bindparam("id", type_=Uuid(as_uuid=False))),
+            {"id": work_order_id},
+        ).mappings().first()
+        if not work_order:
+            raise ValueError("O.S. nao encontrada ou nao esta ativa.")
+        context_kind = "WORK_ORDER"
+    elif setor:
+        context_kind = "SETOR"
+    elif reference_text:
+        context_kind = "REFERENCIA"
+    else:
+        context_kind = "LEGACY"
+        if require_context:
+            raise ValueError("Informe uma O.S. ativa, setor ou referencia.")
+    return {
+        "work_order_id": work_order_id,
+        "context_kind": context_kind,
+        "setor": setor or None,
+        "reference_text": reference_text or None,
+        "work_order": dict(work_order) if work_order else None,
+    }
+
+
+def resolve_active_work_order_reference(db, reference):
+    reference = str(reference or "").strip()
+    if not reference:
+        return None
+    rows = (
+        db.execute(
+            text(
+                """
+                select w.id,w.numero_os,w.status,e.item_number,v.chassi
+                  from erp_work_orders w
+                  join erp_vehicle_entries e on e.id=w.vehicle_entry_id
+                  join erp_vehicles v on v.id=e.vehicle_id
+                 where w.status in ('ATIVA','EM_PRODUÇÃO','EM_PRODUCAO')
+                   and coalesce(w.technical_status,'ABERTA')='ABERTA'
+                   and (
+                        upper(trim(coalesce(w.numero_os,'')))=upper(:reference)
+                        or cast(e.item_number as text)=:reference
+                        or upper(trim(coalesce(v.chassi,'')))=upper(:reference)
+                        or upper(substr(trim(coalesce(v.chassi,'')),-8))=upper(:reference)
+                   )
+                 order by e.item_number desc
+                 limit 2
+                """
+            ),
+            {"reference": reference},
+        )
+        .mappings()
+        .all()
+    )
+    if not rows:
+        raise ValueError(f"O.S. ativa nao encontrada para a referencia {reference}.")
+    if len(rows) > 1:
+        raise ValueError(
+            f"Referencia {reference} corresponde a mais de uma O.S. ativa; "
+            "selecione a O.S. explicitamente."
+        )
+    return dict(rows[0])
+
+
+def movement_context_from_movement(movement):
+    return {
+        "work_order_id": movement.work_order_id,
+        "context_kind": movement.context_kind or "LEGACY",
+        "setor": movement.setor,
+        "reference_text": movement.reference_text,
+    }
+
+
+def update_movement_context(
+    db,
+    movement,
+    context,
+    actor_user_id,
+    reason="",
+    propagate_related=False,
+):
+    before = movement_context_from_movement(movement)
+    after = {
+        "work_order_id": context.get("work_order_id"),
+        "context_kind": context.get("context_kind") or "LEGACY",
+        "setor": context.get("setor"),
+        "reference_text": context.get("reference_text"),
+    }
+    if before == after:
+        return False
+    history = ErpMovementReferenceHistory(
+        id=str(uuid4()),
+        movement_id=movement.id,
+        previous_work_order_id=before["work_order_id"],
+        new_work_order_id=after["work_order_id"],
+        previous_context_kind=before["context_kind"],
+        new_context_kind=after["context_kind"],
+        previous_setor=before["setor"],
+        new_setor=after["setor"],
+        previous_reference_text=before["reference_text"],
+        new_reference_text=after["reference_text"],
+        changed_by=actor_user_id,
+        reason=str(reason or "").strip(),
+    )
+    db.add(history)
+    movement.work_order_id = after["work_order_id"]
+    movement.context_kind = after["context_kind"]
+    movement.setor = after["setor"]
+    movement.reference_text = after["reference_text"]
+    movement.link_updated_at = now_utc()
+    movement.link_updated_by = actor_user_id
+    if propagate_related:
+        children = (
+            db.query(Movement)
+            .filter(
+                Movement.related_movement_id == movement.id,
+                Movement.movement_status == ACTIVE_MOVEMENT_STATUS,
+            )
+            .all()
+        )
+        for child in children:
+            update_movement_context(
+                db,
+                child,
+                context,
+                actor_user_id,
+                reason=reason,
+                propagate_related=False,
+            )
+    db.flush()
+    return True
 
 
 def create_or_update_sku(db, data, user=None, commit=True):
@@ -194,6 +381,16 @@ def register_movement(
     allow_negative=False,
     commit=True,
     related_movement_id=None,
+    work_order_id=None,
+    context_kind=None,
+    setor="",
+    reference_text="",
+    link_updated_by=None,
+    require_context=False,
+    source_type=None,
+    idempotency_key=None,
+    operation_id=None,
+    parent_movement_id=None,
 ):
     if sku is None:
         raise ValueError("COD nao encontrado.")
@@ -206,7 +403,63 @@ def register_movement(
     if quantidade <= 0 and tipo in {"ENTRADA", "EMPENHO", "BAIXA"}:
         raise ValueError("Quantidade deve ser maior que zero.")
 
+    idempotency_key = str(idempotency_key or "").strip() or None
+
+    def replay_if_present():
+        if not idempotency_key:
+            return None
+        existing = (
+            db.query(Movement)
+            .filter(Movement.idempotency_key == idempotency_key)
+            .one_or_none()
+        )
+        if existing is None:
+            return None
+        same_command = (
+            existing.sku_id == sku.id
+            and existing.tipo == tipo
+            and to_decimal(existing.quantidade) == quantidade
+            and existing.related_movement_id == related_movement_id
+        )
+        if not same_command:
+            raise ValueError(
+                "Chave de idempotencia ja utilizada por outra movimentacao."
+            )
+        return existing
+
+    replayed = replay_if_present()
+    if replayed is not None:
+        return replayed
+
+    context = resolve_movement_context(
+        db,
+        work_order_id=work_order_id,
+        setor=setor,
+        reference_text=reference_text,
+        require_context=(
+            require_context
+            and tipo in {"EMPENHO", "BAIXA"}
+            and movement_context_enabled()
+        ),
+    )
+    if context_kind in VALID_CONTEXT_KINDS and not any(
+        (work_order_id, setor, reference_text)
+    ):
+        context["context_kind"] = context_kind
+
     balance = ensure_balance(db, sku)
+    db.flush()
+    balance = (
+        db.query(StockBalance)
+        .filter(StockBalance.sku_id == sku.id)
+        .with_for_update()
+        .one()
+    )
+    # The balance row serializes commands for the same SKU. Recheck after the
+    # lock so two retries racing with the same key cannot both insert.
+    replayed = replay_if_present()
+    if replayed is not None:
+        return replayed
     saldo_anterior = to_decimal(balance.saldo_atual)
 
     if tipo == "ENTRADA":
@@ -235,6 +488,17 @@ def register_movement(
         related_movement_id=related_movement_id,
         documento=documento or None,
         observacao=observacao or None,
+        work_order_id=context["work_order_id"],
+        context_kind=context["context_kind"],
+        setor=context["setor"],
+        reference_text=context["reference_text"],
+        source_type=str(source_type or "").strip() or None,
+        idempotency_key=idempotency_key,
+        operation_id=str(operation_id or "").strip() or None,
+        parent_movement_id=parent_movement_id,
+        link_updated_at=now_utc() if context["context_kind"] != "LEGACY" else None,
+        link_updated_by=link_updated_by,
+        movement_status=ACTIVE_MOVEMENT_STATUS,
     )
     db.add(movement)
     db.flush()
@@ -246,7 +510,8 @@ def register_movement(
 
 def pending_commitments_by_sku(db, sku_ids=None):
     commitment_query = db.query(Movement.sku_id, func.coalesce(func.sum(Movement.quantidade), 0)).filter(
-        Movement.tipo.in_(COMMITMENT_TYPES)
+        Movement.tipo.in_(COMMITMENT_TYPES),
+        Movement.movement_status == ACTIVE_MOVEMENT_STATUS,
     )
     if sku_ids is not None:
         commitment_query = commitment_query.filter(Movement.sku_id.in_(sku_ids))
@@ -261,7 +526,12 @@ def pending_commitments_by_sku(db, sku_ids=None):
     baixas_query = (
         db.query(parent.sku_id, func.coalesce(func.sum(Movement.quantidade), 0))
         .join(parent, Movement.related_movement_id == parent.id)
-        .filter(Movement.tipo == "BAIXA", parent.tipo.in_(COMMITMENT_TYPES))
+        .filter(
+            Movement.tipo == "BAIXA",
+            Movement.movement_status == ACTIVE_MOVEMENT_STATUS,
+            parent.tipo.in_(COMMITMENT_TYPES),
+            parent.movement_status == ACTIVE_MOVEMENT_STATUS,
+        )
     )
     if sku_ids is not None:
         baixas_query = baixas_query.filter(parent.sku_id.in_(sku_ids))
@@ -276,11 +546,19 @@ def pending_commitments_by_sku(db, sku_ids=None):
 
 
 def pending_commitment_for_movement(db, movement):
-    if movement is None or movement.tipo not in COMMITMENT_TYPES:
+    if (
+        movement is None
+        or movement.tipo not in COMMITMENT_TYPES
+        or movement.movement_status != ACTIVE_MOVEMENT_STATUS
+    ):
         return Decimal("0.000")
     baixado = (
         db.query(func.coalesce(func.sum(Movement.quantidade), 0))
-        .filter(Movement.tipo == "BAIXA", Movement.related_movement_id == movement.id)
+        .filter(
+            Movement.tipo == "BAIXA",
+            Movement.related_movement_id == movement.id,
+            Movement.movement_status == ACTIVE_MOVEMENT_STATUS,
+        )
         .scalar()
     )
     return max(to_decimal(movement.quantidade) - to_decimal(baixado), Decimal("0.000"))
@@ -302,6 +580,10 @@ def movement_available_snapshots(db, movements):
     for movement in history:
         sku_id = movement.sku_id
         pending = pending_by_sku.get(sku_id, Decimal("0.000"))
+        if movement.movement_status != ACTIVE_MOVEMENT_STATUS:
+            if movement.id in movement_ids:
+                snapshots[movement.id] = to_decimal(movement.saldo_posterior) - pending
+            continue
         if movement.tipo in COMMITMENT_TYPES:
             pending += to_decimal(movement.quantidade)
         elif movement.tipo == "BAIXA" and movement.related_movement_id:
@@ -321,7 +603,41 @@ def register_consumption_from_commitment(
     observacao="",
     allow_negative=False,
     commit=True,
+    work_order_id=None,
+    setor="",
+    reference_text="",
+    correct_context=False,
+    context_reason="",
+    idempotency_key=None,
 ):
+    if commitment is None:
+        raise ValueError("Empenho nao encontrado.")
+    commitment_id = commitment.id
+    idempotency_key = str(idempotency_key or "").strip() or None
+    if idempotency_key:
+        replayed = (
+            db.query(Movement)
+            .filter(Movement.idempotency_key == idempotency_key)
+            .one_or_none()
+        )
+        if replayed is not None:
+            if (
+                replayed.tipo != "BAIXA"
+                or replayed.related_movement_id != commitment_id
+            ):
+                raise ValueError(
+                    "Chave de idempotencia ja utilizada por outra movimentacao."
+                )
+            return replayed
+    # Lock and reload the parent before calculating the pending quantity. On
+    # PostgreSQL this serializes concurrent consumptions for the same empenho.
+    commitment = (
+        db.query(Movement)
+        .filter(Movement.id == commitment_id)
+        .with_for_update()
+        .populate_existing()
+        .one_or_none()
+    )
     if commitment is None or commitment.tipo not in COMMITMENT_TYPES:
         raise ValueError("Empenho nao encontrado.")
     pending = pending_commitment_for_movement(db, commitment)
@@ -336,6 +652,37 @@ def register_consumption_from_commitment(
     note = f"Baixa vinculada ao empenho {commitment.id}."
     if observacao:
         note = f"{note} {observacao}"
+    inherited_context = movement_context_from_movement(commitment)
+    if correct_context or any((work_order_id, setor, reference_text)):
+        inherited_context = resolve_movement_context(
+            db,
+            work_order_id=work_order_id,
+            setor=setor,
+            reference_text=reference_text,
+            require_context=movement_context_enabled(),
+        )
+        if (
+            movement_context_from_movement(commitment) != {
+                "work_order_id": inherited_context["work_order_id"],
+                "context_kind": inherited_context["context_kind"],
+                "setor": inherited_context["setor"],
+                "reference_text": inherited_context["reference_text"],
+            }
+            and not str(context_reason or "").strip()
+        ):
+            raise ValueError("Informe o motivo da correcao do vinculo.")
+        update_movement_context(
+            db,
+            commitment,
+            inherited_context,
+            usuario_id,
+            reason=context_reason,
+            propagate_related=True,
+        )
+    elif movement_context_enabled() and inherited_context["context_kind"] == "LEGACY":
+        raise ValueError(
+            "Revise o vinculo do empenho: selecione uma O.S., setor ou referencia."
+        )
     return register_movement(
         db,
         commitment.sku,
@@ -347,6 +694,13 @@ def register_consumption_from_commitment(
         allow_negative=allow_negative,
         commit=commit,
         related_movement_id=commitment.id,
+        work_order_id=inherited_context["work_order_id"],
+        context_kind=inherited_context["context_kind"],
+        setor=inherited_context["setor"],
+        reference_text=inherited_context["reference_text"],
+        link_updated_by=usuario_id,
+        require_context=True,
+        idempotency_key=idempotency_key,
     )
 
 
@@ -417,7 +771,18 @@ def register_entry_with_backflush(
     documento="",
     observacao="",
     allow_negative=False,
+    idempotency_key=None,
 ):
+    command_key = str(idempotency_key or "").strip() or None
+    if command_key:
+        existing = (
+            db.query(Movement)
+            .filter(Movement.idempotency_key == f"{command_key}:entry")
+            .one_or_none()
+        )
+        if existing is not None:
+            return existing
+    operation_id = str(uuid4())
     document = documento or f"ENTRADA-BACKFLUSH-{now_utc().strftime('%Y%m%d-%H%M%S')}"
     entry = register_movement(
         db,
@@ -428,8 +793,11 @@ def register_entry_with_backflush(
         documento=document,
         observacao=observacao,
         commit=False,
+        source_type="MANUAL_ENTRY_BACKFLUSH",
+        idempotency_key=f"{command_key}:entry" if command_key else None,
+        operation_id=operation_id,
     )
-    for row in component_rows:
+    for index, row in enumerate(component_rows, start=1):
         component_sku = row["sku"]
         consumed = row["quantidade"]
         note = (
@@ -448,6 +816,12 @@ def register_entry_with_backflush(
             observacao=note,
             allow_negative=allow_negative,
             commit=False,
+            source_type="BACKFLUSH_CONSUMPTION",
+            idempotency_key=(
+                f"{command_key}:component:{index}" if command_key else None
+            ),
+            operation_id=operation_id,
+            parent_movement_id=entry.id,
         )
     db.commit()
     return entry
@@ -478,6 +852,92 @@ def delete_movement(db, movement, allow_negative=False):
     clear_dashboard_movement_cache(db)
     db.commit()
     return saldo_corrigido
+
+
+def cancel_movement(
+    db,
+    movement,
+    actor_user_id,
+    reason,
+    allow_any=False,
+    allow_negative=False,
+):
+    if movement is None:
+        raise ValueError("Movimentacao nao encontrada.")
+    movement = (
+        db.query(Movement)
+        .filter(Movement.id == movement.id)
+        .with_for_update()
+        .one()
+    )
+    if movement.movement_status == "CANCELADA":
+        return movement, movement.cancellation_reversal, True
+    if movement.source_type == "MOVEMENT_CANCELLATION":
+        raise ValueError(
+            "Ajuste compensatorio de cancelamento nao pode ser cancelado diretamente."
+        )
+    if movement.operation_id:
+        raise ValueError(
+            "Movimentacao composta de backflush nao pode ser cancelada "
+            "isoladamente; use um estorno operacional do conjunto."
+        )
+    if not allow_any and movement.usuario_id != actor_user_id:
+        raise ValueError("Voce so pode cancelar movimentacoes registradas por seu usuario.")
+    reason = str(reason or "").strip()
+    if not reason:
+        raise ValueError("Informe o motivo do cancelamento.")
+    if movement.source_type in {"GOODS_RECEIPT", "GOODS_RECEIPT_REVERSAL"}:
+        raise ValueError(
+            "Movimento de recebimento deve ser estornado pela Inspecao de Recebimento."
+        )
+    if movement.tipo in COMMITMENT_TYPES:
+        has_active_consumption = (
+            db.query(Movement.id)
+            .filter(
+                Movement.related_movement_id == movement.id,
+                Movement.tipo == "BAIXA",
+                Movement.movement_status == ACTIVE_MOVEMENT_STATUS,
+            )
+            .first()
+            is not None
+        )
+        if has_active_consumption:
+            raise ValueError(
+                "Cancelamento bloqueado: o empenho possui baixa ativa vinculada."
+            )
+
+    impact = to_decimal(movement.saldo_posterior) - to_decimal(movement.saldo_anterior)
+    reversal = None
+    if impact:
+        reversal = register_movement(
+            db,
+            movement.sku,
+            "AJUSTE",
+            -impact,
+            actor_user_id,
+            documento=f"CANCELAMENTO-MOV-{movement.id}",
+            observacao=f"Cancelamento da movimentacao {movement.id}: {reason}",
+            allow_negative=allow_negative,
+            commit=False,
+            context_kind="LEGACY",
+        )
+        reversal.source_type = "MOVEMENT_CANCELLATION"
+        reversal.idempotency_key = f"movement-cancellation:{movement.id}"
+        reversal.work_order_id = movement.work_order_id
+        reversal.context_kind = movement.context_kind
+        reversal.setor = movement.setor
+        reversal.reference_text = movement.reference_text
+        reversal.link_updated_at = now_utc()
+        reversal.link_updated_by = actor_user_id
+
+    movement.movement_status = "CANCELADA"
+    movement.canceled_at = now_utc()
+    movement.canceled_by = actor_user_id
+    movement.cancel_reason = reason
+    movement.reversal_movement_id = reversal.id if reversal else None
+    clear_dashboard_movement_cache(db)
+    db.commit()
+    return movement, reversal, False
 
 
 def adjust_balance_to_count(db, sku, counted_qty, usuario_id, documento="", observacao=""):

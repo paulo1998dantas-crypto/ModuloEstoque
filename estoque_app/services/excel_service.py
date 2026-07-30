@@ -16,6 +16,7 @@ from services.estoque_service import (
     decimal_to_str,
     ensure_balance,
     get_sku_by_code,
+    movement_context_enabled,
     movement_available_snapshots,
     normalize_sku,
     optional_decimal_to_str,
@@ -23,6 +24,7 @@ from services.estoque_service import (
     pending_commitments_by_sku,
     register_consumption_from_commitment,
     register_movement,
+    resolve_active_work_order_reference,
     save_inventory_count,
     to_decimal,
 )
@@ -928,6 +930,7 @@ def _expand_mass_material_row(db, sku, qty, row, explicit_parent_codes, errors, 
         "sku": sku,
         "quantidade": qty,
         "numero_os": str(row.get("numero_os") or "").strip(),
+        "setor": str(row.get("setor") or "").strip(),
         "linha": row.get("linha"),
         "origem_codigo": row.get("codigo"),
         "unidade": sku.unidade or row.get("unidade") or "",
@@ -989,14 +992,15 @@ def import_mass_material_movements(db, rows, mode, user_id, documento="", observ
     for row in final_rows:
         sku = row["sku"]
         os_number = row["numero_os"]
-        key = (sku.id, os_number)
+        key = (sku.id, os_number, row.get("setor") or "")
         if key not in aggregated:
             aggregated[key] = dict(row)
         else:
             aggregated[key]["quantidade"] += row["quantidade"]
 
     try:
-        default_document = documento or f"{movement_type}-OS-{datetime.now().strftime('%Y%m%d-%H%M%S')}"
+        explicit_reference = str(documento or "").strip()
+        default_document = explicit_reference or f"{movement_type}-OS-{datetime.now().strftime('%Y%m%d-%H%M%S')}"
         for row in aggregated.values():
             sku = row["sku"]
             qty = to_decimal(row["quantidade"])
@@ -1005,6 +1009,24 @@ def import_mass_material_movements(db, rows, mode, user_id, documento="", observ
             note = observacao or f"{movement_type} em massa por requisicao de materiais."
             if row.get("origem_codigo") and row["origem_codigo"] != sku.sku:
                 note = f"{note} Origem/conjunto: {row['origem_codigo']}."
+            context_args = {}
+            if movement_context_enabled():
+                work_order = (
+                    resolve_active_work_order_reference(db, os_number)
+                    if os_number
+                    else None
+                )
+                context_args = {
+                    "work_order_id": work_order["id"] if work_order else None,
+                    "setor": row.get("setor") or "",
+                    "reference_text": (
+                        ""
+                        if work_order or row.get("setor")
+                        else explicit_reference
+                    ),
+                    "link_updated_by": user_id,
+                    "require_context": True,
+                }
             register_movement(
                 db,
                 sku,
@@ -1015,6 +1037,7 @@ def import_mass_material_movements(db, rows, mode, user_id, documento="", observ
                 observacao=note,
                 allow_negative=allow_negative,
                 commit=False,
+                **context_args,
             )
             result["processed"] += 1
             total += qty

@@ -74,3 +74,45 @@ Para usar um atalho local no Windows conversando com a base online:
 6. Abra o exe pelo atalho.
 
 Nesse modo, os dados ficam no Supabase e a impressao Zebra continua local no computador conectado por USB.
+
+## Integração ERP e ativação gradual
+
+As integrações novas permanecem desligadas por padrão. Depois de aplicar e validar
+as migrations aditivas no ambiente de staging, aplique por último
+`202607301320_reconcile_shared_user_roles_cutover.sql` e só então ative
+separadamente:
+
+```text
+ERP_FEATURE_FLAG=true
+ERP_PO_SUGGESTION_ENABLED=true
+ERP_MOVEMENT_CONTEXT_ENABLED=true
+ERP_SHARED_RBAC_ENABLED=true
+```
+
+Quando `ERP_SHARED_RBAC_ENABLED=true`, a ausência de qualquer tabela/coluna do
+contrato RBAC bloqueia autorização e faz `/healthz` responder `503`; não há
+fallback para `users.role`. Com a flag desligada, o comportamento legado é
+preservado. A tela central de usuários já grava `erp_user_roles` sempre que o
+schema existe, inclusive durante a janela anterior à ativação da flag.
+
+As migrations de RBAC abortam a transação se houver usuário ativo sem perfil
+ativo ou se não existir ao menos um `ADMIN` ativo. Não corrija isso atribuindo
+perfil por inferência: trate os casos ambíguos individualmente antes do corte.
+Depois que uma migration entrar no histórico do Supabase, rollback de schema é
+operacional (flags/deploy anterior); qualquer ajuste estrutural deve ser uma
+nova migration aditiva de forward-fix. Os arquivos em `supabase/rollbacks` não
+apagam tabelas, auditoria, vínculos nem reabrem acesso direto da Data API.
+
+- A sugestão de O.C. nunca movimenta saldo no navegador: a escolha leva à
+  Inspeção de Recebimento, cujo backend confirma recebimento, pedido e movimento
+  na mesma transação.
+- Uma entrada direta com O.C. pendente exige motivo de exceção.
+- Empenhos e baixas novos exigem O.S. ativa, setor ou referência quando
+  `ERP_MOVEMENT_CONTEXT_ENABLED=true`.
+- Baixas vinculadas herdam o contexto do empenho; a correção posterior exige
+  motivo e gera histórico.
+- Cancelamentos preservam a movimentação original e, quando necessário, geram
+  movimento compensatório. Recebimentos devem ser estornados pela própria
+  Inspeção de Recebimento.
+- `ERP_BACKEND_TOKEN` deve ser igual no Estoque e nos backends autorizados a
+  consultar os endpoints internos. Nunca coloque esse token no frontend.

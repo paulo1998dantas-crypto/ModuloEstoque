@@ -495,6 +495,65 @@ th {
     grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
+.context-fields {
+    min-width: 0;
+    margin: 0;
+    padding: 10px;
+    border: 1px solid var(--line);
+    border-radius: 5px;
+    background: #f8fafc;
+}
+
+.context-fields legend {
+    padding: 0 6px;
+    color: var(--primary);
+    font-weight: 850;
+}
+
+[data-work-order-picker] label {
+    position: relative;
+}
+
+.autocomplete-results {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    right: 0;
+    z-index: 15;
+    max-height: 240px;
+    overflow: auto;
+    border: 1px solid var(--line-dark);
+    border-radius: 4px;
+    background: #ffffff;
+    box-shadow: 0 10px 24px rgba(15, 23, 42, 0.16);
+}
+
+.autocomplete-option,
+.autocomplete-empty {
+    display: block;
+    width: 100%;
+    padding: 9px 10px;
+    border: 0;
+    border-bottom: 1px solid var(--line);
+    background: #ffffff;
+    color: var(--text);
+    text-align: left;
+}
+
+.autocomplete-option {
+    cursor: pointer;
+    font-weight: 750;
+}
+
+.autocomplete-option:hover,
+.autocomplete-option:focus {
+    background: #eef6fa;
+}
+
+.autocomplete-empty {
+    color: var(--muted);
+}
+
 label {
     display: grid;
     gap: 5px;

@@ -20,29 +20,60 @@
 
             <nav class="nav">
                 <span class="nav-section">Operacao</span>
+                {% if can('estoque.dashboard.view') %}
                 <a href="{{ url_for('dashboard') }}" class="{% if request.endpoint == 'dashboard' %}active{% endif %}">Dashboard</a>
+                {% endif %}
+                {% if can('estoque.entry.create') %}
                 <a href="{{ url_for('entrada') }}" class="{% if request.endpoint == 'entrada' %}active{% endif %}">Entrada</a>
+                {% endif %}
+                {% if erp_feature_enabled and can('estoque.inspection.receive') %}
+                <a href="{{ url_for('erp_receipts_screen') }}" class="{% if request.endpoint == 'erp_receipts_screen' %}active{% endif %}">Inspeção de recebimento</a>
+                {% endif %}
+                {% if can('estoque.commitment.create') %}
                 <a href="{{ url_for('saida') }}" class="{% if request.endpoint in ['saida', 'import_commitments'] %}active{% endif %}">Empenho</a>
+                {% endif %}
+                {% if can('estoque.consumption.create') %}
                 <a href="{{ url_for('baixa') }}" class="{% if request.endpoint == 'baixa' %}active{% endif %}">Baixa</a>
+                {% endif %}
+                {% if can('estoque.inventory.manage') %}
                 <a href="{{ url_for('inventory_mobile') }}" class="{% if request.endpoint == 'inventory_mobile' %}active{% endif %}">Inventario</a>
+                {% endif %}
+                {% if can('estoque.labels.use') %}
                 <a href="{{ url_for('print_label') }}" class="{% if request.endpoint == 'print_label' %}active{% endif %}">Etiqueta</a>
+                {% endif %}
+                {% if can('estoque.stock.view') %}
                 <a href="{{ url_for('stock') }}" class="{% if request.endpoint == 'stock' %}active{% endif %}">Estoque</a>
+                {% endif %}
+                {% if can('estoque.movement.view') %}
                 <a href="{{ url_for('movements') }}" class="{% if request.endpoint == 'movements' %}active{% endif %}">Movimentacoes</a>
-                <a href="{{ url_for('reports') }}" class="{% if request.endpoint == 'reports' %}active{% endif %}">Relatorios</a>
-
-                {% if current_user.role == 'ADM' %}
-                <span class="nav-section">Administracao</span>
-                <a href="{{ url_for('inventory_labels') }}" class="{% if request.endpoint == 'inventory_labels' %}active{% endif %}">Inventario ADM</a>
+                {% endif %}
+                {% if can('estoque.skus.view') %}
                 <a href="{{ url_for('skus') }}" class="{% if request.endpoint in ['skus', 'sku_form', 'import_skus', 'atualizar_skus_local'] %}active{% endif %}">CODs</a>
+                {% endif %}
+                {% if can('estoque.reports.view') %}
+                <a href="{{ url_for('reports') }}" class="{% if request.endpoint == 'reports' %}active{% endif %}">Relatorios</a>
+                {% endif %}
+
+                {% if can('estoque.inventory.manage') or can('estoque.import') or can('estoque.users.manage') or can('estoque.settings.manage') %}
+                <span class="nav-section">Administracao</span>
+                {% if can('estoque.inventory.manage') %}
+                <a href="{{ url_for('inventory_labels') }}" class="{% if request.endpoint == 'inventory_labels' %}active{% endif %}">Inventario ADM</a>
+                {% endif %}
+                {% if can('estoque.import') %}
                 <a href="{{ url_for('import_bom') }}" class="{% if request.endpoint in ['import_bom', 'atualizar_bom_local'] %}active{% endif %}">B.O.M</a>
+                {% endif %}
+                {% if can('estoque.users.manage') %}
                 <a href="{{ url_for('users') }}" class="{% if request.endpoint in ['users', 'toggle_user'] %}active{% endif %}">Usuarios</a>
+                {% endif %}
+                {% if can('estoque.settings.manage') %}
                 <a href="{{ url_for('settings') }}" class="{% if request.endpoint == 'settings' %}active{% endif %}">Configuracoes</a>
+                {% endif %}
                 {% endif %}
             </nav>
 
             <div class="sidebar-user">
                 <strong>{{ current_user.username }}</strong>
-                <span>{{ current_user.role }}</span>
+                <span>{{ effective_roles|join(' + ') or current_user.role }}</span>
                 <a href="{{ url_for('logout') }}">Sair</a>
             </div>
         </aside>

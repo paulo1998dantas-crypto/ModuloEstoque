@@ -17,5 +17,15 @@ services:
         sync: false
       - key: ESTOQUE_DATABASE_MODE
         value: online
+      - key: ERP_FEATURE_FLAG
+        value: "false"
+      - key: ERP_PO_SUGGESTION_ENABLED
+        value: "false"
+      - key: ERP_MOVEMENT_CONTEXT_ENABLED
+        value: "false"
+      - key: ERP_SHARED_RBAC_ENABLED
+        value: "false"
+      - key: ERP_BACKEND_TOKEN
+        sync: false
       - key: DATABASE_URL
         sync: false

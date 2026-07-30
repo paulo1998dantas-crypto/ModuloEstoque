@@ -1,10 +1,13 @@
+import hmac
 import logging
 import os
 import sys
+from datetime import datetime
 from functools import wraps
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
 from urllib.parse import urlsplit
+from uuid import uuid4
 
 from flask import (
     Flask,
@@ -21,16 +24,33 @@ from sqlalchemy import or_
 from werkzeug.exceptions import NotFound
 
 from auth import (
+    ROLE_DEFINITIONS,
+    can,
     current_user,
+    effective_roles,
     ensure_initial_data,
     hash_password,
     login_required,
+    permission_required,
+    rbac_schema_ready,
+    record_auth_audit,
     roles_required,
+    shared_rbac_enabled,
+    sync_user_roles,
     verify_password,
 )
 from config import APP_ROOT, BASE_DIR, Config, EXPORTS_DIR, LOGS_DIR
 from database import SessionLocal, init_db
-from models import InventoryCount, LabelPrintJob, Movement, SKU, StockBalance, User, now_utc
+from models import (
+    ErpUserRole,
+    InventoryCount,
+    LabelPrintJob,
+    Movement,
+    SKU,
+    StockBalance,
+    User,
+    now_utc,
+)
 from purchase_report import build_purchase_inspection_report
 from services.backup_service import create_backup
 from services.etiqueta_service import (
@@ -69,10 +89,12 @@ from services.cadastro_supabase_service import (
 )
 from services.estoque_service import (
     adjust_balance_to_count,
+    append_manual_entry_exception,
     build_backflush_preview,
     close_inventory_and_adjust,
     dashboard_movement_cache,
     delete_movement,
+    cancel_movement,
     decimal_to_str,
     get_active_inventory_session,
     get_setting,
@@ -89,6 +111,7 @@ from services.estoque_service import (
     register_consumption_from_commitment,
     register_movement,
     register_entry_with_backflush,
+    resolve_movement_context,
     reset_operational_data,
     save_inventory_count,
     set_setting,
@@ -97,6 +120,7 @@ from services.estoque_service import (
     create_or_update_sku,
 )
 from services.erp_service import (
+    active_work_orders,
     cancel_purchase_order,
     cancel_purchase_order_by_idempotency_key,
     close_purchase_order_by_idempotency_key,
@@ -105,11 +129,13 @@ from services.erp_service import (
     confirm_receipt,
     create_purchase_order,
     pending_purchase_orders,
+    pending_purchase_order_lines_by_sku,
     purchase_order_financial_detail,
     purchase_orders_dashboard,
     register_purchase_order_financial_entry,
     reverse_receipt,
     sync_legacy_purchase_order,
+    work_order_materials,
 )
 
 
@@ -140,6 +166,19 @@ def erp_feature_enabled():
     return os.environ.get("ERP_FEATURE_FLAG", "false").strip().lower() in {"1", "true", "yes", "sim", "on"}
 
 
+def feature_enabled(name, default=False):
+    value = os.environ.get(name, "true" if default else "false")
+    return value.strip().lower() in {"1", "true", "yes", "sim", "on"}
+
+
+def po_suggestion_enabled():
+    return feature_enabled("ERP_PO_SUGGESTION_ENABLED", False)
+
+
+def movement_context_feature_enabled():
+    return feature_enabled("ERP_MOVEMENT_CONTEXT_ENABLED", False)
+
+
 def erp_feature_required(view):
     @wraps(view)
     def wrapped(*args, **kwargs):
@@ -158,8 +197,15 @@ def remove_session(exception=None):
 
 @app.context_processor
 def inject_globals():
+    user = current_user()
     return {
-        "current_user": current_user(),
+        "current_user": user,
+        "can": lambda permission: can(user, permission),
+        "effective_roles": sorted(effective_roles(user)) if user else [],
+        "shared_rbac_enabled": shared_rbac_enabled(),
+        "erp_feature_enabled": erp_feature_enabled(),
+        "movement_context_enabled": movement_context_feature_enabled(),
+        "po_suggestion_enabled": po_suggestion_enabled(),
         "fmt_qty": decimal_to_str,
         "fmt_min": optional_decimal_to_str,
         "movement_label": movement_label,
@@ -267,13 +313,23 @@ def configured_printer_name(database):
 def user_can_export(database, user):
     if not user:
         return False
-    return user.role == "ADM" or get_setting_bool(database, "operator_can_export", True)
+    if not can(user, "estoque.reports.view"):
+        return False
+    return can(user, "estoque.settings.manage") or get_setting_bool(
+        database,
+        "operator_can_export",
+        True,
+    )
 
 
 def can_print_sku(database, sku, user):
     if sku.active:
         return True
-    return bool(user and user.role == "ADM" and get_setting_bool(database, "admin_can_print_inactive_sku", False))
+    return bool(
+        user
+        and can(user, "estoque.settings.manage")
+        and get_setting_bool(database, "admin_can_print_inactive_sku", False)
+    )
 
 
 def flash_local_update_result(label, result, success_category="success"):
@@ -321,7 +377,13 @@ def refresh_local_sources_quietly(database, include_bom=False):
 
 
 def can_access_label_job(job, user):
-    return bool(user and (user.role == "ADM" or job.usuario_id == user.id))
+    return bool(
+        user
+        and (
+            can(user, "estoque.settings.manage")
+            or job.usuario_id == user.id
+        )
+    )
 
 
 def movement_label(tipo):
@@ -379,21 +441,37 @@ def index():
 
 @app.route("/healthz")
 def healthz():
-    return jsonify({"ok": True})
+    rbac_ready = rbac_schema_ready(db())
+    payload = {
+        "ok": not shared_rbac_enabled() or rbac_ready,
+        "shared_rbac_enabled": shared_rbac_enabled(),
+        "shared_rbac_ready": rbac_ready,
+    }
+    return jsonify(payload), (200 if payload["ok"] else 503)
 
 
 @app.route("/login", methods=["GET", "POST"])
 def login():
     if request.method == "POST":
         database = db()
+        if shared_rbac_enabled() and not rbac_schema_ready(database):
+            flash(
+                "Autorizacao compartilhada indisponivel. Aguarde a conclusao da migration.",
+                "danger",
+            )
+            return render_template("login.html"), 503
         username = request.form.get("username", "").strip()
         password = request.form.get("password", "")
         user = database.query(User).filter_by(username=username).one_or_none()
         if user and user.active and verify_password(user.password_hash, password):
             session.clear()
             session["user_id"] = user.id
+            session["auth_version"] = int(user.auth_version or 1)
             flash("Login realizado com sucesso.", "success")
-            return redirect(request.args.get("next") or url_for("dashboard"))
+            next_path = request.args.get("next", "")
+            if not next_path.startswith("/") or next_path.startswith("//"):
+                next_path = url_for("dashboard")
+            return redirect(next_path)
         flash("Usuario ou senha invalidos.", "danger")
     return render_template("login.html")
 
@@ -407,6 +485,7 @@ def logout():
 
 @app.route("/dashboard")
 @login_required
+@permission_required("estoque.dashboard.view")
 def dashboard():
     database = db()
     total_active = database.query(SKU).filter(SKU.active.is_(True)).count()
@@ -429,33 +508,214 @@ def dashboard():
 
 @app.route("/usuarios", methods=["GET", "POST"])
 @login_required
-@roles_required("ADM")
+@permission_required("estoque.users.manage")
 def users():
     database = db()
     if request.method == "POST":
         username = request.form.get("username", "").strip()
         password = request.form.get("password", "")
-        role = request.form.get("role", "OPERADOR")
+        roles = [
+            role
+            for role in request.form.getlist("roles")
+            if role in ROLE_DEFINITIONS
+        ] or [request.form.get("role", "OPERADOR")]
+        roles = [role for role in roles if role in ROLE_DEFINITIONS] or ["OPERADOR"]
         if not username or not password:
             flash("Informe usuario e senha.", "danger")
         elif database.query(User).filter_by(username=username).one_or_none():
             flash("Usuario ja existe.", "danger")
         else:
-            database.add(User(username=username, password_hash=hash_password(password), role=role, active=True))
+            primary_role = "ADM" if "ADMIN" in roles else roles[0]
+            user = User(
+                username=username,
+                password_hash=hash_password(password),
+                role=primary_role,
+                active=True,
+                auth_version=1,
+            )
+            database.add(user)
+            database.flush()
+            if rbac_schema_ready(database):
+                sync_user_roles(
+                    database,
+                    user.id,
+                    roles,
+                    assigned_by=session.get("user_id"),
+                )
+                record_auth_audit(
+                    database,
+                    user_id=user.id,
+                    actor_user_id=session.get("user_id"),
+                    action="USER_CREATED",
+                    before_data={},
+                    after_data={
+                        "username": username,
+                        "active": True,
+                        "roles": sorted(set(roles)),
+                        "password_changed": True,
+                    },
+                )
             database.commit()
             flash("Usuario criado.", "success")
         return redirect(url_for("users"))
-    return render_template("users.html", users=database.query(User).order_by(User.username).all())
+    rows = database.query(User).order_by(User.username).all()
+    user_roles = {
+        user.id: sorted(effective_roles(user, database))
+        for user in rows
+    }
+    return render_template(
+        "users.html",
+        users=rows,
+        user_roles=user_roles,
+        role_definitions=ROLE_DEFINITIONS,
+    )
+
+
+@app.route("/usuarios/<int:user_id>/editar", methods=["POST"])
+@login_required
+@permission_required("estoque.users.manage")
+def edit_user(user_id):
+    database = db()
+    user = database.get(User, user_id)
+    if not user:
+        flash("Usuario nao encontrado.", "danger")
+        return redirect(url_for("users"))
+
+    username = request.form.get("username", "").strip()
+    roles = [
+        role
+        for role in request.form.getlist("roles")
+        if role in ROLE_DEFINITIONS
+    ]
+    active = bool(request.form.get("active"))
+    password = request.form.get("password", "")
+    if not username or not roles:
+        flash("Informe usuario e ao menos um perfil.", "danger")
+        return redirect(url_for("users"))
+    duplicate = (
+        database.query(User)
+        .filter(User.username == username, User.id != user.id)
+        .one_or_none()
+    )
+    if duplicate:
+        flash("Ja existe outro usuario com esse nome.", "danger")
+        return redirect(url_for("users"))
+    if user.id == session.get("user_id") and not active:
+        flash("Voce nao pode inativar o proprio usuario.", "danger")
+        return redirect(url_for("users"))
+
+    current_roles = effective_roles(user, database)
+    before_data = {
+        "username": user.username,
+        "active": bool(user.active),
+        "roles": sorted(current_roles),
+        "password_changed": False,
+    }
+    if "ADMIN" in current_roles and ("ADMIN" not in roles or not active):
+        other_admins = (
+            database.query(ErpUserRole.user_id)
+            .join(User, User.id == ErpUserRole.user_id)
+            .filter(
+                ErpUserRole.role_code == "ADMIN",
+                ErpUserRole.user_id != user.id,
+                User.active.is_(True),
+            )
+            .count()
+            if rbac_schema_ready(database)
+            else database.query(User)
+            .filter(
+                User.id != user.id,
+                User.active.is_(True),
+                User.role == "ADM",
+            )
+            .count()
+        )
+        if not other_admins:
+            flash("Mantenha ao menos um ADMIN ativo.", "danger")
+            return redirect(url_for("users"))
+
+    user.username = username
+    user.active = active
+    user.role = "ADM" if "ADMIN" in roles else roles[0]
+    if password:
+        user.password_hash = hash_password(password)
+    user.auth_version = int(user.auth_version or 1) + 1
+    if rbac_schema_ready(database):
+        sync_user_roles(
+            database,
+            user.id,
+            roles,
+            assigned_by=session.get("user_id"),
+        )
+        record_auth_audit(
+            database,
+            user_id=user.id,
+            actor_user_id=session.get("user_id"),
+            action="USER_UPDATED",
+            before_data=before_data,
+            after_data={
+                "username": username,
+                "active": active,
+                "roles": sorted(set(roles)),
+                "password_changed": bool(password),
+            },
+        )
+    database.commit()
+    if user.id == session.get("user_id"):
+        session["auth_version"] = user.auth_version
+    flash("Usuario e acessos atualizados.", "success")
+    return redirect(url_for("users"))
 
 
 @app.route("/usuarios/<int:user_id>/toggle", methods=["POST"])
 @login_required
-@roles_required("ADM")
+@permission_required("estoque.users.manage")
 def toggle_user(user_id):
     database = db()
     user = database.get(User, user_id)
     if user and user.id != session.get("user_id"):
+        before_data = {
+            "username": user.username,
+            "active": bool(user.active),
+            "roles": sorted(effective_roles(user, database)),
+            "password_changed": False,
+        }
+        if user.active and "ADMIN" in effective_roles(user, database):
+            other_admins = (
+                database.query(ErpUserRole.user_id)
+                .join(User, User.id == ErpUserRole.user_id)
+                .filter(
+                    ErpUserRole.role_code == "ADMIN",
+                    ErpUserRole.user_id != user.id,
+                    User.active.is_(True),
+                )
+                .count()
+                if rbac_schema_ready(database)
+                else database.query(User)
+                .filter(
+                    User.id != user.id,
+                    User.active.is_(True),
+                    User.role == "ADM",
+                )
+                .count()
+            )
+            if not other_admins:
+                flash("Mantenha ao menos um ADMIN ativo.", "danger")
+                return redirect(url_for("users"))
         user.active = not user.active
+        user.auth_version = int(user.auth_version or 1) + 1
+        if rbac_schema_ready(database):
+            record_auth_audit(
+                database,
+                user_id=user.id,
+                actor_user_id=session.get("user_id"),
+                action="USER_STATUS_CHANGED",
+                before_data=before_data,
+                after_data={
+                    **before_data,
+                    "active": bool(user.active),
+                },
+            )
         database.commit()
         flash("Status do usuario atualizado.", "success")
     return redirect(url_for("users"))
@@ -463,7 +723,7 @@ def toggle_user(user_id):
 
 @app.route("/configuracoes", methods=["GET", "POST"])
 @login_required
-@roles_required("ADM")
+@permission_required("estoque.settings.manage")
 def settings():
     database = db()
     if request.method == "POST":
@@ -484,7 +744,7 @@ def settings():
 
 @app.route("/skus")
 @login_required
-@roles_required("ADM")
+@permission_required("estoque.skus.view")
 def skus():
     database = db()
     refresh_local_sources_quietly(database)
@@ -507,7 +767,7 @@ def skus():
 @app.route("/atualizar_skus", methods=["POST"])
 @app.route("/skus/atualizar-local", methods=["POST"])
 @login_required
-@roles_required("ADM")
+@permission_required("estoque.skus.manage")
 def atualizar_skus_local():
     database = db()
     result = sync_skus_from_cadastro(database, force=True)
@@ -518,7 +778,7 @@ def atualizar_skus_local():
 @app.route("/skus/novo", methods=["GET", "POST"])
 @app.route("/skus/<int:sku_id>/editar", methods=["GET", "POST"])
 @login_required
-@roles_required("ADM")
+@permission_required("estoque.skus.manage")
 def sku_form(sku_id=None):
     database = db()
     sku = database.get(SKU, sku_id) if sku_id else None
@@ -559,7 +819,7 @@ def sku_form(sku_id=None):
 
 @app.route("/skus/importar", methods=["GET", "POST"])
 @login_required
-@roles_required("ADM")
+@permission_required("estoque.skus.manage")
 def import_skus():
     database = db()
     if request.method == "POST":
@@ -571,6 +831,7 @@ def import_skus():
 
 @app.route("/estoque")
 @login_required
+@permission_required("estoque.stock.view")
 def stock():
     database = db()
     filters = {
@@ -587,6 +848,7 @@ def stock():
 
 @app.route("/estoque/exportar")
 @login_required
+@permission_required("estoque.reports.view")
 def export_stock():
     database = db()
     user = current_user()
@@ -600,12 +862,19 @@ def export_stock():
 
 @app.route("/entrada", methods=["GET", "POST"])
 @login_required
+@permission_required("estoque.entry.create")
 def entrada():
     database = db()
     refresh_local_sources_quietly(database, include_bom=True)
     sku = None
     sku_code = request.args.get("sku", "").strip()
     backflush = None
+    po_prompt = None
+    entry_draft = {}
+    idempotency_key = (
+        str(request.form.get("idempotency_key") or "").strip()
+        or f"stock-entry:{uuid4()}"
+    )
     if request.method == "POST":
         try:
             sku = get_sku_by_code(database, request.form.get("sku"), active_only=True)
@@ -614,6 +883,72 @@ def entrada():
             quantidade = request.form.get("quantidade")
             documento = request.form.get("documento", "")
             observacao = request.form.get("observacao", "")
+            entry_origin = str(request.form.get("entry_origin") or "").strip().upper()
+            manual_reason = str(request.form.get("manual_reason") or "").strip()
+            po_candidates = []
+            if po_suggestion_enabled() and erp_feature_enabled():
+                po_candidates = pending_purchase_order_lines_by_sku(
+                    database,
+                    sku_id=sku.id,
+                    sku_code=sku.sku,
+                )
+            if po_candidates:
+                if entry_origin not in {"PURCHASE_ORDER", "MANUAL"}:
+                    entry_draft = {
+                        "sku": sku.sku,
+                        "quantidade": quantidade,
+                        "documento": documento,
+                        "observacao": observacao,
+                        "idempotency_key": idempotency_key,
+                    }
+                    po_prompt = {"candidates": po_candidates}
+                    return render_template(
+                        "movement_form.html",
+                        mode="entrada",
+                        sku=sku,
+                        sku_code=sku.sku,
+                        backflush=None,
+                        po_prompt=po_prompt,
+                        entry_draft=entry_draft,
+                        idempotency_key=idempotency_key,
+                    )
+                if entry_origin == "PURCHASE_ORDER":
+                    selected_line_id = str(
+                        request.form.get("purchase_order_line_id") or ""
+                    ).strip()
+                    selected = next(
+                        (
+                            row
+                            for row in po_candidates
+                            if str(row["purchase_order_line_id"]) == selected_line_id
+                        ),
+                        None,
+                    )
+                    if not selected:
+                        raise ValueError(
+                            "Selecione uma linha pendente valida da O.C. sugerida."
+                        )
+                    flash(
+                        "O item possui O.C. pendente. Confirme a entrada pela "
+                        "Inspecao de Recebimento para atualizar pedido e saldo uma unica vez.",
+                        "warning",
+                    )
+                    return redirect(
+                        url_for(
+                            "erp_receipts_screen",
+                            order_id=selected["purchase_order_id"],
+                            line_id=selected["purchase_order_line_id"],
+                            quantity=quantidade,
+                            sku=sku.sku,
+                            document=documento,
+                        )
+                    )
+                if not manual_reason:
+                    raise ValueError(
+                        "Informe o motivo para registrar entrada direta sem vincular "
+                        "a O.C. pendente."
+                    )
+                observacao = append_manual_entry_exception(observacao, manual_reason)
             if request.form.get("confirm_backflush") == "1":
                 component_rows = parse_backflush_rows(
                     database,
@@ -629,6 +964,7 @@ def entrada():
                     documento=documento,
                     observacao=observacao,
                     allow_negative=get_setting_bool(database, "allow_negative_stock", False),
+                    idempotency_key=idempotency_key,
                 )
                 total_consumed = sum((row["quantidade"] for row in component_rows), to_decimal(0))
                 flash(
@@ -644,10 +980,22 @@ def entrada():
                     "quantidade": quantidade,
                     "documento": documento,
                     "observacao": observacao,
+                    "entry_origin": entry_origin,
+                    "manual_reason": manual_reason,
+                    "idempotency_key": idempotency_key,
                     "components": bom_rows,
                 }
                 flash("Item com B.O.M cadastrada. Confirme o consumo dos componentes.", "warning")
-                return render_template("movement_form.html", mode="entrada", sku=sku, sku_code=sku.sku, backflush=backflush)
+                return render_template(
+                    "movement_form.html",
+                    mode="entrada",
+                    sku=sku,
+                    sku_code=sku.sku,
+                    backflush=backflush,
+                    po_prompt=None,
+                    entry_draft={},
+                    idempotency_key=idempotency_key,
+                )
 
             register_movement(
                 database,
@@ -657,6 +1005,8 @@ def entrada():
                 session["user_id"],
                 documento=documento,
                 observacao=observacao,
+                source_type="MANUAL_ENTRY",
+                idempotency_key=idempotency_key,
             )
             flash("Entrada registrada com sucesso.", "success")
             return redirect(url_for("entrada"))
@@ -668,12 +1018,21 @@ def entrada():
         sku = get_sku_by_code(database, sku_code, active_only=True)
         if not sku:
             flash("COD nao cadastrado ou inativo. Entrada bloqueada.", "danger")
-    return render_template("movement_form.html", mode="entrada", sku=sku, sku_code=sku_code, backflush=backflush)
+    return render_template(
+        "movement_form.html",
+        mode="entrada",
+        sku=sku,
+        sku_code=sku_code,
+        backflush=backflush,
+        po_prompt=po_prompt,
+        entry_draft=entry_draft,
+        idempotency_key=idempotency_key,
+    )
 
 
 @app.route("/bom/importar", methods=["GET", "POST"])
 @login_required
-@roles_required("ADM")
+@permission_required("estoque.import")
 def import_bom():
     result = None
     if request.method == "POST":
@@ -701,7 +1060,7 @@ def import_bom():
 
 @app.route("/bom/atualizar-local", methods=["POST"])
 @login_required
-@roles_required("ADM")
+@permission_required("estoque.import")
 def atualizar_bom_local():
     database = db()
     sku_result, result = sync_catalog_from_cadastro(database, include_bom=True, force=True)
@@ -714,10 +1073,15 @@ def atualizar_bom_local():
 
 @app.route("/saida", methods=["GET", "POST"])
 @login_required
+@permission_required("estoque.commitment.create")
 def saida():
     database = db()
     sku = None
     sku_code = request.args.get("sku", "").strip()
+    idempotency_key = (
+        str(request.form.get("idempotency_key") or "").strip()
+        or f"stock-commitment:{uuid4()}"
+    )
     if request.method == "POST":
         try:
             sku = get_sku_by_code(database, request.form.get("sku"), active_only=True)
@@ -731,6 +1095,12 @@ def saida():
                 session["user_id"],
                 documento=request.form.get("documento", ""),
                 observacao=request.form.get("observacao", ""),
+                work_order_id=request.form.get("work_order_id"),
+                setor=request.form.get("setor", ""),
+                reference_text=request.form.get("reference_text", ""),
+                link_updated_by=session["user_id"],
+                require_context=True,
+                idempotency_key=idempotency_key,
             )
             flash("Empenho registrado com sucesso.", "success")
             return redirect(url_for("saida"))
@@ -742,11 +1112,18 @@ def saida():
         sku = get_sku_by_code(database, sku_code, active_only=True)
         if not sku:
             flash("COD nao cadastrado ou inativo. Empenho bloqueado.", "danger")
-    return render_template("movement_form.html", mode="saida", sku=sku, sku_code=sku_code)
+    return render_template(
+        "movement_form.html",
+        mode="saida",
+        sku=sku,
+        sku_code=sku_code,
+        idempotency_key=idempotency_key,
+    )
 
 
 @app.route("/empenhos/importar", methods=["GET", "POST"])
 @login_required
+@permission_required("estoque.commitment.create")
 def import_commitments():
     database = db()
     result = None
@@ -802,12 +1179,17 @@ def import_commitments():
 
 @app.route("/baixa", methods=["GET", "POST"])
 @login_required
+@permission_required("estoque.consumption.create")
 def baixa():
     database = db()
     user = current_user()
     result = None
     sku = None
     sku_code = request.args.get("sku", "").strip()
+    idempotency_key = (
+        str(request.form.get("idempotency_key") or "").strip()
+        or f"stock-consumption:{uuid4()}"
+    )
     if request.method == "POST":
         try:
             if request.form.get("action") == "confirm_mass_materials":
@@ -824,7 +1206,13 @@ def baixa():
                     session["user_id"],
                     documento=request.form.get("documento", ""),
                     observacao=request.form.get("observacao", ""),
-                    allow_negative=(user and user.role == "ADM") or get_setting_bool(database, "allow_negative_stock", False),
+                    allow_negative=can(user, "estoque.settings.manage") or get_setting_bool(database, "allow_negative_stock", False),
+                    work_order_id=request.form.get("work_order_id"),
+                    setor=request.form.get("setor", ""),
+                    reference_text=request.form.get("reference_text", ""),
+                    link_updated_by=session["user_id"],
+                    require_context=True,
+                    idempotency_key=idempotency_key,
                 )
                 flash(f"Baixa manual registrada: {decimal_to_str(baixa_manual.quantidade)} de {sku.sku}.", "success")
                 return redirect(url_for("baixa", sku=sku.sku))
@@ -845,7 +1233,7 @@ def baixa():
                         session["user_id"],
                         documento=request.form.get("documento", ""),
                         observacao=request.form.get("observacao", ""),
-                        allow_negative=(user and user.role == "ADM")
+                        allow_negative=can(user, "estoque.settings.manage")
                         or get_setting_bool(database, "allow_negative_stock", False),
                     )
                     if result["errors"]:
@@ -881,7 +1269,7 @@ def baixa():
                 session["user_id"],
                 documento=request.form.get("documento", ""),
                 observacao=request.form.get("observacao", ""),
-                allow_negative=(user and user.role == "ADM") or get_setting_bool(database, "allow_negative_stock", False),
+                allow_negative=can(user, "estoque.settings.manage") or get_setting_bool(database, "allow_negative_stock", False),
             )
             if result["errors"]:
                 flash("A planilha possui erros. Nenhuma baixa foi registrada.", "danger")
@@ -906,7 +1294,13 @@ def baixa():
         sku = get_sku_by_code(database, sku_code, active_only=True)
         if not sku:
             flash("COD nao cadastrado ou inativo. Baixa bloqueada.", "danger")
-    return render_template("consumption_import.html", result=result, sku=sku, sku_code=sku_code)
+    return render_template(
+        "consumption_import.html",
+        result=result,
+        sku=sku,
+        sku_code=sku_code,
+        idempotency_key=idempotency_key,
+    )
 
 
 @app.route("/inventario-mobile")
@@ -917,6 +1311,7 @@ def inventory_mobile_legacy():
 
 @app.route("/inventario", methods=["GET", "POST"])
 @login_required
+@permission_required("estoque.inventory.manage")
 def inventory_mobile():
     database = db()
     user = current_user()
@@ -971,6 +1366,7 @@ def inventory_mobile():
 
 @app.route("/imprimir-etiqueta", methods=["GET", "POST"])
 @login_required
+@permission_required("estoque.labels.use")
 def print_label():
     database = db()
     user = current_user()
@@ -1015,6 +1411,7 @@ def print_label():
 
 @app.route("/api/labels/zpl", methods=["POST"])
 @login_required
+@permission_required("estoque.labels.use")
 def api_label_zpl():
     database = db()
     user = current_user()
@@ -1041,12 +1438,13 @@ def api_label_zpl():
 
 @app.route("/movimentacoes")
 @login_required
+@permission_required("estoque.movement.view")
 def movements():
     database = db()
     user = current_user()
     tipo = request.args.get("tipo", "")
     query = database.query(Movement)
-    if user.role != "ADM":
+    if not can(user, "estoque.movement.cancel_any"):
         query = query.filter(Movement.tipo.in_(["ENTRADA", "EMPENHO", "BAIXA", "SAIDA"]))
     if tipo:
         if tipo == "EMPENHO":
@@ -1055,14 +1453,45 @@ def movements():
             query = query.filter(Movement.tipo == tipo)
     rows = query.order_by(Movement.created_at.desc()).limit(500).all()
     available_snapshots = movement_available_snapshots(database, rows)
+    work_order_cache = {}
     for movement in rows:
         movement.pending_commitment = pending_commitment_for_movement(database, movement)
+        movement.consumption_idempotency_key = (
+            f"commitment-consumption:{movement.id}:{uuid4()}"
+        )
         movement.saldo_posterior_disponivel = available_snapshots.get(movement.id, to_decimal(movement.saldo_posterior))
-    return render_template("movements.html", movements=rows, tipo=tipo, can_export=user_can_export(database, user))
+        movement.work_order_label = ""
+        if movement.work_order_id:
+            key = str(movement.work_order_id)
+            if key not in work_order_cache:
+                try:
+                    context = resolve_movement_context(
+                        database,
+                        work_order_id=key,
+                        active_work_order_only=False,
+                    )
+                    work_order_cache[key] = context["work_order"] or {}
+                except ValueError:
+                    work_order_cache[key] = {}
+            summary = work_order_cache[key]
+            if summary:
+                movement.work_order_label = (
+                    f"O.S. {summary.get('numero_os') or summary.get('item_number')} "
+                    f"· {str(summary.get('chassi') or '')[-8:]}"
+                )
+    return render_template(
+        "movements.html",
+        movements=rows,
+        tipo=tipo,
+        can_export=user_can_export(database, user),
+        can_cancel_any=can(user, "estoque.movement.cancel_any"),
+        can_cancel_own=can(user, "estoque.movement.cancel_own"),
+    )
 
 
 @app.route("/movimentacoes/<int:movement_id>/baixar-empenho", methods=["POST"])
 @login_required
+@permission_required("estoque.consumption.create")
 def consume_commitment_route(movement_id):
     database = db()
     user = current_user()
@@ -1075,7 +1504,13 @@ def consume_commitment_route(movement_id):
             session["user_id"],
             documento=request.form.get("documento", ""),
             observacao=request.form.get("observacao", ""),
-            allow_negative=(user and user.role == "ADM") or get_setting_bool(database, "allow_negative_stock", False),
+            allow_negative=can(user, "estoque.settings.manage") or get_setting_bool(database, "allow_negative_stock", False),
+            work_order_id=request.form.get("work_order_id"),
+            setor=request.form.get("setor", ""),
+            reference_text=request.form.get("reference_text", ""),
+            correct_context=request.form.get("correct_context") == "1",
+            context_reason=request.form.get("context_reason", ""),
+            idempotency_key=request.form.get("idempotency_key"),
         )
         flash(
             f"Baixa {baixa.id} gerada a partir do empenho {movement_id}: {decimal_to_str(baixa.quantidade)}.",
@@ -1087,10 +1522,53 @@ def consume_commitment_route(movement_id):
     return redirect(url_for("movements", tipo=request.form.get("tipo", "EMPENHO")))
 
 
+@app.route("/movimentacoes/<int:movement_id>/cancelar", methods=["POST"])
+@login_required
+@permission_required("estoque.movement.view")
+def cancel_movement_route(movement_id):
+    database = db()
+    user = current_user()
+    allow_any = can(user, "estoque.movement.cancel_any")
+    if not allow_any and not can(user, "estoque.movement.cancel_own"):
+        flash("Seu perfil nao pode cancelar movimentacoes.", "danger")
+        return redirect(url_for("movements", tipo=request.form.get("tipo", "")))
+    movement = database.get(Movement, movement_id)
+    try:
+        canceled, reversal, replayed = cancel_movement(
+            database,
+            movement,
+            user.id,
+            request.form.get("reason", ""),
+            allow_any=allow_any,
+            allow_negative=get_setting_bool(database, "allow_negative_stock", False),
+        )
+        if replayed:
+            flash(f"Movimentacao {movement_id} ja estava cancelada.", "warning")
+        elif reversal:
+            flash(
+                f"Movimentacao {movement_id} cancelada; ajuste compensatorio "
+                f"{reversal.id} registrado.",
+                "success",
+            )
+        else:
+            flash(f"Movimentacao {movement_id} cancelada.", "success")
+    except Exception as exc:
+        database.rollback()
+        flash(f"Falha ao cancelar movimentacao: {exc}", "danger")
+    return redirect(url_for("movements", tipo=request.form.get("tipo", "")))
+
+
 @app.route("/movimentacoes/<int:movement_id>/excluir", methods=["POST"])
 @login_required
 @roles_required("ADM")
 def delete_movement_route(movement_id):
+    if shared_rbac_enabled():
+        flash(
+            "Exclusao fisica desativada. Use Cancelar para preservar o historico "
+            "e gerar o ajuste compensatorio.",
+            "warning",
+        )
+        return redirect(url_for("movements", tipo=request.form.get("tipo", "")))
     database = db()
     movement = database.get(Movement, movement_id)
     try:
@@ -1112,6 +1590,7 @@ def delete_movement_route(movement_id):
 
 @app.route("/relatorios")
 @login_required
+@permission_required("estoque.reports.view")
 def reports():
     database = db()
     return render_template("reports.html", can_export=user_can_export(database, current_user()))
@@ -1119,6 +1598,7 @@ def reports():
 
 @app.route("/relatorios/exportar/<tipo>")
 @login_required
+@permission_required("estoque.reports.view")
 def export_report(tipo):
     database = db()
     user = current_user()
@@ -1147,7 +1627,7 @@ def export_report(tipo):
 
 @app.route("/backup", methods=["POST"])
 @login_required
-@roles_required("ADM")
+@permission_required("estoque.settings.manage")
 def backup():
     path = create_backup()
     flash(f"Backup gerado: {path}", "success")
@@ -1156,7 +1636,7 @@ def backup():
 
 @app.route("/resetar-dados", methods=["POST"])
 @login_required
-@roles_required("ADM")
+@permission_required("estoque.settings.manage")
 def reset_data():
     database = db()
     try:
@@ -1177,7 +1657,7 @@ def reset_data():
 
 @app.route("/inventario-etiquetas", methods=["GET", "POST"])
 @login_required
-@roles_required("ADM")
+@permission_required("estoque.inventory.manage")
 def inventory_labels():
     database = db()
     user = current_user()
@@ -1346,7 +1826,7 @@ def inventory_labels():
 
 @app.route("/inventario/exportar-previa")
 @login_required
-@roles_required("ADM")
+@permission_required("estoque.inventory.manage")
 def export_inventory_preview_route():
     database = db()
     active_session = get_active_inventory_session(database)
@@ -1400,6 +1880,7 @@ def api_local_print_zpl():
 
 @app.route("/api/label-jobs/<int:job_id>/zpl", methods=["POST"])
 @login_required
+@permission_required("estoque.labels.use")
 def api_label_job_zpl(job_id):
     database = db()
     user = current_user()
@@ -1417,6 +1898,7 @@ def api_label_job_zpl(job_id):
 
 @app.route("/api/label-jobs/<int:job_id>/local-result", methods=["POST"])
 @login_required
+@permission_required("estoque.labels.use")
 def api_label_job_local_result(job_id):
     database = db()
     user = current_user()
@@ -1443,12 +1925,14 @@ def api_label_job_local_result(job_id):
 
 @app.route("/api/label-jobs/<int:job_id>/print", methods=["POST"])
 @login_required
-@roles_required("ADM")
+@permission_required("estoque.labels.use")
 def api_print_label_job(job_id):
     database = db()
     job = database.get(LabelPrintJob, job_id)
     if not job:
         return jsonify({"ok": False, "error": "Job nao encontrado."}), 404
+    if not can_access_label_job(job, current_user()):
+        return jsonify({"ok": False, "error": "Acesso restrito para este job."}), 403
     if not can_print_sku(database, job.sku, current_user()):
         return jsonify({"ok": False, "error": "COD inativo. Impressao bloqueada."}), 400
     if request_print_mode() != "server":
@@ -1465,37 +1949,44 @@ def api_print_label_job(job_id):
 
 @app.route("/api/label-jobs/<int:job_id>/save-zpl", methods=["POST"])
 @login_required
-@roles_required("ADM")
+@permission_required("estoque.labels.use")
 def api_save_label_job(job_id):
     database = db()
     job = database.get(LabelPrintJob, job_id)
     if not job:
         return jsonify({"ok": False, "error": "Job nao encontrado."}), 404
+    if not can_access_label_job(job, current_user()):
+        return jsonify({"ok": False, "error": "Acesso restrito para este job."}), 403
     path = prepare_label_job_file(database, job)
     return jsonify({"ok": True, "path": str(path), "download_url": url_for("download_label_job_zpl", job_id=job.id)})
 
 
 @app.route("/api/label-jobs/<int:job_id>/download-zpl")
 @login_required
-@roles_required("ADM")
+@permission_required("estoque.labels.use")
 def download_label_job_zpl(job_id):
     database = db()
     job = database.get(LabelPrintJob, job_id)
     if not job:
         flash("Job nao encontrado.", "danger")
         return redirect(url_for("inventory_labels"))
+    if not can_access_label_job(job, current_user()):
+        flash("Acesso restrito para este job.", "danger")
+        return redirect(url_for("print_label"))
     path = prepare_label_job_file(database, job)
     return send_file(path, as_attachment=True)
 
 
 @app.route("/api/label-jobs/<int:job_id>/mark-printed", methods=["POST"])
 @login_required
-@roles_required("ADM")
+@permission_required("estoque.labels.use")
 def api_mark_printed(job_id):
     database = db()
     job = database.get(LabelPrintJob, job_id)
     if not job:
         return jsonify({"ok": False, "error": "Job nao encontrado."}), 404
+    if not can_access_label_job(job, current_user()):
+        return jsonify({"ok": False, "error": "Acesso restrito para este job."}), 403
     job.status = "IMPRESSO"
     job.erro = None
     job.printed_at = now_utc()
@@ -1505,12 +1996,14 @@ def api_mark_printed(job_id):
 
 @app.route("/api/label-jobs/<int:job_id>/cancel", methods=["POST"])
 @login_required
-@roles_required("ADM")
+@permission_required("estoque.labels.use")
 def api_cancel_job(job_id):
     database = db()
     job = database.get(LabelPrintJob, job_id)
     if not job:
         return jsonify({"ok": False, "error": "Job nao encontrado."}), 404
+    if not can_access_label_job(job, current_user()):
+        return jsonify({"ok": False, "error": "Acesso restrito para este job."}), 403
     job.status = "CANCELADO"
     database.commit()
     return jsonify({"ok": True, "status": job.status})
@@ -1532,6 +2025,19 @@ def download_template(name):
     if name not in allowed:
         flash("Template invalido.", "danger")
         return redirect(url_for("dashboard"))
+    required_permission = {
+        "skus": "estoque.skus.manage",
+        "exemplo": "estoque.skus.manage",
+        "etiquetas": "estoque.labels.use",
+        "baixa": "estoque.consumption.create",
+        "empenhos": "estoque.commitment.create",
+        "bom": "estoque.import",
+        "contagem_inventario": "estoque.inventory.manage",
+        "somar_saldo_inventario": "estoque.inventory.manage",
+    }[name]
+    if not can(current_user(), required_permission):
+        flash("Acesso restrito para este template.", "danger")
+        return redirect(url_for("dashboard"))
     path = BASE_DIR / allowed[name]
     if not path.exists():
         create_template_files(BASE_DIR)
@@ -1542,6 +2048,7 @@ def download_template(name):
 # are deliberately server-side only; the browser never creates a stock movement.
 @app.route("/api/erp/purchase-orders", methods=["POST"])
 @login_required
+@permission_required("suprimentos.purchase.create")
 @erp_feature_required
 def erp_create_purchase_order():
     user = current_user()
@@ -1554,12 +2061,58 @@ def erp_create_purchase_order():
 
 @app.route("/api/erp/receipts/pending")
 @login_required
+@permission_required("estoque.inspection.receive")
 @erp_feature_required
 def erp_pending_receipts():
     return jsonify({"ok": True, "orders": pending_purchase_orders(db())})
 
+
+@app.route("/api/erp/purchase-orders/pending-by-sku")
+@login_required
+@permission_required("estoque.entry.create")
+@erp_feature_required
+def erp_pending_purchase_orders_by_sku():
+    if not po_suggestion_enabled():
+        return jsonify({"ok": True, "enabled": False, "lines": []})
+    sku = get_sku_by_code(db(), request.args.get("sku"), active_only=True)
+    if not sku:
+        return jsonify({"ok": False, "error": "COD nao cadastrado ou inativo."}), 404
+    return jsonify(
+        {
+            "ok": True,
+            "enabled": True,
+            "lines": pending_purchase_order_lines_by_sku(
+                db(),
+                sku_id=sku.id,
+                sku_code=sku.sku,
+            ),
+        }
+    )
+
+
+@app.route("/api/erp/work-orders/active")
+@login_required
+@permission_required("estoque.movement.view")
+@erp_feature_required
+def erp_active_work_orders():
+    if not movement_context_feature_enabled():
+        return jsonify({"ok": True, "enabled": False, "work_orders": []})
+    return jsonify(
+        {
+            "ok": True,
+            "enabled": True,
+            "work_orders": active_work_orders(
+                db(),
+                query=request.args.get("q", ""),
+                limit=request.args.get("limit", 20),
+            ),
+        }
+    )
+
+
 @app.route("/erp/recebimentos")
 @login_required
+@permission_required("estoque.inspection.receive")
 @erp_feature_required
 def erp_receipts_screen():
     return render_template("erp_recebimentos.html")
@@ -1567,6 +2120,7 @@ def erp_receipts_screen():
 
 @app.route("/api/erp/receipts/confirm", methods=["POST"])
 @login_required
+@permission_required("estoque.inspection.receive")
 @erp_feature_required
 def erp_confirm_receipt():
     user = current_user()
@@ -1584,7 +2138,7 @@ def erp_confirm_receipt():
 
 @app.route("/api/erp/purchase-orders/<order_id>/cancel", methods=["POST"])
 @login_required
-@roles_required("ADM")
+@permission_required("suprimentos.purchase.cancel")
 @erp_feature_required
 def erp_cancel_purchase_order(order_id):
     try:
@@ -1595,7 +2149,7 @@ def erp_cancel_purchase_order(order_id):
 
 @app.route("/api/erp/purchase-orders/<order_id>/technical-close", methods=["POST"])
 @login_required
-@roles_required("ADM")
+@permission_required("suprimentos.purchase.technical_close")
 @erp_feature_required
 def erp_technical_close_purchase_order(order_id):
     payload = request.get_json(silent=True) or {}
@@ -1609,7 +2163,7 @@ def erp_technical_close_purchase_order(order_id):
 
 @app.route("/api/erp/purchase-orders/<order_id>/financial-close", methods=["POST"])
 @login_required
-@roles_required("ADM")
+@permission_required("suprimentos.purchase.financial_close")
 @erp_feature_required
 def erp_financial_close_purchase_order(order_id):
     payload = request.get_json(silent=True) or {}
@@ -1629,7 +2183,7 @@ def erp_financial_close_purchase_order(order_id):
 
 @app.route("/api/erp/purchase-orders/<order_id>/financial-detail")
 @login_required
-@roles_required("ADM")
+@permission_required("suprimentos.purchase.financial_close")
 @erp_feature_required
 def erp_financial_detail_purchase_order(order_id):
     try:
@@ -1640,7 +2194,7 @@ def erp_financial_detail_purchase_order(order_id):
 
 @app.route("/api/erp/receipts/<receipt_id>/reverse", methods=["POST"])
 @login_required
-@roles_required("ADM")
+@permission_required("estoque.movement.cancel_any")
 @erp_feature_required
 def erp_reverse_receipt(receipt_id):
     user=current_user()
@@ -1653,12 +2207,26 @@ def erp_reverse_receipt(receipt_id):
 def _erp_internal_allowed():
     expected = os.environ.get("ERP_BACKEND_TOKEN", "").strip()
     supplied = request.headers.get("X-ERP-Backend-Token", "").strip()
-    return bool(expected) and supplied == expected
+    return bool(expected) and bool(supplied) and hmac.compare_digest(supplied, expected)
 
 
 def _erp_actor_user(database, actor):
     actor = (actor or "ERP").strip()
-    return database.query(User).filter(User.username == actor, User.active.is_(True)).first() or database.query(User).filter(User.active.is_(True)).first()
+    supplied_id = str(request.headers.get("X-ERP-Actor-ID") or "").strip()
+    if supplied_id:
+        if not supplied_id.isdigit():
+            return None
+        user = database.get(User, int(supplied_id))
+        if not user or not user.active:
+            return None
+        if actor and actor != "ERP" and user.username != actor:
+            return None
+        return user
+    return (
+        database.query(User)
+        .filter(User.username == actor, User.active.is_(True))
+        .one_or_none()
+    )
 
 
 @app.route("/api/erp/internal/purchase-orders", methods=["POST"])
@@ -1766,6 +2334,17 @@ def erp_internal_dashboard():
     return jsonify({"ok": True, **purchase_orders_dashboard(db())})
 
 
+@app.route("/api/erp/internal/work-orders/<work_order_id>/materials")
+@erp_feature_required
+def erp_internal_work_order_materials(work_order_id):
+    if not _erp_internal_allowed():
+        return jsonify({"ok": False, "error": "Servico nao autorizado."}), 401
+    try:
+        return jsonify({"ok": True, **work_order_materials(db(), work_order_id)})
+    except ValueError as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 404
+
+
 @app.route("/api/erp/internal/reports/purchases-inspections.xlsx")
 @erp_feature_required
 def erp_internal_purchase_inspection_report():
@@ -1782,6 +2361,7 @@ def erp_internal_purchase_inspection_report():
 
 @app.route("/erp/relatorios/compras-inspecao.xlsx")
 @login_required
+@permission_required("estoque.reports.view")
 @erp_feature_required
 def erp_purchase_inspection_report():
     output, _, _ = build_purchase_inspection_report(db())

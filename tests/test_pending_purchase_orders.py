@@ -11,6 +11,7 @@ APP_DIR = Path(__file__).resolve().parents[1] / "estoque_app"
 sys.path.insert(0, str(APP_DIR))
 
 from services.erp_service import (  # noqa: E402
+    pending_purchase_order_lines_by_sku,
     pending_purchase_orders,
     purchase_orders_dashboard,
 )
@@ -24,6 +25,7 @@ PURCHASE_ORDER_SCHEMA = (
         categoria text not null,
         fornecedor_nome text not null,
         status text not null,
+        data_emissao date,
         data_necessidade date,
         destino text not null default '',
         valor_total_pedido numeric not null default 0
@@ -149,6 +151,43 @@ class PendingPurchaseOrdersTest(unittest.TestCase):
                 for row in rows
             },
         )
+
+    def test_sku_suggestion_only_lists_receivable_matching_lines(self):
+        self.add_order("matching", "EMITIDA")
+        self.add_line("matching", 1, 10, 4, "PARCIALMENTE_RECEBIDA")
+        self.add_order("other-sku", "EMITIDA")
+        self.add_line("other-sku", 1, 3, 0, "PENDENTE")
+        self.add_order("closed", "RECEBIDA")
+        self.add_line("closed", 1, 9, 0, "PENDENTE")
+        self.db.execute(
+            text(
+                "update erp_purchase_order_lines "
+                "set sku_id=77,sku_codigo='MAT-001' where purchase_order_id='matching'"
+            )
+        )
+        self.db.execute(
+            text(
+                "update erp_purchase_order_lines "
+                "set sku_id=88,sku_codigo='OUTRO' where purchase_order_id='other-sku'"
+            )
+        )
+        self.db.execute(
+            text(
+                "update erp_purchase_order_lines "
+                "set sku_id=77,sku_codigo='MAT-001' where purchase_order_id='closed'"
+            )
+        )
+        self.db.commit()
+
+        rows = pending_purchase_order_lines_by_sku(
+            self.db,
+            sku_id=77,
+            sku_code="MAT-001",
+        )
+
+        self.assertEqual(1, len(rows))
+        self.assertEqual("matching", rows[0]["purchase_order_id"])
+        self.assertEqual(Decimal("6"), Decimal(str(rows[0]["quantidade_pendente"])))
 
 
 class _FakeRow:

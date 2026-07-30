@@ -6,11 +6,13 @@
         <h1>Cadastro de CODs</h1>
         <p>Base mestre sincronizada com o ModuloCadastro no Supabase.</p>
     </div>
+    {% if can('estoque.skus.manage') %}
     <div class="actions">
         <form method="post" action="{{ url_for('atualizar_skus_local') }}">
             <button class="btn primary" type="submit">Sincronizar Cadastro</button>
         </form>
     </div>
+    {% endif %}
 </section>
 
 <section class="panel">
@@ -45,7 +47,7 @@
                     <th>Localizacao</th>
                     <th>Minimo</th>
                     <th>Status</th>
-                    <th></th>
+                    {% if can('estoque.skus.manage') %}<th></th>{% endif %}
                 </tr>
             </thead>
             <tbody>
@@ -59,10 +61,12 @@
                     <td>{{ sku.localizacao or "" }}</td>
                     <td>{{ fmt_min(sku.estoque_minimo) }}</td>
                     <td><span class="badge {{ 'ok' if sku.active else 'off' }}">{{ "Ativo" if sku.active else "Inativo" }}</span></td>
+                    {% if can('estoque.skus.manage') %}
                     <td><a class="btn small" href="{{ url_for('sku_form', sku_id=sku.id) }}">Editar</a></td>
+                    {% endif %}
                 </tr>
                 {% else %}
-                <tr><td colspan="9" class="empty">Nenhum COD cadastrado.</td></tr>
+                <tr><td colspan="{{ 9 if can('estoque.skus.manage') else 8 }}" class="empty">Nenhum COD cadastrado.</td></tr>
                 {% endfor %}
             </tbody>
         </table>

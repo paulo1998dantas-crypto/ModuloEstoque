@@ -1,4 +1,5 @@
 from datetime import datetime
+from uuid import uuid4
 
 from sqlalchemy import (
     Boolean,
@@ -6,6 +7,7 @@ from sqlalchemy import (
     DateTime,
     ForeignKey,
     Integer,
+    JSON,
     Numeric,
     String,
     Text,
@@ -29,9 +31,115 @@ class User(Base):
     password_hash = Column(String(255), nullable=False)
     role = Column(String(20), nullable=False, default="OPERADOR")
     active = Column(Boolean, nullable=False, default=True)
+    auth_version = Column(Integer, nullable=False, default=1)
     created_at = Column(DateTime, nullable=False, default=now_utc)
 
-    movements = relationship("Movement", back_populates="usuario")
+    movements = relationship(
+        "Movement",
+        foreign_keys="Movement.usuario_id",
+        back_populates="usuario",
+    )
+
+
+class ErpRole(Base):
+    __tablename__ = "erp_roles"
+
+    code = Column(String(40), primary_key=True)
+    name = Column(String(100), nullable=False)
+    description = Column(Text, nullable=False, default="")
+    active = Column(Boolean, nullable=False, default=True)
+    created_at = Column(DateTime, nullable=False, default=now_utc)
+    updated_at = Column(DateTime, nullable=False, default=now_utc, onupdate=now_utc)
+
+
+class ErpPermission(Base):
+    __tablename__ = "erp_permissions"
+
+    code = Column(String(120), primary_key=True)
+    module = Column(String(40), nullable=False, index=True)
+    description = Column(Text, nullable=False, default="")
+    created_at = Column(DateTime, nullable=False, default=now_utc)
+
+
+class ErpRolePermission(Base):
+    __tablename__ = "erp_role_permissions"
+
+    role_code = Column(
+        String(40),
+        ForeignKey(
+            "erp_roles.code",
+            onupdate="CASCADE",
+            ondelete="CASCADE",
+        ),
+        primary_key=True,
+    )
+    permission_code = Column(
+        String(120),
+        ForeignKey("erp_permissions.code", ondelete="CASCADE"),
+        primary_key=True,
+    )
+
+
+class ErpUserRole(Base):
+    __tablename__ = "erp_user_roles"
+
+    user_id = Column(
+        Integer,
+        ForeignKey("users.id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    role_code = Column(
+        String(40),
+        ForeignKey(
+            "erp_roles.code",
+            onupdate="CASCADE",
+            ondelete="RESTRICT",
+        ),
+        primary_key=True,
+    )
+    assigned_by = Column(Integer, ForeignKey("users.id"), nullable=True)
+    assigned_at = Column(DateTime, nullable=False, default=now_utc)
+
+
+class ErpUserPermissionOverride(Base):
+    __tablename__ = "erp_user_permission_overrides"
+
+    user_id = Column(
+        Integer,
+        ForeignKey("users.id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    permission_code = Column(
+        String(120),
+        ForeignKey("erp_permissions.code", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    allowed = Column(Boolean, nullable=False)
+    reason = Column(Text, nullable=False, default="")
+    assigned_by = Column(Integer, ForeignKey("users.id"), nullable=True)
+    assigned_at = Column(DateTime, nullable=False, default=now_utc)
+
+
+class ErpAuthAuditEvent(Base):
+    __tablename__ = "erp_auth_audit_events"
+
+    id = Column(
+        Uuid(as_uuid=False),
+        primary_key=True,
+        default=lambda: str(uuid4()),
+    )
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    actor_user_id = Column(
+        Integer,
+        ForeignKey("users.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    action = Column(String(80), nullable=False)
+    before_data = Column(JSON, nullable=False, default=dict)
+    after_data = Column(JSON, nullable=False, default=dict)
+    reason = Column(Text, nullable=False, default="")
+    origin_app = Column(String(40), nullable=False, default="ESTOQUE")
+    created_at = Column(DateTime, nullable=False, default=now_utc)
 
 
 class SKU(Base):
@@ -86,11 +194,69 @@ class Movement(Base):
     source_id = Column(Uuid(as_uuid=False), nullable=True, index=True)
     source_line_id = Column(Uuid(as_uuid=False), nullable=True, index=True)
     idempotency_key = Column(String(160), nullable=True, unique=True, index=True)
+    work_order_id = Column(Uuid(as_uuid=False), nullable=True, index=True)
+    context_kind = Column(String(20), nullable=True)
+    setor = Column(String(120), nullable=True)
+    reference_text = Column(String(255), nullable=True)
+    link_updated_at = Column(DateTime, nullable=True)
+    link_updated_by = Column(Integer, ForeignKey("users.id"), nullable=True)
+    movement_status = Column(String(20), nullable=False, default="ATIVA", index=True)
+    canceled_at = Column(DateTime, nullable=True)
+    canceled_by = Column(Integer, ForeignKey("users.id"), nullable=True)
+    cancel_reason = Column(Text, nullable=True)
+    reversal_movement_id = Column(Integer, ForeignKey("movements.id"), nullable=True)
+    operation_id = Column(Uuid(as_uuid=False), nullable=True, index=True)
+    parent_movement_id = Column(
+        Integer,
+        ForeignKey("movements.id"),
+        nullable=True,
+        index=True,
+    )
     created_at = Column(DateTime, nullable=False, default=now_utc, index=True)
 
     sku = relationship("SKU", back_populates="movements")
-    usuario = relationship("User", back_populates="movements")
-    related_movement = relationship("Movement", remote_side=[id], backref="related_movements")
+    usuario = relationship("User", foreign_keys=[usuario_id], back_populates="movements")
+    related_movement = relationship(
+        "Movement",
+        foreign_keys=[related_movement_id],
+        remote_side=[id],
+        backref="related_movements",
+    )
+    cancellation_reversal = relationship(
+        "Movement",
+        foreign_keys=[reversal_movement_id],
+        remote_side=[id],
+        post_update=True,
+    )
+    parent_movement = relationship(
+        "Movement",
+        foreign_keys=[parent_movement_id],
+        remote_side=[id],
+        backref="operation_children",
+    )
+
+
+class ErpMovementReferenceHistory(Base):
+    __tablename__ = "erp_movement_reference_history"
+
+    id = Column(Uuid(as_uuid=False), primary_key=True)
+    movement_id = Column(
+        Integer,
+        ForeignKey("movements.id", ondelete="RESTRICT"),
+        nullable=False,
+        index=True,
+    )
+    previous_work_order_id = Column(Uuid(as_uuid=False), nullable=True)
+    new_work_order_id = Column(Uuid(as_uuid=False), nullable=True)
+    previous_context_kind = Column(String(20), nullable=True)
+    new_context_kind = Column(String(20), nullable=True)
+    previous_setor = Column(String(120), nullable=True)
+    new_setor = Column(String(120), nullable=True)
+    previous_reference_text = Column(String(255), nullable=True)
+    new_reference_text = Column(String(255), nullable=True)
+    changed_by = Column(Integer, ForeignKey("users.id"), nullable=True)
+    reason = Column(Text, nullable=False, default="")
+    created_at = Column(DateTime, nullable=False, default=now_utc)
 
 
 class DashboardMovementCache(Base):

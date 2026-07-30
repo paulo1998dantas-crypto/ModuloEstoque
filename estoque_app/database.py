@@ -63,8 +63,79 @@ def migrate_sku_schema():
             row[1]: row
             for row in connection.execute(text("PRAGMA table_info(movements)"))
         }
-        if "related_movement_id" not in movement_columns:
-            connection.execute(text("ALTER TABLE movements ADD COLUMN related_movement_id INTEGER"))
+        movement_additions = {
+            "related_movement_id": "INTEGER",
+            "source_type": "VARCHAR(40)",
+            "source_id": "CHAR(32)",
+            "source_line_id": "CHAR(32)",
+            "idempotency_key": "VARCHAR(160)",
+            "work_order_id": "CHAR(32)",
+            "context_kind": "VARCHAR(20)",
+            "setor": "VARCHAR(120)",
+            "reference_text": "VARCHAR(255)",
+            "link_updated_at": "DATETIME",
+            "link_updated_by": "INTEGER",
+            "movement_status": "VARCHAR(20) NOT NULL DEFAULT 'ATIVA'",
+            "canceled_at": "DATETIME",
+            "canceled_by": "INTEGER",
+            "cancel_reason": "TEXT",
+            "reversal_movement_id": "INTEGER",
+            "operation_id": "CHAR(32)",
+            "parent_movement_id": "INTEGER",
+        }
+        for column_name, column_type in movement_additions.items():
+            if column_name not in movement_columns:
+                connection.execute(
+                    text(
+                        f"ALTER TABLE movements ADD COLUMN "
+                        f"{column_name} {column_type}"
+                    )
+                )
+        user_columns = {
+            row[1]: row
+            for row in connection.execute(text("PRAGMA table_info(users)"))
+        }
+        if "auth_version" not in user_columns:
+            connection.execute(
+                text(
+                    "ALTER TABLE users ADD COLUMN "
+                    "auth_version INTEGER NOT NULL DEFAULT 1"
+                )
+            )
+        connection.execute(
+            text(
+                "UPDATE movements SET context_kind='LEGACY' "
+                "WHERE context_kind IS NULL OR trim(context_kind)=''"
+            )
+        )
+        connection.execute(
+            text(
+                "UPDATE movements SET movement_status='ATIVA' "
+                "WHERE movement_status IS NULL OR trim(movement_status)=''"
+            )
+        )
+        movement_indexes = (
+            "CREATE INDEX IF NOT EXISTS ix_movements_related_movement_id "
+            "ON movements (related_movement_id)",
+            "CREATE INDEX IF NOT EXISTS ix_movements_source_type "
+            "ON movements (source_type)",
+            "CREATE INDEX IF NOT EXISTS ix_movements_source_id "
+            "ON movements (source_id)",
+            "CREATE INDEX IF NOT EXISTS ix_movements_source_line_id "
+            "ON movements (source_line_id)",
+            "CREATE UNIQUE INDEX IF NOT EXISTS ix_movements_idempotency_key "
+            "ON movements (idempotency_key)",
+            "CREATE INDEX IF NOT EXISTS ix_movements_work_order_id "
+            "ON movements (work_order_id)",
+            "CREATE INDEX IF NOT EXISTS ix_movements_movement_status "
+            "ON movements (movement_status)",
+            "CREATE INDEX IF NOT EXISTS ix_movements_operation_id "
+            "ON movements (operation_id)",
+            "CREATE INDEX IF NOT EXISTS ix_movements_parent_movement_id "
+            "ON movements (parent_movement_id)",
+        )
+        for statement in movement_indexes:
+            connection.execute(text(statement))
         estoque_minimo = skus_columns.get("estoque_minimo")
         if not estoque_minimo or not estoque_minimo[3]:
             return
