@@ -201,7 +201,7 @@ def correct_purchase_order_number(db, order_id, actor, data):
                            ),
                            atualizado_por=:actor,
                            updated_at=now()
-                     where id=cast(:document_id as uuid)
+                     where id=cast(:document_id as bigint)
                        and lower(coalesce(tipo,''))='oc'
                        and erp_purchase_order_id=cast(:order_id as uuid)
                 """), {
