@@ -1,6 +1,7 @@
 import logging
 import os
 import sys
+from functools import wraps
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
 from urllib.parse import urlsplit
@@ -30,6 +31,7 @@ from auth import (
 from config import APP_ROOT, BASE_DIR, Config, EXPORTS_DIR, LOGS_DIR
 from database import SessionLocal, init_db
 from models import InventoryCount, LabelPrintJob, Movement, SKU, StockBalance, User, now_utc
+from purchase_report import build_purchase_inspection_report
 from services.backup_service import create_backup
 from services.etiqueta_service import (
     create_label_job,
@@ -94,6 +96,21 @@ from services.estoque_service import (
     to_optional_decimal,
     create_or_update_sku,
 )
+from services.erp_service import (
+    cancel_purchase_order,
+    cancel_purchase_order_by_idempotency_key,
+    close_purchase_order_by_idempotency_key,
+    close_purchase_order_financial,
+    close_purchase_order_technical,
+    confirm_receipt,
+    create_purchase_order,
+    pending_purchase_orders,
+    purchase_order_financial_detail,
+    purchase_orders_dashboard,
+    register_purchase_order_financial_entry,
+    reverse_receipt,
+    sync_legacy_purchase_order,
+)
 
 
 app = Flask(
@@ -116,6 +133,22 @@ def configure_logging():
 configure_logging()
 init_db()
 ensure_initial_data()
+
+
+def erp_feature_enabled():
+    """The new cross-module flow remains opt-in until the cutover."""
+    return os.environ.get("ERP_FEATURE_FLAG", "false").strip().lower() in {"1", "true", "yes", "sim", "on"}
+
+
+def erp_feature_required(view):
+    @wraps(view)
+    def wrapped(*args, **kwargs):
+        if erp_feature_enabled():
+            return view(*args, **kwargs)
+        if request.path.startswith("/api/"):
+            return jsonify({"ok": False, "error": "Integração ERP desativada pela feature flag."}), 404
+        return "Integração ERP desativada pela feature flag.", 404
+    return wrapped
 
 
 @app.teardown_appcontext
@@ -1503,6 +1536,273 @@ def download_template(name):
     if not path.exists():
         create_template_files(BASE_DIR)
     return send_file(path, as_attachment=True)
+
+
+# Backend contract used by Suprimentos and by the receipt screen.  These routes
+# are deliberately server-side only; the browser never creates a stock movement.
+@app.route("/api/erp/purchase-orders", methods=["POST"])
+@login_required
+@erp_feature_required
+def erp_create_purchase_order():
+    user = current_user()
+    try:
+        result = create_purchase_order(db(), request.get_json(silent=True) or {}, user.username)
+        return jsonify({"ok": True, **result}), 201 if not result["replayed"] else 200
+    except ValueError as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 400
+
+
+@app.route("/api/erp/receipts/pending")
+@login_required
+@erp_feature_required
+def erp_pending_receipts():
+    return jsonify({"ok": True, "orders": pending_purchase_orders(db())})
+
+@app.route("/erp/recebimentos")
+@login_required
+@erp_feature_required
+def erp_receipts_screen():
+    return render_template("erp_recebimentos.html")
+
+
+@app.route("/api/erp/receipts/confirm", methods=["POST"])
+@login_required
+@erp_feature_required
+def erp_confirm_receipt():
+    user = current_user()
+    try:
+        result = confirm_receipt(db(), request.get_json(silent=True) or {}, user.username, user.id)
+        return jsonify({"ok": True, **result}), 201 if not result["replayed"] else 200
+    except ValueError as exc:
+        db().rollback()
+        return jsonify({"ok": False, "error": str(exc)}), 400
+    except Exception:
+        db().rollback()
+        app.logger.exception("Falha ao confirmar recebimento ERP")
+        return jsonify({"ok": False, "error": "Falha transacional ao confirmar recebimento."}), 500
+
+
+@app.route("/api/erp/purchase-orders/<order_id>/cancel", methods=["POST"])
+@login_required
+@roles_required("ADM")
+@erp_feature_required
+def erp_cancel_purchase_order(order_id):
+    try:
+        cancel_purchase_order(db(), order_id, current_user().username, (request.get_json(silent=True) or {}).get("motivo", ""))
+        return jsonify({"ok": True})
+    except ValueError as exc: return jsonify({"ok": False,"error":str(exc)}),400
+
+
+@app.route("/api/erp/purchase-orders/<order_id>/technical-close", methods=["POST"])
+@login_required
+@roles_required("ADM")
+@erp_feature_required
+def erp_technical_close_purchase_order(order_id):
+    payload = request.get_json(silent=True) or {}
+    try:
+        return jsonify({"ok": True, **close_purchase_order_technical(
+            db(), order_id, current_user().username, payload.get("motivo", "")
+        )})
+    except ValueError as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 400
+
+
+@app.route("/api/erp/purchase-orders/<order_id>/financial-close", methods=["POST"])
+@login_required
+@roles_required("ADM")
+@erp_feature_required
+def erp_financial_close_purchase_order(order_id):
+    payload = request.get_json(silent=True) or {}
+    try:
+        if payload.get("lines"):
+            result = register_purchase_order_financial_entry(
+                db(), order_id, current_user().username, payload
+            )
+        else:
+            result = close_purchase_order_financial(
+                db(), order_id, current_user().username, payload.get("motivo", "")
+            )
+        return jsonify({"ok": True, **result})
+    except ValueError as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 400
+
+
+@app.route("/api/erp/purchase-orders/<order_id>/financial-detail")
+@login_required
+@roles_required("ADM")
+@erp_feature_required
+def erp_financial_detail_purchase_order(order_id):
+    try:
+        return jsonify({"ok": True, **purchase_order_financial_detail(db(), order_id)})
+    except ValueError as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 404
+
+
+@app.route("/api/erp/receipts/<receipt_id>/reverse", methods=["POST"])
+@login_required
+@roles_required("ADM")
+@erp_feature_required
+def erp_reverse_receipt(receipt_id):
+    user=current_user()
+    try:
+        reverse_receipt(db(), receipt_id, user.username, user.id, (request.get_json(silent=True) or {}).get("motivo", ""))
+        return jsonify({"ok": True})
+    except ValueError as exc: return jsonify({"ok":False,"error":str(exc)}),400
+
+
+def _erp_internal_allowed():
+    expected = os.environ.get("ERP_BACKEND_TOKEN", "").strip()
+    supplied = request.headers.get("X-ERP-Backend-Token", "").strip()
+    return bool(expected) and supplied == expected
+
+
+def _erp_actor_user(database, actor):
+    actor = (actor or "ERP").strip()
+    return database.query(User).filter(User.username == actor, User.active.is_(True)).first() or database.query(User).filter(User.active.is_(True)).first()
+
+
+@app.route("/api/erp/internal/purchase-orders", methods=["POST"])
+@erp_feature_required
+def erp_internal_create_purchase_order():
+    if not _erp_internal_allowed(): return jsonify({"ok": False, "error": "Servico nao autorizado."}), 401
+    database = db(); actor = request.headers.get("X-ERP-Actor", "ERP")
+    try:
+        return jsonify({"ok": True, **create_purchase_order(database, request.get_json(silent=True) or {}, actor)})
+    except ValueError as exc: return jsonify({"ok": False, "error": str(exc)}), 400
+
+
+@app.route("/api/erp/internal/purchase-orders/legacy-sync", methods=["POST"])
+@erp_feature_required
+def erp_internal_sync_legacy_purchase_order():
+    if not _erp_internal_allowed(): return jsonify({"ok": False, "error": "Servico nao autorizado."}), 401
+    database = db(); actor = request.headers.get("X-ERP-Actor", "ERP")
+    try:
+        return jsonify({"ok": True, **sync_legacy_purchase_order(database, request.get_json(silent=True) or {}, actor)})
+    except ValueError as exc:
+        database.rollback()
+        return jsonify({"ok": False, "error": str(exc)}), 400
+
+
+@app.route("/api/erp/internal/purchase-orders/legacy-cancel", methods=["POST"])
+@erp_feature_required
+def erp_internal_cancel_legacy_purchase_order():
+    if not _erp_internal_allowed(): return jsonify({"ok": False, "error": "Servico nao autorizado."}), 401
+    payload = request.get_json(silent=True) or {}
+    try:
+        return jsonify({"ok": True, **cancel_purchase_order_by_idempotency_key(
+            db(), payload.get("idempotency_key"), request.headers.get("X-ERP-Actor", "ERP"), payload.get("motivo", "")
+        )})
+    except ValueError as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 400
+
+
+@app.route("/api/erp/internal/purchase-orders/legacy-close", methods=["POST"])
+@erp_feature_required
+def erp_internal_close_legacy_purchase_order():
+    if not _erp_internal_allowed(): return jsonify({"ok": False, "error": "Servico nao autorizado."}), 401
+    payload = request.get_json(silent=True) or {}
+    try:
+        return jsonify({"ok": True, **close_purchase_order_by_idempotency_key(
+            db(), payload.get("idempotency_key"), request.headers.get("X-ERP-Actor", "ERP"), payload.get("motivo", "")
+        )})
+    except ValueError as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 400
+
+
+@app.route("/api/erp/internal/purchase-orders/<order_id>/technical-close", methods=["POST"])
+@erp_feature_required
+def erp_internal_technical_close_purchase_order(order_id):
+    if not _erp_internal_allowed(): return jsonify({"ok": False, "error": "Servico nao autorizado."}), 401
+    payload = request.get_json(silent=True) or {}
+    try:
+        return jsonify({"ok": True, **close_purchase_order_technical(
+            db(), order_id, request.headers.get("X-ERP-Actor", "ERP"), payload.get("motivo", "")
+        )})
+    except ValueError as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 400
+
+
+@app.route("/api/erp/internal/purchase-orders/<order_id>/financial-close", methods=["POST"])
+@erp_feature_required
+def erp_internal_financial_close_purchase_order(order_id):
+    if not _erp_internal_allowed(): return jsonify({"ok": False, "error": "Servico nao autorizado."}), 401
+    payload = request.get_json(silent=True) or {}
+    try:
+        if payload.get("lines"):
+            result = register_purchase_order_financial_entry(
+                db(), order_id, request.headers.get("X-ERP-Actor", "ERP"), payload
+            )
+        else:
+            result = close_purchase_order_financial(
+                db(), order_id, request.headers.get("X-ERP-Actor", "ERP"), payload.get("motivo", "")
+            )
+        return jsonify({"ok": True, **result})
+    except ValueError as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 400
+
+
+@app.route("/api/erp/internal/purchase-orders/<order_id>/financial-detail")
+@erp_feature_required
+def erp_internal_financial_detail_purchase_order(order_id):
+    if not _erp_internal_allowed():
+        return jsonify({"ok": False, "error": "Servico nao autorizado."}), 401
+    try:
+        return jsonify({"ok": True, **purchase_order_financial_detail(db(), order_id)})
+    except ValueError as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 404
+
+
+@app.route("/api/erp/internal/receipts/pending")
+@erp_feature_required
+def erp_internal_pending_receipts():
+    if not _erp_internal_allowed(): return jsonify({"ok": False, "error": "Servico nao autorizado."}), 401
+    return jsonify({"ok": True, "orders": pending_purchase_orders(db())})
+
+
+@app.route("/api/erp/internal/dashboard")
+@erp_feature_required
+def erp_internal_dashboard():
+    if not _erp_internal_allowed(): return jsonify({"ok": False, "error": "Servico nao autorizado."}), 401
+    return jsonify({"ok": True, **purchase_orders_dashboard(db())})
+
+
+@app.route("/api/erp/internal/reports/purchases-inspections.xlsx")
+@erp_feature_required
+def erp_internal_purchase_inspection_report():
+    if not _erp_internal_allowed():
+        return jsonify({"ok": False, "error": "Servico nao autorizado."}), 401
+    output, _, _ = build_purchase_inspection_report(db())
+    return send_file(
+        output,
+        as_attachment=True,
+        download_name="Compras_Bancos_e_Inspecao_Recebimento.xlsx",
+        mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    )
+
+
+@app.route("/erp/relatorios/compras-inspecao.xlsx")
+@login_required
+@erp_feature_required
+def erp_purchase_inspection_report():
+    output, _, _ = build_purchase_inspection_report(db())
+    return send_file(
+        output,
+        as_attachment=True,
+        download_name="Compras_Bancos_e_Inspecao_Recebimento.xlsx",
+        mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    )
+
+
+@app.route("/api/erp/internal/receipts/confirm", methods=["POST"])
+@erp_feature_required
+def erp_internal_confirm_receipt():
+    if not _erp_internal_allowed(): return jsonify({"ok": False, "error": "Servico nao autorizado."}), 401
+    database = db(); actor = request.headers.get("X-ERP-Actor", "ERP"); user = _erp_actor_user(database, actor)
+    if not user: return jsonify({"ok": False, "error": "Usuario operacional nao encontrado."}), 409
+    try:
+        return jsonify({"ok": True, **confirm_receipt(database, request.get_json(silent=True) or {}, actor, user.id)})
+    except ValueError as exc:
+        database.rollback(); return jsonify({"ok": False, "error": str(exc)}), 400
 
 
 if __name__ == "__main__":

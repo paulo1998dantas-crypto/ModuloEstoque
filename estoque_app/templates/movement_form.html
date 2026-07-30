@@ -7,11 +7,16 @@
         <h1>{{ "Entrada de estoque" if is_entry else "Empenho de estoque" }}</h1>
         <p>{{ "Leia o codigo de barras do COD, confira o item e confirme a quantidade." if is_entry else "Registre a quantidade empenhada; a baixa real sera feita por planilha de consumo." }}</p>
     </div>
-    {% if not is_entry %}
-    <a class="btn secondary" href="{{ url_for('import_commitments') }}">Importar empenhos</a>
-    {% elif current_user.role == 'ADM' %}
-    <a class="btn secondary" href="{{ url_for('import_bom') }}">Sincronizar B.O.M</a>
-    {% endif %}
+    <div class="actions">
+        {% if is_entry %}
+        <a class="btn primary" href="{{ url_for('erp_receipts_screen') }}">Inspeção de Recebimento</a>
+            {% if current_user.role == 'ADM' %}
+            <a class="btn secondary" href="{{ url_for('import_bom') }}">Sincronizar B.O.M</a>
+            {% endif %}
+        {% else %}
+        <a class="btn secondary" href="{{ url_for('import_commitments') }}">Importar empenhos</a>
+        {% endif %}
+    </div>
 </section>
 
 <section class="scan-layout">

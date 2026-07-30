@@ -81,6 +81,10 @@ class Movement(Base):
     related_movement_id = Column(Integer, ForeignKey("movements.id"), nullable=True, index=True)
     documento = Column(String(120), nullable=True)
     observacao = Column(Text, nullable=True)
+    source_type = Column(String(40), nullable=True, index=True)
+    source_id = Column(String(36), nullable=True, index=True)
+    source_line_id = Column(String(36), nullable=True, index=True)
+    idempotency_key = Column(String(160), nullable=True, unique=True, index=True)
     created_at = Column(DateTime, nullable=False, default=now_utc, index=True)
 
     sku = relationship("SKU", back_populates="movements")
