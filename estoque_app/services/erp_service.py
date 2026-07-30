@@ -6,7 +6,7 @@ from uuid import uuid4
 from sqlalchemy import text
 
 from models import Movement, SKU
-from services.estoque_service import register_movement, to_decimal
+from services.estoque_service import get_sku_by_code, register_movement, to_decimal
 
 
 def _id():
@@ -15,6 +15,17 @@ def _id():
 
 def _row(row):
     return dict(row._mapping) if row else None
+
+
+def _resolve_sku_reference(db, sku_id, sku_code):
+    """Resolve a missing internal id from an active stock SKU code."""
+    normalized_code = str(sku_code or "").strip()
+    if sku_id:
+        return sku_id, normalized_code or None
+    sku = get_sku_by_code(db, normalized_code, active_only=True)
+    if sku:
+        return sku.id, sku.sku
+    return None, normalized_code or None
 
 
 def create_purchase_order(db, data, actor):
@@ -36,7 +47,10 @@ def create_purchase_order(db, data, actor):
         total += qty * to_decimal(line.get("valor_unitario_pedido"))
     db.execute(text("""insert into erp_purchase_orders (id,numero_oc,categoria,fornecedor_id,fornecedor_nome,data_emissao,criado_por,status,destino,frete,data_necessidade,observacoes,valor_total_pedido,idempotency_key) values (:id,:numero,:categoria,:fornecedor_id,:fornecedor_nome,:emissao,:actor,'EMITIDA',:destino,:frete,:necessidade,:obs,:total,:key)"""), {"id":order_id,"numero":str(data.get("numero_oc") or "").strip() or order_id[:8],"categoria":str(data.get("categoria") or "GERAL").upper(),"fornecedor_id":data.get("fornecedor_id"),"fornecedor_nome":str(data.get("fornecedor_nome") or ""),"emissao":data.get("data_emissao") or datetime.utcnow(),"actor":actor,"destino":str(data.get("destino") or ""),"frete":to_decimal(data.get("frete")),"necessidade":data.get("data_necessidade") or None,"obs":str(data.get("observacoes") or ""),"total":total,"key":key})
     for number, line in enumerate(lines, 1):
-        db.execute(text("""insert into erp_purchase_order_lines (id,purchase_order_id,numero_linha,sku_id,sku_codigo,descricao_original,unidade,quantidade_pedida,valor_unitario_pedido,destino,data_necessidade) values (:id,:order,:number,:sku_id,:sku_codigo,:descricao,:unidade,:qty,:value,:destino,:necessidade)"""), {"id":_id(),"order":order_id,"number":number,"sku_id":line.get("sku_id"),"sku_codigo":line.get("sku_codigo"),"descricao":str(line.get("descricao_original") or line.get("descricao") or "ITEM SEM DESCRICAO"),"unidade":str(line.get("unidade") or "UN"),"qty":to_decimal(line.get("quantidade_pedida")),"value":to_decimal(line.get("valor_unitario_pedido")),"destino":str(line.get("destino") or data.get("destino") or ""),"necessidade":line.get("data_necessidade") or data.get("data_necessidade") or None})
+        sku_id, sku_code = _resolve_sku_reference(
+            db, line.get("sku_id"), line.get("sku_codigo")
+        )
+        db.execute(text("""insert into erp_purchase_order_lines (id,purchase_order_id,numero_linha,sku_id,sku_codigo,descricao_original,unidade,quantidade_pedida,valor_unitario_pedido,destino,data_necessidade) values (:id,:order,:number,:sku_id,:sku_codigo,:descricao,:unidade,:qty,:value,:destino,:necessidade)"""), {"id":_id(),"order":order_id,"number":number,"sku_id":sku_id,"sku_codigo":sku_code,"descricao":str(line.get("descricao_original") or line.get("descricao") or "ITEM SEM DESCRICAO"),"unidade":str(line.get("unidade") or "UN"),"qty":to_decimal(line.get("quantidade_pedida")),"value":to_decimal(line.get("valor_unitario_pedido")),"destino":str(line.get("destino") or data.get("destino") or ""),"necessidade":line.get("data_necessidade") or data.get("data_necessidade") or None})
     db.execute(text("insert into erp_audit_events(entity_type,entity_id,action,actor,after_data) values ('PURCHASE_ORDER',:id,'EMITIDA',:actor,jsonb_build_object('numero_oc',cast(:numero as text)))"), {"id":order_id,"actor":actor,"numero":str(data.get("numero_oc") or "")})
     db.commit(); return {"id":order_id,"replayed":False}
 
@@ -84,11 +98,14 @@ def sync_legacy_purchase_order(db, data, actor):
     })
     db.execute(text("delete from erp_purchase_order_lines where purchase_order_id=:id"), {"id": order_id})
     for number, line in enumerate(lines, 1):
+        sku_id, sku_code = _resolve_sku_reference(
+            db, line.get("sku_id"), line.get("sku_codigo")
+        )
         db.execute(text("""insert into erp_purchase_order_lines
             (id,purchase_order_id,numero_linha,sku_id,sku_codigo,descricao_original,unidade,quantidade_pedida,valor_unitario_pedido,destino,data_necessidade)
             values (:id,:order,:number,:sku_id,:sku_codigo,:descricao,:unidade,:qty,:value,:destino,:necessidade)"""), {
-            "id": _id(), "order": order_id, "number": number, "sku_id": line.get("sku_id"),
-            "sku_codigo": line.get("sku_codigo"), "descricao": str(line.get("descricao_original") or line.get("descricao") or "ITEM SEM DESCRICAO"),
+            "id": _id(), "order": order_id, "number": number, "sku_id": sku_id,
+            "sku_codigo": sku_code, "descricao": str(line.get("descricao_original") or line.get("descricao") or "ITEM SEM DESCRICAO"),
             "unidade": str(line.get("unidade") or "UN"), "qty": to_decimal(line.get("quantidade_pedida")),
             "value": to_decimal(line.get("valor_unitario_pedido")), "destino": str(line.get("destino") or data.get("destino") or ""),
             "necessidade": line.get("data_necessidade") or data.get("data_necessidade") or None,
@@ -451,7 +468,11 @@ def confirm_receipt(db, data, actor, user_id):
         result=str(input_line.get("resultado_inspecao") or "A").upper()
         if result not in {'A','AC','D'} or min(physical,approved,conditional,rejected)<0 or approved+conditional+rejected>physical: raise ValueError("Quantidades ou resultado de inspecao invalidos.")
         if po_line and physical > Decimal(str(po_line['quantidade_pedida']))-Decimal(str(po_line['quantidade_recebida'])) and not data.get('allow_overreceipt'): raise ValueError("Recebimento acima do saldo pendente.")
-        sku_id=input_line.get('sku_id') or (po_line and po_line['sku_id']); sku_code=input_line.get('sku_codigo') or (po_line and po_line['sku_codigo'])
+        sku_id, sku_code = _resolve_sku_reference(
+            db,
+            input_line.get('sku_id') or (po_line and po_line['sku_id']),
+            input_line.get('sku_codigo') or (po_line and po_line['sku_codigo']),
+        )
         if approved and not sku_id: raise ValueError("SKU e obrigatorio para quantidade aprovada em estoque.")
         line_id=_id(); pending=(Decimal(str(po_line['quantidade_pedida']))-Decimal(str(po_line['quantidade_recebida']))) if po_line else Decimal('0')
         db.execute(text("""insert into erp_goods_receipt_lines(id,goods_receipt_id,purchase_order_line_id,sku_id,sku_codigo,quantidade_esperada,quantidade_recebida_anterior,saldo_pendente,quantidade_fisica,quantidade_aprovada,quantidade_condicional,quantidade_rejeitada,valor_unitario_pedido,valor_unitario_real,certificado_exigido,certificado_apresentado,validade_certificado,resultado_inspecao,justificativa_divergencia) values(:id,:receipt,:po_line,:sku_id,:sku_code,:expected,:previous,:pending,:physical,:approved,:conditional,:rejected,:ordered_value,:actual_value,:cert_required,:cert_presented,:cert_expiry,:result,:reason)"""),{"id":line_id,"receipt":receipt_id,"po_line":po_line_id,"sku_id":sku_id,"sku_code":sku_code,"expected":po_line['quantidade_pedida'] if po_line else 0,"previous":po_line['quantidade_recebida'] if po_line else 0,"pending":pending,"physical":physical,"approved":approved,"conditional":conditional,"rejected":rejected,"ordered_value":po_line['valor_unitario_pedido'] if po_line else 0,"actual_value":to_decimal(input_line.get('valor_unitario_real')),"cert_required":bool(input_line.get('certificado_exigido')),"cert_presented":bool(input_line.get('certificado_apresentado')),"cert_expiry":input_line.get('validade_certificado') or None,"result":result,"reason":str(input_line.get('justificativa_divergencia') or '')})

@@ -1,0 +1,369 @@
+import json
+import re
+import sqlite3
+import sys
+import unittest
+from decimal import Decimal
+from pathlib import Path
+from uuid import uuid4
+
+from sqlalchemy import create_engine, event, text
+from sqlalchemy.orm import sessionmaker
+
+
+APP_DIR = Path(__file__).resolve().parents[1] / "estoque_app"
+sys.path.insert(0, str(APP_DIR))
+
+from database import Base  # noqa: E402
+from models import Movement, SKU, StockBalance, User  # noqa: E402
+from services.erp_service import (  # noqa: E402
+    confirm_receipt,
+    create_purchase_order,
+    sync_legacy_purchase_order,
+)
+
+
+sqlite3.register_adapter(Decimal, float)
+
+
+ERP_TEST_SCHEMA = (
+    """
+    create table erp_purchase_orders (
+        id text primary key,
+        numero_oc text not null,
+        categoria text not null default 'GERAL',
+        fornecedor_id text,
+        fornecedor_nome text not null default '',
+        data_emissao datetime,
+        criado_por text not null default '',
+        status text not null default 'RASCUNHO',
+        destino text not null default '',
+        frete numeric not null default 0,
+        data_necessidade date,
+        observacoes text not null default '',
+        valor_total_pedido numeric not null default 0,
+        version integer not null default 1,
+        idempotency_key text unique,
+        created_at datetime not null default current_timestamp,
+        updated_at datetime not null default current_timestamp
+    )
+    """,
+    """
+    create table erp_purchase_order_lines (
+        id text primary key,
+        purchase_order_id text not null,
+        numero_linha integer not null,
+        sku_id integer,
+        sku_codigo text,
+        descricao_original text not null,
+        unidade text not null default 'UN',
+        quantidade_pedida numeric not null,
+        quantidade_recebida numeric not null default 0,
+        valor_unitario_pedido numeric not null default 0,
+        destino text not null default '',
+        cliente_id text,
+        work_order_id text,
+        data_necessidade date,
+        status text not null default 'PENDENTE',
+        unique (purchase_order_id, numero_linha)
+    )
+    """,
+    """
+    create table erp_goods_receipts (
+        id text primary key,
+        purchase_order_id text,
+        origem text not null,
+        data_recebimento datetime not null,
+        fornecedor_nome text not null default '',
+        numero_nf text not null default '',
+        operador text not null,
+        status text not null default 'CONFIRMADO',
+        observacoes text not null default '',
+        motivo_excecao text not null default '',
+        idempotency_key text not null unique,
+        confirmed_at datetime not null default current_timestamp,
+        reversed_at datetime,
+        created_at datetime not null default current_timestamp
+    )
+    """,
+    """
+    create table erp_goods_receipt_lines (
+        id text primary key,
+        goods_receipt_id text not null,
+        purchase_order_line_id text,
+        sku_id integer,
+        sku_codigo text,
+        quantidade_esperada numeric not null default 0,
+        quantidade_recebida_anterior numeric not null default 0,
+        saldo_pendente numeric not null default 0,
+        quantidade_fisica numeric not null default 0,
+        quantidade_aprovada numeric not null default 0,
+        quantidade_condicional numeric not null default 0,
+        quantidade_rejeitada numeric not null default 0,
+        valor_unitario_pedido numeric not null default 0,
+        valor_unitario_real numeric not null default 0,
+        certificado_exigido boolean not null default false,
+        certificado_apresentado boolean not null default false,
+        validade_certificado date,
+        resultado_inspecao text not null,
+        justificativa_divergencia text not null default ''
+    )
+    """,
+    """
+    create table erp_stock_receipt_links (
+        id text primary key default (lower(hex(randomblob(16)))),
+        goods_receipt_line_id text not null,
+        movement_id integer,
+        quantidade_disponivel numeric not null default 0,
+        quantidade_quarentena numeric not null default 0,
+        idempotency_key text not null unique,
+        created_at datetime not null default current_timestamp
+    )
+    """,
+    """
+    create table erp_audit_events (
+        id text primary key default (lower(hex(randomblob(16)))),
+        entity_type text not null,
+        entity_id text,
+        action text not null,
+        actor text not null default '',
+        origin text not null default 'ERP',
+        before_data text not null default '{}',
+        after_data text not null default '{}',
+        reason text not null default '',
+        created_at datetime not null default current_timestamp
+    )
+    """,
+)
+
+
+class ErpSkuResolutionTest(unittest.TestCase):
+    def setUp(self):
+        self.engine = create_engine("sqlite:///:memory:", future=True)
+
+        @event.listens_for(self.engine, "connect")
+        def register_sqlite_functions(connection, _):
+            connection.create_function("now", 0, lambda: "2026-07-30 00:00:00")
+            connection.create_function(
+                "jsonb_build_object",
+                -1,
+                lambda *args: json.dumps(
+                    {
+                        str(args[index]): args[index + 1]
+                        for index in range(0, len(args), 2)
+                    }
+                ),
+            )
+
+        @event.listens_for(self.engine, "before_cursor_execute", retval=True)
+        def remove_postgres_row_locks(_, __, statement, parameters, ___, ____):
+            return (
+                re.sub(r"\s+for\s+update(?:\s+of\s+\w+)?", "", statement, flags=re.I),
+                parameters,
+            )
+
+        Base.metadata.create_all(self.engine)
+        with self.engine.begin() as connection:
+            for statement in ERP_TEST_SCHEMA:
+                connection.execute(text(statement))
+        self.Session = sessionmaker(bind=self.engine, future=True)
+        self.db = self.Session()
+        self.user = User(
+            username="erp-sku-tester",
+            password_hash="hash",
+            role="ADM",
+            active=True,
+        )
+        self.active_sku = SKU(
+            sku="MAT-001",
+            descricao="Material ativo",
+            unidade="UN",
+            active=True,
+        )
+        self.inactive_sku = SKU(
+            sku="MAT-002",
+            descricao="Material inativo",
+            unidade="UN",
+            active=False,
+        )
+        self.db.add_all([self.user, self.active_sku, self.inactive_sku])
+        self.db.commit()
+        self.user_id = self.user.id
+        self.active_sku_id = self.active_sku.id
+
+    def tearDown(self):
+        self.db.close()
+        self.engine.dispose()
+
+    @staticmethod
+    def _payload(key, sku_code, quantity=2):
+        return {
+            "idempotency_key": key,
+            "numero_oc": f"OC-{key}",
+            "fornecedor_nome": "Fornecedor teste",
+            "lines": [
+                {
+                    "sku_codigo": sku_code,
+                    "descricao_original": "Material da O.C.",
+                    "unidade": "UN",
+                    "quantidade_pedida": quantity,
+                    "valor_unitario_pedido": 10,
+                }
+            ],
+        }
+
+    def _line(self, order_id):
+        return self.db.execute(
+            text(
+                "select * from erp_purchase_order_lines "
+                "where purchase_order_id=:order_id"
+            ),
+            {"order_id": order_id},
+        ).mappings().one()
+
+    def test_create_purchase_order_resolves_active_sku_code(self):
+        order = create_purchase_order(
+            self.db,
+            self._payload(str(uuid4()), "  mat-001  "),
+            "comprador-teste",
+        )
+
+        line = self._line(order["id"])
+        self.assertEqual(self.active_sku_id, line["sku_id"])
+        self.assertEqual("MAT-001", line["sku_codigo"])
+
+    def test_create_purchase_order_keeps_unregistered_or_inactive_item_unlinked(self):
+        for code in ("NAO-CADASTRADO", "MAT-002"):
+            with self.subTest(code=code):
+                order = create_purchase_order(
+                    self.db,
+                    self._payload(str(uuid4()), code),
+                    "comprador-teste",
+                )
+                line = self._line(order["id"])
+                self.assertIsNone(line["sku_id"])
+                self.assertEqual(code, line["sku_codigo"])
+
+    def test_legacy_sync_resolves_sku_when_replacing_existing_lines(self):
+        key = str(uuid4())
+        order = create_purchase_order(
+            self.db,
+            self._payload(key, "AINDA-SEM-CADASTRO"),
+            "comprador-teste",
+        )
+
+        result = sync_legacy_purchase_order(
+            self.db,
+            self._payload(key, "mat-001"),
+            "comprador-teste",
+        )
+
+        line = self._line(order["id"])
+        self.assertTrue(result["updated"])
+        self.assertEqual(self.active_sku_id, line["sku_id"])
+        self.assertEqual("MAT-001", line["sku_codigo"])
+
+    def test_confirm_receipt_resolves_legacy_line_by_active_sku_code(self):
+        order = create_purchase_order(
+            self.db,
+            self._payload(str(uuid4()), "MAT-001"),
+            "comprador-teste",
+        )
+        line = self._line(order["id"])
+        self.db.execute(
+            text(
+                "update erp_purchase_order_lines set sku_id=null "
+                "where id=:line_id"
+            ),
+            {"line_id": line["id"]},
+        )
+        self.db.commit()
+
+        result = confirm_receipt(
+            self.db,
+            {
+                "idempotency_key": str(uuid4()),
+                "purchase_order_id": order["id"],
+                "numero_nf": "NF-TESTE",
+                "lines": [
+                    {
+                        "purchase_order_line_id": line["id"],
+                        "quantidade_fisica": 2,
+                        "quantidade_aprovada": 2,
+                        "quantidade_condicional": 0,
+                        "quantidade_rejeitada": 0,
+                        "resultado_inspecao": "A",
+                        "valor_unitario_real": 10,
+                    }
+                ],
+            },
+            "almoxarife-teste",
+            self.user_id,
+        )
+
+        receipt_line = self.db.execute(
+            text(
+                "select sku_id,sku_codigo from erp_goods_receipt_lines "
+                "where goods_receipt_id=:receipt_id"
+            ),
+            {"receipt_id": result["id"]},
+        ).mappings().one()
+        balance = self.db.query(StockBalance).filter_by(
+            sku_id=self.active_sku_id
+        ).one()
+        movements = self.db.query(Movement).filter_by(
+            source_type="GOODS_RECEIPT",
+            source_id=result["id"],
+        ).all()
+        self.assertEqual(self.active_sku_id, receipt_line["sku_id"])
+        self.assertEqual("MAT-001", receipt_line["sku_codigo"])
+        self.assertEqual(2, balance.saldo_atual)
+        self.assertEqual(1, len(movements))
+
+    def test_confirm_receipt_still_blocks_approved_unregistered_item(self):
+        order = create_purchase_order(
+            self.db,
+            self._payload(str(uuid4()), "NAO-CADASTRADO"),
+            "comprador-teste",
+        )
+        line = self._line(order["id"])
+        receipt_key = str(uuid4())
+
+        with self.assertRaisesRegex(
+            ValueError,
+            "SKU e obrigatorio para quantidade aprovada em estoque",
+        ):
+            confirm_receipt(
+                self.db,
+                {
+                    "idempotency_key": receipt_key,
+                    "purchase_order_id": order["id"],
+                    "lines": [
+                        {
+                            "purchase_order_line_id": line["id"],
+                            "quantidade_fisica": 1,
+                            "quantidade_aprovada": 1,
+                            "quantidade_condicional": 0,
+                            "quantidade_rejeitada": 0,
+                            "resultado_inspecao": "A",
+                        }
+                    ],
+                },
+                "almoxarife-teste",
+                self.user_id,
+            )
+        self.db.rollback()
+
+        receipt_count = self.db.execute(
+            text(
+                "select count(*) from erp_goods_receipts "
+                "where idempotency_key=:key"
+            ),
+            {"key": receipt_key},
+        ).scalar_one()
+        self.assertEqual(0, receipt_count)
+        self.assertEqual(0, self.db.query(Movement).count())
+
+
+if __name__ == "__main__":
+    unittest.main()
