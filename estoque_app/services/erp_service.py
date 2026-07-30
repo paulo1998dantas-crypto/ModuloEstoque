@@ -6,7 +6,12 @@ from uuid import uuid4
 from sqlalchemy import Uuid, bindparam, text
 
 from models import Movement, SKU
-from services.estoque_service import get_sku_by_code, register_movement, to_decimal
+from services.estoque_service import (
+    bom_components_for_sku,
+    get_sku_by_code,
+    register_movement,
+    to_decimal,
+)
 
 
 def _id():
@@ -26,6 +31,197 @@ def _resolve_sku_reference(db, sku_id, sku_code):
     if sku:
         return sku.id, sku.sku
     return None, normalized_code or None
+
+
+def _explode_receipt_bom(db, parent_sku, received_quantity):
+    """Return the leaf components to receive for a purchased assembly.
+
+    The ERP receives an assembly physically as its B.O.M. components.  The
+    recursive expansion intentionally leaves no balance on an intermediate
+    assembly SKU.  Cycles and inactive/missing component SKUs block the whole
+    receipt before any stock movement is written.
+    """
+    total_by_sku = {}
+
+    def walk(current_sku, quantity, ancestry):
+        if current_sku.id in ancestry:
+            chain = " -> ".join(str(item) for item in (*ancestry, current_sku.id))
+            raise ValueError(f"B.O.M. ciclica detectada ({chain}).")
+        components = bom_components_for_sku(db, current_sku)
+        if not components:
+            total_by_sku[current_sku.id] = total_by_sku.get(
+                current_sku.id, Decimal("0")
+            ) + quantity
+            return
+        next_ancestry = (*ancestry, current_sku.id)
+        for component in components:
+            component_sku = component.component_sku
+            if not component_sku or not component_sku.active:
+                raise ValueError(
+                    "B.O.M. possui componente inexistente ou inativo para "
+                    f"{current_sku.sku}. Corrija o Cadastro antes de receber."
+                )
+            component_quantity = to_decimal(component.quantidade)
+            if component_quantity <= 0:
+                raise ValueError(
+                    f"B.O.M. possui quantidade invalida para {component_sku.sku}."
+                )
+            walk(
+                component_sku,
+                quantity * component_quantity,
+                next_ancestry,
+            )
+
+    walk(parent_sku, to_decimal(received_quantity), tuple())
+    return [
+        (db.get(SKU, sku_id), total_by_sku[sku_id])
+        for sku_id in sorted(total_by_sku)
+    ]
+
+
+def _insert_receipt_stock_link(db, receipt_line_id, movement_id, available, quarantine, key):
+    db.execute(text("""
+        insert into erp_stock_receipt_links(
+            goods_receipt_line_id,movement_id,quantidade_disponivel,
+            quantidade_quarentena,idempotency_key
+        ) values(:line,:movement,:available,:quarantine,:key)
+    """), {
+        "line": receipt_line_id,
+        "movement": movement_id,
+        "available": to_decimal(available),
+        "quarantine": to_decimal(quarantine),
+        "key": key,
+    })
+
+
+def explode_confirmed_receipt_bom(db, receipt_id, actor, user_id, reason=""):
+    """Reclassify an already confirmed assembly receipt into B.O.M. leaves.
+
+    This is deliberately a stock-only correction: the goods receipt and its
+    purchase-order quantity remain intact.  It is useful for receipts made
+    before inverse backflush became automatic.  The operation is idempotent
+    and creates explicit links for both the parent reversal and each leaf.
+    """
+    receipt = _row(db.execute(text("""
+        select * from erp_goods_receipts where id=:id for update
+    """), {"id": receipt_id}).first())
+    if not receipt:
+        raise ValueError("Recebimento nao encontrado.")
+    if receipt["status"] != "CONFIRMADO":
+        raise ValueError("Somente recebimento confirmado pode ser reclassificado.")
+
+    lines = [
+        _row(raw)
+        for raw in db.execute(text("""
+            select * from erp_goods_receipt_lines
+             where goods_receipt_id=:id
+             order by id
+             for update
+        """), {"id": receipt_id}).all()
+    ]
+    corrected = []
+    for line in lines:
+        approved = to_decimal(line["quantidade_aprovada"])
+        parent_sku = db.get(SKU, int(line["sku_id"])) if line.get("sku_id") else None
+        if approved <= 0 or not parent_sku or not bom_components_for_sku(db, parent_sku):
+            continue
+
+        correction_prefix = f"bom-explosion:{receipt_id}:{line['id']}"
+        already_done = db.execute(text("""
+            select count(*) from movements
+             where idempotency_key like :prefix
+        """), {"prefix": f"{correction_prefix}:%"}).scalar_one()
+        if already_done:
+            corrected.append({"receipt_line_id": str(line["id"]), "replayed": True})
+            continue
+
+        components = _explode_receipt_bom(db, parent_sku, approved)
+        stock_links = [
+            _row(raw)
+            for raw in db.execute(text("""
+                select x.*,m.sku_id,m.movement_status
+                  from erp_stock_receipt_links x
+                  join movements m on m.id=x.movement_id
+                 where x.goods_receipt_line_id=:line
+                   and x.movement_id is not null
+                   and x.quantidade_disponivel > 0
+                 order by x.id
+                 for update
+            """), {"line": line["id"]}).all()
+        ]
+        parent_links = [
+            link for link in stock_links
+            if int(link["sku_id"]) == parent_sku.id
+            and to_decimal(link["quantidade_disponivel"]) == approved
+            and link["movement_status"] == "ATIVA"
+        ]
+        if len(parent_links) != 1 or len(stock_links) != 1:
+            raise ValueError(
+                "Recebimento nao possui exatamente uma entrada ativa do conjunto. "
+                "Nao foi feita nenhuma reclassificacao; revise o historico."
+            )
+
+        parent_link = parent_links[0]
+        reversal = register_movement(
+            db, parent_sku, "AJUSTE", -approved, user_id,
+            documento=receipt.get("numero_nf") or "",
+            observacao=(
+                f"Reclassificacao B.O.M. do recebimento ERP {receipt_id}: "
+                f"{reason or 'entrada do conjunto convertida em componentes'}"
+            ),
+            commit=False,
+            related_movement_id=parent_link["movement_id"],
+            source_type="GOODS_RECEIPT",
+            source_id=receipt_id,
+            source_line_id=line["id"],
+            idempotency_key=f"{correction_prefix}:parent-reversal",
+        )
+        _insert_receipt_stock_link(
+            db, line["id"], reversal.id, -approved, 0,
+            f"{correction_prefix}:parent-reversal:link",
+        )
+        for component_sku, component_quantity in components:
+            movement = register_movement(
+                db, component_sku, "ENTRADA", component_quantity, user_id,
+                documento=receipt.get("numero_nf") or "",
+                observacao=(
+                    f"Reclassificacao B.O.M. do recebimento ERP {receipt_id}: "
+                    f"componente de {parent_sku.sku}"
+                ),
+                commit=False,
+                source_type="GOODS_RECEIPT",
+                source_id=receipt_id,
+                source_line_id=line["id"],
+                idempotency_key=f"{correction_prefix}:component:{component_sku.id}",
+            )
+            _insert_receipt_stock_link(
+                db, line["id"], movement.id, component_quantity, 0,
+                f"{correction_prefix}:component:{component_sku.id}:link",
+            )
+        db.execute(text("""insert into erp_audit_events(
+            entity_type,entity_id,action,actor,origin,reason,after_data
+        ) values(
+            'GOODS_RECEIPT',:id,'BOM_EXPLODIDA_CORRECAO',:actor,'ESTOQUE',:reason,
+            jsonb_build_object(
+                'receipt_line_id',cast(:line as text),
+                'parent_sku',cast(:parent as text),
+                'componentes',cast(:components as integer)
+            )
+        )"""), {
+            "id": receipt_id, "actor": actor, "reason": reason or "",
+            "line": line["id"], "parent": parent_sku.sku,
+            "components": len(components),
+        })
+        corrected.append({
+            "receipt_line_id": str(line["id"]),
+            "parent_sku": parent_sku.sku,
+            "components": len(components),
+            "replayed": False,
+        })
+    if not corrected:
+        raise ValueError("Nenhuma linha deste recebimento possui B.O.M. para reclassificar.")
+    db.commit()
+    return {"receipt_id": str(receipt_id), "lines": corrected}
 
 
 def create_purchase_order(db, data, actor):
@@ -802,14 +998,65 @@ def confirm_receipt(db, data, actor, user_id):
         if approved and not sku_id: raise ValueError("SKU e obrigatorio para quantidade aprovada em estoque.")
         line_id=_id(); pending=(Decimal(str(po_line['quantidade_pedida']))-Decimal(str(po_line['quantidade_recebida']))) if po_line else Decimal('0')
         db.execute(text("""insert into erp_goods_receipt_lines(id,goods_receipt_id,purchase_order_line_id,sku_id,sku_codigo,quantidade_esperada,quantidade_recebida_anterior,saldo_pendente,quantidade_fisica,quantidade_aprovada,quantidade_condicional,quantidade_rejeitada,valor_unitario_pedido,valor_unitario_real,certificado_exigido,certificado_apresentado,validade_certificado,resultado_inspecao,justificativa_divergencia) values(:id,:receipt,:po_line,:sku_id,:sku_code,:expected,:previous,:pending,:physical,:approved,:conditional,:rejected,:ordered_value,:actual_value,:cert_required,:cert_presented,:cert_expiry,:result,:reason)"""),{"id":line_id,"receipt":receipt_id,"po_line":po_line_id,"sku_id":sku_id,"sku_code":sku_code,"expected":po_line['quantidade_pedida'] if po_line else 0,"previous":po_line['quantidade_recebida'] if po_line else 0,"pending":pending,"physical":physical,"approved":approved,"conditional":conditional,"rejected":rejected,"ordered_value":po_line['valor_unitario_pedido'] if po_line else 0,"actual_value":to_decimal(input_line.get('valor_unitario_real')),"cert_required":bool(input_line.get('certificado_exigido')),"cert_presented":bool(input_line.get('certificado_apresentado')),"cert_expiry":input_line.get('validade_certificado') or None,"result":result,"reason":str(input_line.get('justificativa_divergencia') or '')})
-        movement=None
-        if approved:
-            sku=db.get(SKU,int(sku_id))
-            movement_key = f"{key}:line:{po_line_id or sku_id}:{line_index}"
-            movement=register_movement(db,sku,'ENTRADA',approved,user_id,documento=str(data.get('numero_nf') or ''),observacao=f'Recebimento ERP {receipt_id}',commit=False,source_type='GOODS_RECEIPT',idempotency_key=movement_key)
-            movement.source_id=receipt_id; movement.source_line_id=line_id
-        link_key = f"{key}:line:{po_line_id or sku_id or line_index}:{line_index}"
-        db.execute(text("insert into erp_stock_receipt_links(goods_receipt_line_id,movement_id,quantidade_disponivel,quantidade_quarentena,idempotency_key) values(:line,:movement,:available,:quarantine,:key)"),{"line":line_id,"movement":movement.id if movement else None,"available":approved,"quarantine":conditional,"key":link_key})
+        # A purchased assembly is stocked through its complete B.O.M. rather
+        # than creating an artificial balance on the parent SKU.  This is the
+        # inverse of production backflush and preserves the O.C./receipt line
+        # as the commercial evidence of the assembly received.
+        parent_sku = db.get(SKU, int(sku_id)) if sku_id else None
+        bom_components = (
+            _explode_receipt_bom(db, parent_sku, approved)
+            if approved and po_line and parent_sku and bom_components_for_sku(db, parent_sku)
+            else []
+        )
+        if bom_components:
+            for component_sku, component_quantity in bom_components:
+                if not component_sku:
+                    raise ValueError("Componente da B.O.M. nao encontrado no estoque.")
+                component_key = (
+                    f"{key}:line:{po_line_id or sku_id}:bom:{component_sku.id}"
+                )
+                movement = register_movement(
+                    db, component_sku, 'ENTRADA', component_quantity, user_id,
+                    documento=str(data.get('numero_nf') or ''),
+                    observacao=(
+                        f'Recebimento ERP {receipt_id} · B.O.M. de {parent_sku.sku}'
+                    ),
+                    commit=False, source_type='GOODS_RECEIPT',
+                    source_id=receipt_id, source_line_id=line_id,
+                    idempotency_key=component_key,
+                )
+                _insert_receipt_stock_link(
+                    db, line_id, movement.id, component_quantity, 0,
+                    f"{component_key}:link",
+                )
+            if conditional:
+                _insert_receipt_stock_link(
+                    db, line_id, None, 0, conditional,
+                    f"{key}:line:{po_line_id or sku_id}:bom:quarantine",
+                )
+            db.execute(text("""insert into erp_audit_events(
+                entity_type,entity_id,action,actor,origin,after_data
+            ) values(
+                'GOODS_RECEIPT',:id,'BOM_EXPLODIDA',:actor,'ESTOQUE',
+                jsonb_build_object(
+                    'receipt_line_id',cast(:line as text),
+                    'parent_sku',cast(:parent as text),
+                    'componentes',cast(:components as integer)
+                )
+            )"""), {
+                "id": receipt_id, "actor": actor, "line": line_id,
+                "parent": parent_sku.sku, "components": len(bom_components),
+            })
+        else:
+            movement=None
+            if approved:
+                movement_key = f"{key}:line:{po_line_id or sku_id}:{line_index}"
+                movement=register_movement(db,parent_sku,'ENTRADA',approved,user_id,documento=str(data.get('numero_nf') or ''),observacao=f'Recebimento ERP {receipt_id}',commit=False,source_type='GOODS_RECEIPT',source_id=receipt_id,source_line_id=line_id,idempotency_key=movement_key)
+            link_key = f"{key}:line:{po_line_id or sku_id or line_index}:{line_index}"
+            _insert_receipt_stock_link(
+                db, line_id, movement.id if movement else None, approved,
+                conditional, link_key,
+            )
         if po_line:
             # Rejeitado/devolvido foi inspecionado fisicamente, mas não atende
             # a quantidade do pedido. AC atende o pedido e permanece bloqueado
@@ -938,12 +1185,47 @@ def reverse_receipt(db, receipt_id, actor, user_id, reason):
                 "Recebimento possui baixa financeira vinculada. "
                 "Estorne/corrija a baixa financeira antes de estornar o recebimento físico."
             )
-    links=db.execute(text("select l.*,x.movement_id,x.quantidade_disponivel from erp_goods_receipt_lines l join erp_stock_receipt_links x on x.goods_receipt_line_id=l.id where l.goods_receipt_id=:id"),{'id':receipt_id}).all()
-    for raw in links:
-        line=dict(raw._mapping)
-        if line['movement_id'] and Decimal(str(line['quantidade_disponivel'])):
-            sku=db.get(SKU,int(line['sku_id'])); movement=register_movement(db,sku,'AJUSTE',-Decimal(str(line['quantidade_disponivel'])),user_id,documento=receipt['numero_nf'],observacao=f'Estorno ERP {receipt_id}: {reason}',commit=False,related_movement_id=line['movement_id'])
-            movement.source_type='GOODS_RECEIPT_REVERSAL'; movement.source_id=receipt_id; movement.source_line_id=line['id']; movement.idempotency_key=f'reversal:{receipt_id}:{line["id"]}'
+    # One receipt line can now generate several stock links when a purchased
+    # assembly is exploded through its B.O.M.  Reverse each stock movement,
+    # but decrease the commercial O.C. quantity only once per receipt line.
+    lines = [
+        _row(raw)
+        for raw in db.execute(text("""
+            select * from erp_goods_receipt_lines
+             where goods_receipt_id=:id
+             order by id
+             for update
+        """), {"id": receipt_id}).all()
+    ]
+    for line in lines:
+        links = [
+            _row(raw)
+            for raw in db.execute(text("""
+                select * from erp_stock_receipt_links
+                 where goods_receipt_line_id=:line
+                 order by id
+                 for update
+            """), {"line": line["id"]}).all()
+        ]
+        for link in links:
+            quantity = to_decimal(link["quantidade_disponivel"])
+            if not link["movement_id"] or not quantity:
+                continue
+            original_movement = db.get(Movement, int(link["movement_id"]))
+            if not original_movement:
+                raise ValueError("Movimento de estoque vinculado ao recebimento nao encontrado.")
+            sku = db.get(SKU, original_movement.sku_id)
+            if not sku:
+                raise ValueError("SKU do movimento vinculado ao recebimento nao encontrado.")
+            register_movement(
+                db, sku, 'AJUSTE', -quantity, user_id,
+                documento=receipt['numero_nf'],
+                observacao=f'Estorno ERP {receipt_id}: {reason}',
+                commit=False, related_movement_id=original_movement.id,
+                source_type='GOODS_RECEIPT_REVERSAL', source_id=receipt_id,
+                source_line_id=line['id'],
+                idempotency_key=f'reversal:{receipt_id}:{link["id"]}',
+            )
         if line['purchase_order_line_id']:
             db.execute(text("""
                 update erp_purchase_order_lines

@@ -129,6 +129,7 @@ from services.erp_service import (
     confirm_receipt,
     correct_purchase_order_number,
     create_purchase_order,
+    explode_confirmed_receipt_bom,
     pending_purchase_orders,
     pending_purchase_order_lines_by_sku,
     purchase_order_financial_detail,
@@ -2278,6 +2279,28 @@ def erp_reverse_receipt(receipt_id):
         reverse_receipt(db(), receipt_id, user.username, user.id, (request.get_json(silent=True) or {}).get("motivo", ""))
         return jsonify({"ok": True})
     except ValueError as exc: return jsonify({"ok":False,"error":str(exc)}),400
+
+
+@app.route("/api/erp/receipts/<receipt_id>/explode-bom", methods=["POST"])
+@login_required
+@permission_required("estoque.movement.cancel_any")
+@erp_feature_required
+def erp_explode_receipt_bom(receipt_id):
+    """Correct a historical assembly receipt without changing its O.C. data."""
+    user = current_user()
+    try:
+        result = explode_confirmed_receipt_bom(
+            db(), receipt_id, user.username, user.id,
+            (request.get_json(silent=True) or {}).get("motivo", ""),
+        )
+        return jsonify({"ok": True, **result})
+    except ValueError as exc:
+        db().rollback()
+        return jsonify({"ok": False, "error": str(exc)}), 400
+    except Exception:
+        db().rollback()
+        app.logger.exception("Falha ao reclassificar recebimento ERP por B.O.M.")
+        return jsonify({"ok": False, "error": "Falha transacional ao reclassificar B.O.M."}), 500
 
 
 def _erp_internal_allowed():

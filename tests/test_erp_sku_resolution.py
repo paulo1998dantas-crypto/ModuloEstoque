@@ -15,10 +15,11 @@ APP_DIR = Path(__file__).resolve().parents[1] / "estoque_app"
 sys.path.insert(0, str(APP_DIR))
 
 from database import Base  # noqa: E402
-from models import Movement, SKU, StockBalance, User  # noqa: E402
+from models import BomComponent, Movement, SKU, StockBalance, User  # noqa: E402
 from services.erp_service import (  # noqa: E402
     confirm_receipt,
     create_purchase_order,
+    reverse_receipt,
     sync_legacy_purchase_order,
 )
 
@@ -43,9 +44,19 @@ ERP_TEST_SCHEMA = (
         observacoes text not null default '',
         valor_total_pedido numeric not null default 0,
         version integer not null default 1,
+        financial_status text not null default 'PENDENTE',
+        financial_closed_at datetime,
+        financial_closed_by text,
+        financial_close_reason text not null default '',
         idempotency_key text unique,
         created_at datetime not null default current_timestamp,
         updated_at datetime not null default current_timestamp
+    )
+    """,
+    """
+    create table erp_purchase_order_financial_entries (
+        id text primary key,
+        purchase_order_id text not null
     )
     """,
     """
@@ -144,6 +155,7 @@ class ErpSkuResolutionTest(unittest.TestCase):
         @event.listens_for(self.engine, "connect")
         def register_sqlite_functions(connection, _):
             connection.create_function("now", 0, lambda: "2026-07-30 00:00:00")
+            connection.create_function("greatest", -1, lambda *values: max(values))
             connection.create_function(
                 "jsonb_build_object",
                 -1,
@@ -411,6 +423,61 @@ class ErpSkuResolutionTest(unittest.TestCase):
             ).scalar_one(),
         )
         self.assertEqual(0, self.db.query(Movement).count())
+
+    def test_confirm_receipt_explodes_nested_bom_and_reversal_preserves_oc_quantity(self):
+        assembly = SKU(sku="CJ-001", descricao="Conjunto comprado", unidade="CJ", active=True)
+        intermediate = SKU(sku="SUB-001", descricao="Subconjunto", unidade="UN", active=True)
+        direct_leaf = SKU(sku="COMP-001", descricao="Componente direto", unidade="UN", active=True)
+        nested_leaf = SKU(sku="COMP-002", descricao="Componente interno", unidade="UN", active=True)
+        self.db.add_all([assembly, intermediate, direct_leaf, nested_leaf])
+        self.db.commit()
+        self.db.add_all([
+            BomComponent(item_sku_id=assembly.id, component_sku_id=intermediate.id, quantidade=1),
+            BomComponent(item_sku_id=assembly.id, component_sku_id=direct_leaf.id, quantidade=2),
+            BomComponent(item_sku_id=intermediate.id, component_sku_id=nested_leaf.id, quantidade=3),
+        ])
+        self.db.commit()
+
+        order = create_purchase_order(
+            self.db,
+            self._payload(str(uuid4()), "CJ-001", quantity=2),
+            "comprador-teste",
+        )
+        line = self._line(order["id"])
+        receipt = confirm_receipt(
+            self.db,
+            {
+                "idempotency_key": str(uuid4()),
+                "purchase_order_id": order["id"],
+                "numero_nf": "NF-BOM-001",
+                "lines": [{
+                    "purchase_order_line_id": line["id"],
+                    "quantidade_fisica": 2,
+                    "quantidade_aprovada": 2,
+                    "quantidade_condicional": 0,
+                    "quantidade_rejeitada": 0,
+                    "resultado_inspecao": "A",
+                    "valor_unitario_real": 10,
+                }],
+            },
+            "almoxarife-teste",
+            self.user_id,
+        )
+
+        movements = self.db.query(Movement).filter_by(source_id=receipt["id"]).all()
+        self.assertEqual({direct_leaf.id, nested_leaf.id}, {movement.sku_id for movement in movements})
+        self.assertNotIn(assembly.id, {movement.sku_id for movement in movements})
+        self.assertNotIn(intermediate.id, {movement.sku_id for movement in movements})
+        self.assertEqual(Decimal("4"), self.db.query(StockBalance).filter_by(sku_id=direct_leaf.id).one().saldo_atual)
+        self.assertEqual(Decimal("6"), self.db.query(StockBalance).filter_by(sku_id=nested_leaf.id).one().saldo_atual)
+
+        reverse_receipt(
+            self.db, receipt["id"], "almoxarife-teste", self.user_id, "teste de estorno B.O.M."
+        )
+        self.assertEqual(Decimal("0"), self.db.query(StockBalance).filter_by(sku_id=direct_leaf.id).one().saldo_atual)
+        self.assertEqual(Decimal("0"), self.db.query(StockBalance).filter_by(sku_id=nested_leaf.id).one().saldo_atual)
+        reversed_line = self._line(order["id"])
+        self.assertEqual(Decimal("0"), reversed_line["quantidade_recebida"])
 
 
 if __name__ == "__main__":
