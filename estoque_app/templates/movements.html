@@ -66,6 +66,8 @@
                             Setor: <strong>{{ mv.setor }}</strong>
                         {% elif mv.reference_text %}
                             Referência: <strong>{{ mv.reference_text }}</strong>
+                        {% elif mv.source_type in ['GOODS_RECEIPT', 'GOODS_RECEIPT_REVERSAL'] and mv.source_id %}
+                            <span class="badge entrada">Recebimento ERP vinculado</span>
                         {% elif (mv.context_kind or 'LEGACY') == 'LEGACY' %}
                             <span class="badge alerta">Legado sem vínculo</span>
                         {% endif %}
