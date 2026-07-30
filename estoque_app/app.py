@@ -137,6 +137,14 @@ from services.erp_service import (
     sync_legacy_purchase_order,
     work_order_materials,
 )
+from services.production_order_service import (
+    cancel_production_order,
+    commit_production_order,
+    complete_production_order,
+    create_production_order,
+    list_production_orders,
+    production_order_detail,
+)
 
 
 app = Flask(
@@ -2434,6 +2442,105 @@ def erp_internal_confirm_receipt():
         return jsonify({"ok": True, **confirm_receipt(database, request.get_json(silent=True) or {}, actor, user.id)})
     except ValueError as exc:
         database.rollback(); return jsonify({"ok": False, "error": str(exc)}), 400
+
+
+def _erp_production_order_actor():
+    database = db()
+    actor = request.headers.get("X-ERP-Actor", "ERP")
+    user = _erp_actor_user(database, actor)
+    if not user:
+        database.close()
+        return None, None
+    return database, user
+
+
+@app.route("/api/erp/internal/production-orders", methods=["GET", "POST"])
+@erp_feature_required
+def erp_internal_production_orders():
+    if not _erp_internal_allowed():
+        return jsonify({"ok": False, "error": "Servico nao autorizado."}), 401
+    database, user = _erp_production_order_actor()
+    if not user:
+        return jsonify({"ok": False, "error": "Usuario operacional nao encontrado."}), 409
+    try:
+        if request.method == "GET":
+            return jsonify({"ok": True, **list_production_orders(database, request.args.get("status", ""))})
+        result = create_production_order(database, request.get_json(silent=True) or {}, user.id)
+        return jsonify({"ok": True, **result}), 200 if result.get("replayed") else 201
+    except ValueError as exc:
+        database.rollback()
+        return jsonify({"ok": False, "error": str(exc)}), 400
+    finally:
+        database.close()
+
+
+@app.route("/api/erp/internal/production-orders/<order_id>")
+@erp_feature_required
+def erp_internal_production_order_detail(order_id):
+    if not _erp_internal_allowed():
+        return jsonify({"ok": False, "error": "Servico nao autorizado."}), 401
+    database, user = _erp_production_order_actor()
+    if not user:
+        return jsonify({"ok": False, "error": "Usuario operacional nao encontrado."}), 409
+    try:
+        return jsonify({"ok": True, **production_order_detail(database, order_id)})
+    except ValueError as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 404
+    finally:
+        database.close()
+
+
+@app.route("/api/erp/internal/production-orders/<order_id>/commit", methods=["POST"])
+@erp_feature_required
+def erp_internal_production_order_commit(order_id):
+    if not _erp_internal_allowed():
+        return jsonify({"ok": False, "error": "Servico nao autorizado."}), 401
+    database, user = _erp_production_order_actor()
+    if not user:
+        return jsonify({"ok": False, "error": "Usuario operacional nao encontrado."}), 409
+    try:
+        return jsonify({"ok": True, **commit_production_order(database, order_id, user.id)})
+    except ValueError as exc:
+        database.rollback()
+        return jsonify({"ok": False, "error": str(exc)}), 400
+    finally:
+        database.close()
+
+
+@app.route("/api/erp/internal/production-orders/<order_id>/complete", methods=["POST"])
+@erp_feature_required
+def erp_internal_production_order_complete(order_id):
+    if not _erp_internal_allowed():
+        return jsonify({"ok": False, "error": "Servico nao autorizado."}), 401
+    database, user = _erp_production_order_actor()
+    if not user:
+        return jsonify({"ok": False, "error": "Usuario operacional nao encontrado."}), 409
+    try:
+        payload = request.get_json(silent=True) or {}
+        return jsonify({"ok": True, **complete_production_order(database, order_id, user.id, payload.get("quantidade"))})
+    except ValueError as exc:
+        database.rollback()
+        return jsonify({"ok": False, "error": str(exc)}), 400
+    finally:
+        database.close()
+
+
+@app.route("/api/erp/internal/production-orders/<order_id>/cancel", methods=["POST"])
+@erp_feature_required
+def erp_internal_production_order_cancel(order_id):
+    if not _erp_internal_allowed():
+        return jsonify({"ok": False, "error": "Servico nao autorizado."}), 401
+    database, user = _erp_production_order_actor()
+    if not user:
+        return jsonify({"ok": False, "error": "Usuario operacional nao encontrado."}), 409
+    try:
+        payload = request.get_json(silent=True) or {}
+        return jsonify({"ok": True, **cancel_production_order(database, order_id, user.id, payload.get("motivo"))})
+    except ValueError as exc:
+        database.rollback()
+        return jsonify({"ok": False, "error": str(exc)}), 400
+    finally:
+        database.close()
 
 
 if __name__ == "__main__":

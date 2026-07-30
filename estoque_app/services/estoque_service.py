@@ -1,4 +1,5 @@
 import os
+from uuid import UUID
 from decimal import Decimal, InvalidOperation
 from uuid import uuid4
 
@@ -466,6 +467,8 @@ def register_movement(
     link_updated_by=None,
     require_context=False,
     source_type=None,
+    source_id=None,
+    source_line_id=None,
     idempotency_key=None,
     operation_id=None,
     parent_movement_id=None,
@@ -482,6 +485,18 @@ def register_movement(
         raise ValueError("Quantidade deve ser maior que zero.")
 
     idempotency_key = str(idempotency_key or "").strip() or None
+
+    def normalize_source_uuid(value, label):
+        raw = str(value or "").strip()
+        if not raw:
+            return None
+        try:
+            return str(UUID(raw))
+        except (ValueError, AttributeError, TypeError) as exc:
+            raise ValueError(f"{label} deve ser um UUID valido.") from exc
+
+    source_id = normalize_source_uuid(source_id, "source_id")
+    source_line_id = normalize_source_uuid(source_line_id, "source_line_id")
 
     def replay_if_present():
         if not idempotency_key:
@@ -579,6 +594,8 @@ def register_movement(
         setor=context["setor"],
         reference_text=context["reference_text"],
         source_type=str(source_type or "").strip() or None,
+        source_id=source_id,
+        source_line_id=source_line_id,
         idempotency_key=idempotency_key,
         operation_id=str(operation_id or "").strip() or None,
         parent_movement_id=parent_movement_id,
@@ -694,6 +711,11 @@ def register_consumption_from_commitment(
     reference_text="",
     correct_context=False,
     context_reason="",
+    source_type=None,
+    source_id=None,
+    source_line_id=None,
+    operation_id=None,
+    parent_movement_id=None,
     idempotency_key=None,
 ):
     if commitment is None:
@@ -807,6 +829,11 @@ def register_consumption_from_commitment(
         reference_text=inherited_context["reference_text"],
         link_updated_by=usuario_id,
         require_context=True,
+        source_type=source_type,
+        source_id=source_id,
+        source_line_id=source_line_id,
+        operation_id=operation_id,
+        parent_movement_id=parent_movement_id,
         idempotency_key=idempotency_key,
     )
 

@@ -259,6 +259,105 @@ class ErpMovementReferenceHistory(Base):
     created_at = Column(DateTime, nullable=False, default=now_utc)
 
 
+class ErpProductionOrder(Base):
+    """Production order for a controlled SKU-to-SKU transformation.
+
+    This is deliberately distinct from ``erp_work_orders``: a vehicle O.S.
+    governs a vehicle's manufacturing process, while an OP governs a material
+    conversion in a shop such as Serralheria.
+    """
+
+    __tablename__ = "erp_production_orders"
+
+    id = Column(Uuid(as_uuid=False), primary_key=True, default=lambda: str(uuid4()))
+    numero_op = Column(String(40), nullable=False, unique=True, index=True)
+    status = Column(String(30), nullable=False, default="RASCUNHO", index=True)
+    setor = Column(String(120), nullable=False, default="SERRALHERIA")
+    target_sku_id = Column(Integer, ForeignKey("skus.id", ondelete="RESTRICT"), nullable=False, index=True)
+    quantidade_planejada = Column(Numeric(14, 3), nullable=False)
+    quantidade_produzida = Column(Numeric(14, 3), nullable=False, default=0)
+    unidade = Column(String(20), nullable=True)
+    producao_tipo = Column(String(30), nullable=False, default="ESTOQUE")
+    destino_descricao = Column(String(255), nullable=True)
+    chassi_lote = Column(String(500), nullable=True)
+    cliente_nome = Column(String(255), nullable=True)
+    municipio = Column(String(120), nullable=True)
+    mmv = Column(String(120), nullable=True)
+    observacoes = Column(Text, nullable=True)
+    target_snapshot = Column(JSON, nullable=False, default=dict)
+    selected_parameters = Column(JSON, nullable=False, default=list)
+    process_snapshot = Column(JSON, nullable=False, default=list)
+    idempotency_key = Column(String(160), nullable=False, unique=True, index=True)
+    created_by = Column(Integer, ForeignKey("users.id", ondelete="RESTRICT"), nullable=False)
+    released_by = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    completed_by = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    completed_operation_id = Column(Uuid(as_uuid=False), nullable=True, unique=True, index=True)
+    completed_at = Column(DateTime, nullable=True)
+    cancelled_at = Column(DateTime, nullable=True)
+    cancelled_by = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    cancel_reason = Column(Text, nullable=True)
+    created_at = Column(DateTime, nullable=False, default=now_utc)
+    updated_at = Column(DateTime, nullable=False, default=now_utc, onupdate=now_utc)
+
+    target_sku = relationship("SKU", foreign_keys=[target_sku_id])
+    inputs = relationship(
+        "ErpProductionOrderInput",
+        back_populates="production_order",
+        cascade="all, delete-orphan",
+        order_by="ErpProductionOrderInput.numero_linha",
+    )
+    events = relationship(
+        "ErpProductionOrderEvent",
+        cascade="all, delete-orphan",
+        order_by="ErpProductionOrderEvent.created_at",
+    )
+
+
+class ErpProductionOrderInput(Base):
+    __tablename__ = "erp_production_order_inputs"
+    __table_args__ = (
+        UniqueConstraint("production_order_id", "numero_linha", name="uq_erp_production_order_input_line"),
+    )
+
+    id = Column(Uuid(as_uuid=False), primary_key=True, default=lambda: str(uuid4()))
+    production_order_id = Column(
+        Uuid(as_uuid=False),
+        ForeignKey("erp_production_orders.id", ondelete="RESTRICT"),
+        nullable=False,
+        index=True,
+    )
+    numero_linha = Column(Integer, nullable=False)
+    source_sku_id = Column(Integer, ForeignKey("skus.id", ondelete="RESTRICT"), nullable=False, index=True)
+    quantidade_planejada = Column(Numeric(14, 3), nullable=False)
+    quantidade_empenhada = Column(Numeric(14, 3), nullable=False, default=0)
+    quantidade_baixada = Column(Numeric(14, 3), nullable=False, default=0)
+    source_snapshot = Column(JSON, nullable=False, default=dict)
+    commitment_movement_id = Column(Integer, ForeignKey("movements.id", ondelete="RESTRICT"), nullable=True, unique=True)
+    consumption_movement_id = Column(Integer, ForeignKey("movements.id", ondelete="RESTRICT"), nullable=True, unique=True)
+    created_at = Column(DateTime, nullable=False, default=now_utc)
+
+    production_order = relationship("ErpProductionOrder", back_populates="inputs")
+    source_sku = relationship("SKU", foreign_keys=[source_sku_id])
+    commitment_movement = relationship("Movement", foreign_keys=[commitment_movement_id])
+    consumption_movement = relationship("Movement", foreign_keys=[consumption_movement_id])
+
+
+class ErpProductionOrderEvent(Base):
+    __tablename__ = "erp_production_order_events"
+
+    id = Column(Uuid(as_uuid=False), primary_key=True, default=lambda: str(uuid4()))
+    production_order_id = Column(
+        Uuid(as_uuid=False),
+        ForeignKey("erp_production_orders.id", ondelete="RESTRICT"),
+        nullable=False,
+        index=True,
+    )
+    action = Column(String(60), nullable=False, index=True)
+    actor_user_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    details = Column(JSON, nullable=False, default=dict)
+    created_at = Column(DateTime, nullable=False, default=now_utc)
+
+
 class DashboardMovementCache(Base):
     __tablename__ = "dashboard_movement_cache"
 
