@@ -102,6 +102,22 @@ class ProductionOrderTest(unittest.TestCase):
         self.assertEqual(Decimal("0.000"), self.db.query(StockBalance).filter_by(sku_id=self.target.id).one().saldo_atual)
         self.assertEqual("CANCELADA", self.db.get(ErpProductionOrder, order["id"]).status)
 
+    def test_second_op_cannot_reserve_material_already_committed_by_another_op(self):
+        first = self._create()
+        self.assertEqual(1, len(commit_production_order(self.db, first["id"], self.user.id)["movement_ids"]))
+        second = create_production_order(
+            self.db,
+            {
+                "idempotency_key": "op-test:normal-trilho:second",
+                "target_sku": "BCO-TRILHO",
+                "quantidade_planejada": "5",
+                "inputs": [{"sku": "BCO-NORMAL", "quantidade": "5"}],
+            },
+            self.user.id,
+        )["order"]
+        with self.assertRaisesRegex(ValueError, "Empenho bloqueado"):
+            commit_production_order(self.db, second["id"], self.user.id)
+
 
 if __name__ == "__main__":
     unittest.main()

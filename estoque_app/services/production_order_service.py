@@ -246,6 +246,7 @@ def commit_production_order(db, order_id, actor_user_id):
             source_id=order.id,
             source_line_id=line.id,
             idempotency_key=f"production-order:{order.id}:commit:{line.id}",
+            require_available_for_commitment=True,
             commit=False,
         )
         line.commitment_movement_id = movement.id

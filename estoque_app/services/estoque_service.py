@@ -472,6 +472,7 @@ def register_movement(
     idempotency_key=None,
     operation_id=None,
     parent_movement_id=None,
+    require_available_for_commitment=False,
 ):
     if sku is None:
         raise ValueError("COD nao encontrado.")
@@ -562,6 +563,19 @@ def register_movement(
     if replayed is not None:
         return replayed
     saldo_anterior = to_decimal(balance.saldo_atual)
+
+    # Production orders reserve material without changing physical balance.  Do
+    # this check after locking the balance row, otherwise two OP requests for
+    # the same SKU can both observe the same available quantity and overbook it.
+    if tipo == "EMPENHO" and require_available_for_commitment:
+        already_committed = pending_commitments_by_sku(db, [sku.id]).get(
+            sku.id, Decimal("0.000")
+        )
+        available_for_commitment = saldo_anterior - already_committed
+        if quantidade > available_for_commitment:
+            raise ValueError(
+                "Empenho bloqueado: saldo disponivel insuficiente para a Ordem de Producao."
+            )
 
     if tipo == "ENTRADA":
         saldo_posterior = saldo_anterior + quantidade
