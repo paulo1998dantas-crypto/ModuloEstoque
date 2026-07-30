@@ -127,6 +127,7 @@ from services.erp_service import (
     close_purchase_order_financial,
     close_purchase_order_technical,
     confirm_receipt,
+    correct_purchase_order_number,
     create_purchase_order,
     pending_purchase_orders,
     pending_purchase_order_lines_by_sku,
@@ -2221,6 +2222,21 @@ def erp_technical_close_purchase_order(order_id):
         return jsonify({"ok": False, "error": str(exc)}), 400
 
 
+@app.route("/api/erp/purchase-orders/<order_id>/correct-number", methods=["POST"])
+@login_required
+@permission_required("suprimentos.purchase.edit")
+@erp_feature_required
+def erp_correct_purchase_order_number(order_id):
+    try:
+        result = correct_purchase_order_number(
+            db(), order_id, current_user().username, request.get_json(silent=True) or {}
+        )
+        return jsonify({"ok": True, **result})
+    except ValueError as exc:
+        db().rollback()
+        return jsonify({"ok": False, "error": str(exc)}), 400
+
+
 @app.route("/api/erp/purchase-orders/<order_id>/financial-close", methods=["POST"])
 @login_required
 @permission_required("suprimentos.purchase.financial_close")
@@ -2347,6 +2363,24 @@ def erp_internal_technical_close_purchase_order(order_id):
             db(), order_id, request.headers.get("X-ERP-Actor", "ERP"), payload.get("motivo", "")
         )})
     except ValueError as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 400
+
+
+@app.route("/api/erp/internal/purchase-orders/<order_id>/correct-number", methods=["POST"])
+@erp_feature_required
+def erp_internal_correct_purchase_order_number(order_id):
+    if not _erp_internal_allowed():
+        return jsonify({"ok": False, "error": "Servico nao autorizado."}), 401
+    database = db()
+    try:
+        return jsonify({"ok": True, **correct_purchase_order_number(
+            database,
+            order_id,
+            request.headers.get("X-ERP-Actor", "ERP"),
+            request.get_json(silent=True) or {},
+        )})
+    except ValueError as exc:
+        database.rollback()
         return jsonify({"ok": False, "error": str(exc)}), 400
 
 

@@ -117,6 +117,127 @@ def sync_legacy_purchase_order(db, data, actor):
     return {"id": order_id, "replayed": False, "updated": True}
 
 
+def correct_purchase_order_number(db, order_id, actor, data):
+    """Correct only the visible O.C. number while preserving the ERP UUID.
+
+    Receipts, financial settlements and stock links point to ``purchase_order_id``;
+    they are deliberately not modified by this operation.  Duplicate visible
+    numbers are accepted, but require an explicit confirmation from the caller.
+    """
+    new_number = str((data or {}).get("numero_oc") or "").strip()
+    reason = str((data or {}).get("motivo") or "").strip()
+    if not new_number:
+        raise ValueError("Informe o novo numero da O.C.")
+    if len(new_number) > 100:
+        raise ValueError("Numero da O.C. deve ter no maximo 100 caracteres.")
+    if not reason:
+        raise ValueError("Informe o motivo da correcao de numeracao.")
+
+    order = _row(db.execute(text("""
+        select id,numero_oc,categoria,fornecedor_nome,data_emissao,status,
+               idempotency_key,version
+          from erp_purchase_orders
+         where id=:id
+         for update
+    """), {"id": str(order_id or "").strip()}).first())
+    if not order:
+        raise ValueError("O.C. integrada nao encontrada.")
+    if str(order["numero_oc"] or "").strip() == new_number:
+        db.rollback()
+        return {
+            "id": str(order["id"]), "numero_oc": new_number,
+            "unchanged": True, "duplicate_matches": [],
+        }
+
+    duplicates = [_row(row) for row in db.execute(text("""
+        select id,numero_oc,categoria,fornecedor_nome,data_emissao,status
+          from erp_purchase_orders
+         where numero_oc=:numero and id<>:id
+         order by data_emissao nulls last, created_at, id
+         for share
+    """), {"numero": new_number, "id": str(order["id"])}).all()]
+    if duplicates and not bool((data or {}).get("confirmar_duplicidade")):
+        db.rollback()
+        return {
+            "id": str(order["id"]), "numero_oc": str(order["numero_oc"]),
+            "requires_duplicate_confirmation": True,
+            "duplicate_matches": [
+                {
+                    "id": str(item["id"]), "numero_oc": item["numero_oc"],
+                    "categoria": item["categoria"],
+                    "fornecedor_nome": item["fornecedor_nome"],
+                    "data_emissao": item["data_emissao"].isoformat() if item.get("data_emissao") else None,
+                    "status": item["status"],
+                }
+                for item in duplicates
+            ],
+        }
+
+    db.execute(text("""
+        update erp_purchase_orders
+           set numero_oc=:numero, version=version+1, updated_at=now()
+         where id=:id
+    """), {"id": str(order["id"]), "numero": new_number})
+
+    # When the O.C. originated in Suprimentos, keep its buyer document in sync
+    # in the same transaction.  The UUID link prevents accidentally changing a
+    # different historical document that happens to have the same visible number.
+    legacy_document_updated = False
+    legacy_key = str(order.get("idempotency_key") or "")
+    legacy_prefix = "suprimentos-oc:"
+    if legacy_key.startswith(legacy_prefix):
+        legacy_document_id = legacy_key[len(legacy_prefix):].strip()
+        if legacy_document_id:
+            document_table = db.execute(
+                text("select to_regclass('public.suprimentos_documentos')")
+            ).scalar_one_or_none()
+            if document_table:
+                result = db.execute(text("""
+                    update suprimentos_documentos
+                       set numero=:numero,
+                           dados=jsonb_set(
+                               coalesce(dados,'{}'::jsonb),
+                               '{numero_oc}', to_jsonb(cast(:numero as text)), true
+                           ),
+                           atualizado_por=:actor,
+                           updated_at=now()
+                     where id=cast(:document_id as uuid)
+                       and lower(coalesce(tipo,''))='oc'
+                       and erp_purchase_order_id=cast(:order_id as uuid)
+                """), {
+                    "numero": new_number, "actor": str(actor or ""),
+                    "document_id": legacy_document_id, "order_id": str(order["id"]),
+                })
+                legacy_document_updated = bool(result.rowcount)
+
+    db.execute(text("""
+        insert into erp_audit_events(
+            entity_type,entity_id,action,actor,origin,before_data,after_data,reason
+        ) values(
+            'PURCHASE_ORDER',:id,'NUMERO_OC_CORRIGIDO',:actor,'SUPRIMENTOS',
+            jsonb_build_object('numero_oc',cast(:before as text),'version',cast(:version as integer)),
+            jsonb_build_object('numero_oc',cast(:after as text),'duplicado',cast(:duplicado as boolean),
+                               'documento_suprimentos_atualizado',cast(:document_updated as boolean)),
+            :reason
+        )
+    """), {
+        "id": str(order["id"]), "actor": str(actor or ""),
+        "before": str(order["numero_oc"] or ""), "after": new_number,
+        "version": int(order["version"] or 0), "duplicado": bool(duplicates),
+        "document_updated": legacy_document_updated, "reason": reason,
+    })
+    db.commit()
+    return {
+        "id": str(order["id"]), "numero_oc": new_number,
+        "duplicate_matches": [
+            {"id": str(item["id"]), "fornecedor_nome": item["fornecedor_nome"]}
+            for item in duplicates
+        ],
+        "legacy_document_updated": legacy_document_updated,
+        "unchanged": False,
+    }
+
+
 def pending_purchase_orders(db):
     return [_row(r) for r in db.execute(text("""select o.id,o.numero_oc,o.categoria,o.fornecedor_nome,o.status,o.data_necessidade,
         o.destino,o.valor_total_pedido,l.id as line_id,l.numero_linha,l.sku_id,l.sku_codigo,l.descricao_original,
