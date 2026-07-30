@@ -125,7 +125,7 @@ def pending_purchase_orders(db):
         from erp_purchase_orders o
         join erp_purchase_order_lines l on l.purchase_order_id=o.id
         where o.status in ('EMITIDA','PARCIALMENTE_RECEBIDA')
-          and l.status in ('PENDENTE','PARCIALMENTE_RECEBIDA')
+          and l.quantidade_pedida > l.quantidade_recebida
         order by o.data_necessidade nulls last,o.numero_oc,l.numero_linha"""))]
 
 
@@ -152,7 +152,8 @@ def purchase_orders_dashboard(db, limit=1000):
           left join lateral (
               select sum(l.quantidade_pedida) quantidade_pedida,
                      sum(l.quantidade_recebida) quantidade_recebida,
-                     sum(l.quantidade_pedida-l.quantidade_recebida) quantidade_pendente
+                     sum(greatest(l.quantidade_pedida-l.quantidade_recebida,0))
+                         quantidade_pendente
                 from erp_purchase_order_lines l
                where l.purchase_order_id=o.id
           ) lines on true
@@ -190,7 +191,10 @@ def purchase_orders_dashboard(db, limit=1000):
         statuses["emitidas"] += int(status == "EMITIDA")
         statuses["parciais"] += int(status == "PARCIALMENTE_RECEBIDA")
         statuses["recebidas"] += int(status == "RECEBIDA")
-        statuses["pendentes"] += int(status in {"EMITIDA", "PARCIALMENTE_RECEBIDA"})
+        statuses["pendentes"] += int(
+            status in {"EMITIDA", "PARCIALMENTE_RECEBIDA"}
+            and to_decimal(order["quantidade_pendente"]) > 0
+        )
         statuses["tecnicamente_concluidas"] += int(order["technical_status"] == "CONCLUIDA")
         statuses["financeiramente_parciais"] += int(order["financial_status"] == "PARCIALMENTE_CONCLUIDA")
         statuses["financeiramente_concluidas"] += int(order["financial_status"] == "CONCLUIDA")
