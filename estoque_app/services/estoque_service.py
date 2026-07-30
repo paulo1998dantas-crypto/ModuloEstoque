@@ -97,6 +97,84 @@ def normalize_sku(code):
     return str(code or "").strip().upper()
 
 
+def _normalized_identifier(value):
+    value = str(value or "").strip().lower().replace("-", "")
+    return value or None
+
+
+def _normalized_text(value):
+    value = str(value or "").strip()
+    return value or None
+
+
+def _requested_movement_context(
+    work_order_id=None,
+    context_kind=None,
+    setor="",
+    reference_text="",
+):
+    work_order_id = _normalized_identifier(work_order_id)
+    setor = _normalized_text(setor)
+    reference_text = _normalized_text(reference_text)
+    if work_order_id:
+        resolved_kind = "WORK_ORDER"
+    elif setor:
+        resolved_kind = "SETOR"
+    elif reference_text:
+        resolved_kind = "REFERENCIA"
+    elif context_kind in VALID_CONTEXT_KINDS:
+        resolved_kind = context_kind
+    else:
+        resolved_kind = "LEGACY"
+    return {
+        "work_order_id": work_order_id,
+        "context_kind": resolved_kind,
+        "setor": setor,
+        "reference_text": reference_text,
+    }
+
+
+def _movement_matches_command(
+    movement,
+    *,
+    sku_id,
+    tipo,
+    quantidade,
+    related_movement_id=None,
+    work_order_id=None,
+    context_kind=None,
+    setor="",
+    reference_text="",
+    source_type=None,
+    operation_id=None,
+    parent_movement_id=None,
+):
+    requested_context = _requested_movement_context(
+        work_order_id=work_order_id,
+        context_kind=context_kind,
+        setor=setor,
+        reference_text=reference_text,
+    )
+    return (
+        movement.sku_id == sku_id
+        and movement.tipo == tipo
+        and to_decimal(movement.quantidade) == to_decimal(quantidade)
+        and movement.related_movement_id == related_movement_id
+        and _normalized_identifier(movement.work_order_id)
+        == requested_context["work_order_id"]
+        and (movement.context_kind or "LEGACY")
+        == requested_context["context_kind"]
+        and _normalized_text(movement.setor) == requested_context["setor"]
+        and _normalized_text(movement.reference_text)
+        == requested_context["reference_text"]
+        and _normalized_text(movement.source_type)
+        == _normalized_text(source_type)
+        and _normalized_identifier(movement.operation_id)
+        == _normalized_identifier(operation_id)
+        and movement.parent_movement_id == parent_movement_id
+    )
+
+
 def get_sku_by_code(db, code, active_only=False):
     sku_code = normalize_sku(code)
     if not sku_code:
@@ -415,11 +493,19 @@ def register_movement(
         )
         if existing is None:
             return None
-        same_command = (
-            existing.sku_id == sku.id
-            and existing.tipo == tipo
-            and to_decimal(existing.quantidade) == quantidade
-            and existing.related_movement_id == related_movement_id
+        same_command = _movement_matches_command(
+            existing,
+            sku_id=sku.id,
+            tipo=tipo,
+            quantidade=quantidade,
+            related_movement_id=related_movement_id,
+            work_order_id=work_order_id,
+            context_kind=context_kind,
+            setor=setor,
+            reference_text=reference_text,
+            source_type=source_type,
+            operation_id=operation_id,
+            parent_movement_id=parent_movement_id,
         )
         if not same_command:
             raise ValueError(
@@ -613,6 +699,9 @@ def register_consumption_from_commitment(
     if commitment is None:
         raise ValueError("Empenho nao encontrado.")
     commitment_id = commitment.id
+    requested_quantity = (
+        None if quantidade in (None, "") else to_decimal(quantidade)
+    )
     idempotency_key = str(idempotency_key or "").strip() or None
     if idempotency_key:
         replayed = (
@@ -621,9 +710,27 @@ def register_consumption_from_commitment(
             .one_or_none()
         )
         if replayed is not None:
-            if (
-                replayed.tipo != "BAIXA"
-                or replayed.related_movement_id != commitment_id
+            expected_context = movement_context_from_movement(commitment)
+            if correct_context or any((work_order_id, setor, reference_text)):
+                expected_context = _requested_movement_context(
+                    work_order_id=work_order_id,
+                    setor=setor,
+                    reference_text=reference_text,
+                )
+            if not _movement_matches_command(
+                replayed,
+                sku_id=commitment.sku_id,
+                tipo="BAIXA",
+                quantidade=(
+                    replayed.quantidade
+                    if requested_quantity is None
+                    else requested_quantity
+                ),
+                related_movement_id=commitment_id,
+                work_order_id=expected_context["work_order_id"],
+                context_kind=expected_context["context_kind"],
+                setor=expected_context["setor"],
+                reference_text=expected_context["reference_text"],
             ):
                 raise ValueError(
                     "Chave de idempotencia ja utilizada por outra movimentacao."
@@ -641,7 +748,7 @@ def register_consumption_from_commitment(
     if commitment is None or commitment.tipo not in COMMITMENT_TYPES:
         raise ValueError("Empenho nao encontrado.")
     pending = pending_commitment_for_movement(db, commitment)
-    quantidade = pending if quantidade in (None, "") else to_decimal(quantidade)
+    quantidade = pending if requested_quantity is None else requested_quantity
     if quantidade <= 0:
         raise ValueError("Quantidade para baixa deve ser maior que zero.")
     if quantidade > pending:
@@ -774,6 +881,19 @@ def register_entry_with_backflush(
     idempotency_key=None,
 ):
     command_key = str(idempotency_key or "").strip() or None
+    quantidade = to_decimal(quantidade)
+    requested_components = {}
+    for row in component_rows:
+        component_sku = row.get("sku")
+        if component_sku is None:
+            raise ValueError("Componente do backflush nao encontrado.")
+        component_qty = to_decimal(row.get("quantidade"))
+        if component_qty <= 0:
+            raise ValueError("Quantidade do componente deve ser maior que zero.")
+        requested_components[component_sku.id] = (
+            requested_components.get(component_sku.id, Decimal("0.000"))
+            + component_qty
+        )
     if command_key:
         existing = (
             db.query(Movement)
@@ -781,6 +901,33 @@ def register_entry_with_backflush(
             .one_or_none()
         )
         if existing is not None:
+            children = (
+                db.query(Movement)
+                .filter(
+                    Movement.operation_id == existing.operation_id,
+                    Movement.parent_movement_id == existing.id,
+                    Movement.source_type == "BACKFLUSH_CONSUMPTION",
+                )
+                .all()
+            )
+            persisted_components = {}
+            for child in children:
+                persisted_components[child.sku_id] = (
+                    persisted_components.get(child.sku_id, Decimal("0.000"))
+                    + to_decimal(child.quantidade)
+                )
+            same_command = (
+                existing.sku_id == sku.id
+                and existing.tipo == "ENTRADA"
+                and to_decimal(existing.quantidade) == quantidade
+                and existing.source_type == "MANUAL_ENTRY_BACKFLUSH"
+                and existing.parent_movement_id is None
+                and persisted_components == requested_components
+            )
+            if not same_command:
+                raise ValueError(
+                    "Chave de idempotencia ja utilizada por outro backflush."
+                )
             return existing
     operation_id = str(uuid4())
     document = documento or f"ENTRADA-BACKFLUSH-{now_utc().strftime('%Y%m%d-%H%M%S')}"
@@ -877,9 +1024,13 @@ def cancel_movement(
             "Ajuste compensatorio de cancelamento nao pode ser cancelado diretamente."
         )
     if movement.operation_id:
-        raise ValueError(
-            "Movimentacao composta de backflush nao pode ser cancelada "
-            "isoladamente; use um estorno operacional do conjunto."
+        return _cancel_composite_movement(
+            db,
+            movement,
+            actor_user_id,
+            reason,
+            allow_any=allow_any,
+            allow_negative=allow_negative,
         )
     if not allow_any and movement.usuario_id != actor_user_id:
         raise ValueError("Voce so pode cancelar movimentacoes registradas por seu usuario.")
@@ -938,6 +1089,129 @@ def cancel_movement(
     clear_dashboard_movement_cache(db)
     db.commit()
     return movement, reversal, False
+
+
+def _cancel_composite_movement(
+    db,
+    selected_movement,
+    actor_user_id,
+    reason,
+    allow_any=False,
+    allow_negative=False,
+):
+    operation_id = selected_movement.operation_id
+    operation = (
+        db.query(Movement)
+        .filter(Movement.operation_id == operation_id)
+        .order_by(Movement.id)
+        .with_for_update()
+        .all()
+    )
+    originals = [
+        item for item in operation if item.source_type != "MOVEMENT_CANCELLATION"
+    ]
+    parents = [item for item in originals if item.parent_movement_id is None]
+    if len(parents) != 1:
+        raise ValueError("Operacao composta inconsistente: movimento pai nao identificado.")
+    parent = parents[0]
+    if selected_movement.id != parent.id:
+        raise ValueError(
+            f"Movimento filho do backflush. Cancele o conjunto pelo movimento pai {parent.id}."
+        )
+    statuses = {item.movement_status or ACTIVE_MOVEMENT_STATUS for item in originals}
+    if statuses == {"CANCELADA"}:
+        parent.canceled_operation_size = len(originals)
+        return parent, parent.cancellation_reversal, True
+    if statuses != {ACTIVE_MOVEMENT_STATUS}:
+        raise ValueError(
+            "Cancelamento parcial bloqueado: o conjunto possui estados divergentes."
+        )
+    if not allow_any and any(
+        item.usuario_id != actor_user_id for item in originals
+    ):
+        raise ValueError(
+            "Voce so pode cancelar conjuntos registrados integralmente por seu usuario."
+        )
+    reason = str(reason or "").strip()
+    if not reason:
+        raise ValueError("Informe o motivo do cancelamento.")
+    if any(
+        item.source_type in {"GOODS_RECEIPT", "GOODS_RECEIPT_REVERSAL"}
+        for item in originals
+    ):
+        raise ValueError(
+            "Movimento de recebimento deve ser estornado pela Inspecao de Recebimento."
+        )
+
+    sku_ids = sorted({item.sku_id for item in originals})
+    for item in originals:
+        ensure_balance(db, item.sku)
+    db.flush()
+    (
+        db.query(StockBalance)
+        .filter(StockBalance.sku_id.in_(sku_ids))
+        .order_by(StockBalance.sku_id)
+        .with_for_update()
+        .all()
+    )
+
+    reversal_operation_id = str(uuid4())
+    canceled_at = now_utc()
+    reversals = {}
+    children = sorted(
+        (item for item in originals if item.id != parent.id),
+        key=lambda item: (item.sku_id, item.id),
+    )
+    # Reverse component consumptions first. The parent entry is reversed last,
+    # after all component stock has been restored.
+    for original in [*children, parent]:
+        impact = (
+            to_decimal(original.saldo_posterior)
+            - to_decimal(original.saldo_anterior)
+        )
+        reversal = register_movement(
+            db,
+            original.sku,
+            "AJUSTE",
+            -impact,
+            actor_user_id,
+            documento=f"CANCELAMENTO-OPERACAO-{parent.id}",
+            observacao=(
+                f"Estorno do movimento {original.id}, operacao {operation_id}: "
+                f"{reason}"
+            ),
+            allow_negative=allow_negative,
+            commit=False,
+            related_movement_id=original.id,
+            context_kind="LEGACY",
+            source_type="MOVEMENT_CANCELLATION",
+            idempotency_key=f"operation-cancellation:{operation_id}:{original.id}",
+            operation_id=reversal_operation_id,
+        )
+        reversal.work_order_id = original.work_order_id
+        reversal.context_kind = original.context_kind
+        reversal.setor = original.setor
+        reversal.reference_text = original.reference_text
+        reversal.link_updated_at = canceled_at
+        reversal.link_updated_by = actor_user_id
+        reversals[original.id] = reversal
+
+    parent_reversal = reversals[parent.id]
+    for child in children:
+        reversals[child.id].parent_movement_id = parent_reversal.id
+
+    for original in originals:
+        original.movement_status = "CANCELADA"
+        original.canceled_at = canceled_at
+        original.canceled_by = actor_user_id
+        original.cancel_reason = reason
+        original.reversal_movement_id = reversals[original.id].id
+
+    parent.canceled_operation_size = len(originals)
+    parent.cancellation_reversals = list(reversals.values())
+    clear_dashboard_movement_cache(db)
+    db.commit()
+    return parent, parent_reversal, False
 
 
 def adjust_balance_to_count(db, sku, counted_qty, usuario_id, documento="", observacao=""):

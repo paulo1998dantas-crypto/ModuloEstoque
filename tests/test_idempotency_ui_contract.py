@@ -22,6 +22,9 @@ class IdempotencyUiContractTest(unittest.TestCase):
         )
         self.assertIn('name="idempotency_key"', consumption_form)
         self.assertIn("data-modal-idempotency-key", movements)
+        self.assertIn("data-cancel-composite-operation", movements)
+        self.assertIn("Cancelar conjunto", movements)
+        self.assertIn("cancele pelo movimento pai", movements)
 
     def test_receipt_key_is_reused_until_success(self):
         template = (

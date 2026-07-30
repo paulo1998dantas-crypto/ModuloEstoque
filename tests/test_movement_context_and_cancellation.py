@@ -196,15 +196,214 @@ class MovementContextAndCancellationTest(unittest.TestCase):
         self.assertEqual(entry.operation_id, child.operation_id)
         self.assertEqual("MANUAL_ENTRY_BACKFLUSH", entry.source_type)
         self.assertEqual("BACKFLUSH_CONSUMPTION", child.source_type)
-        with self.assertRaisesRegex(ValueError, "composta de backflush"):
+
+    def test_backflush_replay_rejects_divergent_parent_or_components(self):
+        component = SKU(
+            sku="CTX-COMP-DIVERGENT",
+            descricao="Componente divergente",
+            unidade="UN",
+            active=True,
+        )
+        self.db.add(component)
+        self.db.commit()
+        register_movement(self.db, component, "ENTRADA", 10, self.user.id)
+        key = "entry-backflush:divergent"
+        register_entry_with_backflush(
+            self.db,
+            self.sku,
+            1,
+            self.user.id,
+            [{"sku": component, "quantidade": Decimal("2")}],
+            idempotency_key=key,
+        )
+
+        with self.assertRaisesRegex(ValueError, "outro backflush"):
+            register_entry_with_backflush(
+                self.db,
+                self.sku,
+                2,
+                self.user.id,
+                [{"sku": component, "quantidade": Decimal("2")}],
+                idempotency_key=key,
+            )
+        with self.assertRaisesRegex(ValueError, "outro backflush"):
+            register_entry_with_backflush(
+                self.db,
+                self.sku,
+                1,
+                self.user.id,
+                [{"sku": component, "quantidade": Decimal("3")}],
+                idempotency_key=key,
+            )
+
+    def test_composite_backflush_cancels_atomically_and_replays(self):
+        component = SKU(
+            sku="CTX-COMP-CANCEL",
+            descricao="Componente para estorno",
+            unidade="UN",
+            active=True,
+        )
+        self.db.add(component)
+        self.db.commit()
+        register_movement(self.db, component, "ENTRADA", 5, self.user.id)
+        entry = register_entry_with_backflush(
+            self.db,
+            self.sku,
+            1,
+            self.user.id,
+            [{"sku": component, "quantidade": Decimal("2")}],
+            idempotency_key="entry-backflush:cancel",
+        )
+        child = (
+            self.db.query(Movement)
+            .filter(Movement.parent_movement_id == entry.id)
+            .one()
+        )
+
+        canceled, parent_reversal, replayed = cancel_movement(
+            self.db,
+            entry,
+            self.user.id,
+            "Operacao informada em duplicidade.",
+        )
+
+        self.assertFalse(replayed)
+        self.assertEqual("CANCELADA", canceled.movement_status)
+        self.assertEqual("CANCELADA", child.movement_status)
+        self.assertEqual(2, canceled.canceled_operation_size)
+        self.assertEqual("MOVEMENT_CANCELLATION", parent_reversal.source_type)
+        child_reversal = self.db.get(Movement, child.reversal_movement_id)
+        self.assertEqual(parent_reversal.id, child_reversal.parent_movement_id)
+        self.assertEqual(entry.id, parent_reversal.related_movement_id)
+        self.assertEqual(child.id, child_reversal.related_movement_id)
+        self.assertEqual(
+            Decimal("0.000"),
+            self.db.query(StockBalance).filter_by(sku_id=self.sku.id).one().saldo_atual,
+        )
+        self.assertEqual(
+            Decimal("5.000"),
+            self.db.query(StockBalance).filter_by(sku_id=component.id).one().saldo_atual,
+        )
+
+        _, replay_reversal, replayed = cancel_movement(
+            self.db,
+            canceled,
+            self.user.id,
+            "Repeticao da mesma requisicao.",
+        )
+        self.assertTrue(replayed)
+        self.assertEqual(parent_reversal.id, replay_reversal.id)
+        self.assertEqual(
+            2,
+            self.db.query(Movement)
+            .filter(Movement.source_type == "MOVEMENT_CANCELLATION")
+            .count(),
+        )
+
+    def test_composite_child_partial_state_and_foreign_owner_are_blocked(self):
+        component = SKU(
+            sku="CTX-COMP-GUARDS",
+            descricao="Componente para protecoes",
+            unidade="UN",
+            active=True,
+        )
+        self.db.add(component)
+        self.db.commit()
+        register_movement(self.db, component, "ENTRADA", 5, self.user.id)
+        entry = register_entry_with_backflush(
+            self.db,
+            self.sku,
+            1,
+            self.user.id,
+            [{"sku": component, "quantidade": Decimal("1")}],
+            idempotency_key="entry-backflush:guards",
+        )
+        child = (
+            self.db.query(Movement)
+            .filter(Movement.parent_movement_id == entry.id)
+            .one()
+        )
+
+        with self.assertRaisesRegex(ValueError, "movimento pai"):
+            cancel_movement(
+                self.db,
+                child,
+                self.user.id,
+                "Tentativa pelo filho.",
+            )
+        self.db.rollback()
+        entry = self.db.get(Movement, entry.id)
+        child = self.db.get(Movement, child.id)
+        with self.assertRaisesRegex(ValueError, "integralmente"):
+            cancel_movement(
+                self.db,
+                entry,
+                self.other_user.id,
+                "Tentativa por outro operador.",
+            )
+        self.db.rollback()
+        child = self.db.get(Movement, child.id)
+        child.movement_status = "CANCELADA"
+        self.db.commit()
+        entry = self.db.get(Movement, entry.id)
+        with self.assertRaisesRegex(ValueError, "parcial bloqueado"):
             cancel_movement(
                 self.db,
                 entry,
                 self.user.id,
-                "Tentativa isolada",
-                allow_any=True,
+                "Estado parcial inconsistente.",
             )
         self.db.rollback()
+
+    def test_movement_replay_rejects_different_context_or_relation(self):
+        key = "movement:strict-replay"
+        first = register_movement(
+            self.db,
+            self.sku,
+            "EMPENHO",
+            1,
+            self.user.id,
+            setor="PRODUCAO",
+            require_context=True,
+            source_type="MANUAL",
+            idempotency_key=key,
+        )
+        replayed = register_movement(
+            self.db,
+            self.sku,
+            "EMPENHO",
+            1,
+            self.user.id,
+            setor="PRODUCAO",
+            require_context=True,
+            source_type="MANUAL",
+            idempotency_key=key,
+        )
+        self.assertEqual(first.id, replayed.id)
+        with self.assertRaisesRegex(ValueError, "outra movimentacao"):
+            register_movement(
+                self.db,
+                self.sku,
+                "EMPENHO",
+                1,
+                self.user.id,
+                setor="ENGENHARIA",
+                require_context=True,
+                source_type="MANUAL",
+                idempotency_key=key,
+            )
+        with self.assertRaisesRegex(ValueError, "outra movimentacao"):
+            register_movement(
+                self.db,
+                self.sku,
+                "EMPENHO",
+                1,
+                self.user.id,
+                setor="PRODUCAO",
+                require_context=True,
+                source_type="IMPORT",
+                idempotency_key=key,
+            )
 
     def test_new_commitment_requires_context_and_consumption_inherits_it(self):
         with self.assertRaisesRegex(ValueError, "Informe uma O.S. ativa"):
@@ -290,6 +489,14 @@ class MovementContextAndCancellationTest(unittest.TestCase):
             Decimal("2.000"),
             pending_commitment_for_movement(self.db, commitment),
         )
+        with self.assertRaisesRegex(ValueError, "outra movimentacao"):
+            register_consumption_from_commitment(
+                self.db,
+                commitment,
+                2,
+                self.user.id,
+                idempotency_key=key,
+            )
 
     def test_legacy_context_can_be_corrected_during_consumption_with_history(self):
         register_movement(

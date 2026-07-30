@@ -20,7 +20,7 @@ from flask import (
     session,
     url_for,
 )
-from sqlalchemy import or_
+from sqlalchemy import func, or_
 from werkzeug.exceptions import NotFound
 
 from auth import (
@@ -1452,12 +1452,36 @@ def movements():
         else:
             query = query.filter(Movement.tipo == tipo)
     rows = query.order_by(Movement.created_at.desc()).limit(500).all()
+    operation_ids = {
+        str(movement.operation_id)
+        for movement in rows
+        if movement.operation_id
+        and movement.source_type != "MOVEMENT_CANCELLATION"
+    }
+    operation_sizes = {}
+    if operation_ids:
+        operation_sizes = {
+            str(operation_id): count
+            for operation_id, count in (
+                database.query(Movement.operation_id, func.count(Movement.id))
+                .filter(
+                    Movement.operation_id.in_(operation_ids),
+                    Movement.source_type != "MOVEMENT_CANCELLATION",
+                )
+                .group_by(Movement.operation_id)
+                .all()
+            )
+        }
     available_snapshots = movement_available_snapshots(database, rows)
     work_order_cache = {}
     for movement in rows:
         movement.pending_commitment = pending_commitment_for_movement(database, movement)
         movement.consumption_idempotency_key = (
             f"commitment-consumption:{movement.id}:{uuid4()}"
+        )
+        movement.operation_size = operation_sizes.get(
+            str(movement.operation_id),
+            0,
         )
         movement.saldo_posterior_disponivel = available_snapshots.get(movement.id, to_decimal(movement.saldo_posterior))
         movement.work_order_label = ""
@@ -1543,13 +1567,29 @@ def cancel_movement_route(movement_id):
             allow_negative=get_setting_bool(database, "allow_negative_stock", False),
         )
         if replayed:
-            flash(f"Movimentacao {movement_id} ja estava cancelada.", "warning")
+            if canceled.operation_id:
+                flash(
+                    f"Operacao composta do movimento {movement_id} ja estava "
+                    f"cancelada ({getattr(canceled, 'canceled_operation_size', 0)} "
+                    "movimentos).",
+                    "warning",
+                )
+            else:
+                flash(f"Movimentacao {movement_id} ja estava cancelada.", "warning")
         elif reversal:
-            flash(
-                f"Movimentacao {movement_id} cancelada; ajuste compensatorio "
-                f"{reversal.id} registrado.",
-                "success",
-            )
+            if canceled.operation_id:
+                flash(
+                    f"Operacao composta cancelada integralmente: "
+                    f"{getattr(canceled, 'canceled_operation_size', 0)} movimentos "
+                    "e seus ajustes compensatorios foram registrados.",
+                    "success",
+                )
+            else:
+                flash(
+                    f"Movimentacao {movement_id} cancelada; ajuste compensatorio "
+                    f"{reversal.id} registrado.",
+                    "success",
+                )
         else:
             flash(f"Movimentacao {movement_id} cancelada.", "success")
     except Exception as exc:

@@ -98,21 +98,34 @@
                             </form>
                         {% endif %}
                         {% set is_receipt_movement = mv.source_type in ['GOODS_RECEIPT', 'GOODS_RECEIPT_REVERSAL'] %}
-                        {% set is_composite_movement = mv.operation_id or mv.source_type == 'MOVEMENT_CANCELLATION' %}
-                        {% if (mv.movement_status or 'ATIVA') == 'ATIVA' and not is_receipt_movement and not is_composite_movement and (can_cancel_any or (can_cancel_own and mv.usuario_id == current_user.id)) %}
+                        {% set is_composite_parent = mv.operation_id and not mv.parent_movement_id and mv.source_type != 'MOVEMENT_CANCELLATION' %}
+                        {% set is_composite_child = mv.operation_id and mv.parent_movement_id and mv.source_type != 'MOVEMENT_CANCELLATION' %}
+                        {% set is_cancellation_movement = mv.source_type == 'MOVEMENT_CANCELLATION' %}
+                        {% if (mv.movement_status or 'ATIVA') == 'ATIVA' and not is_receipt_movement and not mv.operation_id and not is_cancellation_movement and (can_cancel_any or (can_cancel_own and mv.usuario_id == current_user.id)) %}
                             <form method="post" action="{{ url_for('cancel_movement_route', movement_id=mv.id) }}" class="form-grid">
                                 <input type="hidden" name="tipo" value="{{ tipo }}">
                                 <input name="reason" placeholder="Motivo obrigatório" required>
                                 <button class="btn small danger" type="submit">Cancelar</button>
                             </form>
+                        {% elif (mv.movement_status or 'ATIVA') == 'ATIVA' and is_composite_parent and (can_cancel_any or (can_cancel_own and mv.usuario_id == current_user.id)) %}
+                            <form method="post" action="{{ url_for('cancel_movement_route', movement_id=mv.id) }}" class="form-grid" data-cancel-composite-operation>
+                                <input type="hidden" name="tipo" value="{{ tipo }}">
+                                <input name="reason" placeholder="Motivo do estorno integral" required>
+                                <button class="btn small danger" type="submit">
+                                    Cancelar conjunto ({{ mv.operation_size }})
+                                </button>
+                                <small>Estorna a entrada e todos os componentes do backflush em uma única operação.</small>
+                            </form>
                         {% elif (mv.movement_status or 'ATIVA') == 'ATIVA' and is_receipt_movement %}
                             <span class="badge alerta" title="Recebimentos preservam a rastreabilidade da O.C. e da inspeção.">
                                 Estorno somente pela Inspeção
                             </span>
-                        {% elif (mv.movement_status or 'ATIVA') == 'ATIVA' and mv.operation_id %}
+                        {% elif (mv.movement_status or 'ATIVA') == 'ATIVA' and is_composite_child %}
                             <span class="badge alerta" title="Entrada e componentes pertencem à mesma operação atômica.">
-                                Estorno do conjunto necessário
+                                Componente do conjunto #{{ mv.parent_movement_id }}; cancele pelo movimento pai
                             </span>
+                        {% elif (mv.movement_status or 'ATIVA') == 'ATIVA' and is_cancellation_movement %}
+                            <span class="badge">Ajuste de estorno auditável</span>
                         {% endif %}
                     </td>
                 </tr>
