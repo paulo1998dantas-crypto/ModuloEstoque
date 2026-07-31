@@ -442,6 +442,7 @@ def pending_purchase_orders(db):
         from erp_purchase_orders o
         join erp_purchase_order_lines l on l.purchase_order_id=o.id
         where o.status in ('EMITIDA','PARCIALMENTE_RECEBIDA')
+          and coalesce(o.technical_status,'ABERTA') <> 'CONCLUIDA'
           and l.quantidade_pedida > l.quantidade_recebida
         order by o.data_necessidade nulls last,o.numero_oc,l.numero_linha"""))]
 
@@ -462,8 +463,9 @@ def pending_purchase_order_lines_by_sku(db, sku_id=None, sku_code=""):
                        as quantidade_pendente,
                    l.valor_unitario_pedido
               from erp_purchase_orders o
-              join erp_purchase_order_lines l on l.purchase_order_id=o.id
+             join erp_purchase_order_lines l on l.purchase_order_id=o.id
              where o.status in ('EMITIDA','PARCIALMENTE_RECEBIDA')
+               and coalesce(o.technical_status,'ABERTA') <> 'CONCLUIDA'
                and l.quantidade_pedida > l.quantidade_recebida
                and (
                     (:sku_id is not null and l.sku_id=:sku_id)
@@ -662,6 +664,7 @@ def purchase_orders_dashboard(db, limit=1000):
         statuses["pendentes"] += int(
             status in {"EMITIDA", "PARCIALMENTE_RECEBIDA"}
             and to_decimal(order["quantidade_pendente"]) > 0
+            and str(order.get("technical_status") or "ABERTA").upper() != "CONCLUIDA"
         )
         statuses["tecnicamente_concluidas"] += int(order["technical_status"] == "CONCLUIDA")
         statuses["financeiramente_parciais"] += int(order["financial_status"] == "PARCIALMENTE_CONCLUIDA")
@@ -1124,6 +1127,47 @@ def close_purchase_order_technical(db, order_id, actor, reason):
     return {
         "id": order_id, "status": order["status"],
         "technical_status": "CONCLUIDA", "replayed": False,
+    }
+
+
+def reopen_purchase_order_technical(db, order_id, actor, reason):
+    """Return a technically closed O.C. to the physical receipt workflow.
+
+    This is deliberately only an operational visibility change: receipts,
+    movements and financial records remain untouched.  The audit trail keeps
+    the original technical closure and its subsequent reopening.
+    """
+    order = _row(db.execute(text(
+        "select id,status,technical_status from erp_purchase_orders where id=:id for update"
+    ), {"id": str(order_id or "").strip()}).first())
+    if not order:
+        raise ValueError("O.C. integrada nao encontrada para reabertura tecnica.")
+    if order["status"] == "CANCELADA":
+        raise ValueError("O.C. cancelada nao pode ser reaberta tecnicamente.")
+    order_id = str(order["id"])
+    if str(order.get("technical_status") or "ABERTA").upper() != "CONCLUIDA":
+        return {
+            "id": order_id,
+            "status": order["status"],
+            "technical_status": "ABERTA",
+            "replayed": True,
+        }
+    db.execute(text("""
+        update erp_purchase_orders
+           set technical_status='ABERTA',technical_closed_at=null,
+               technical_closed_by=null,technical_close_reason='',
+               updated_at=now(),version=version+1
+         where id=:id
+    """), {"id": order_id})
+    db.execute(text("""insert into erp_audit_events(entity_type,entity_id,action,actor,reason,origin)
+        values ('PURCHASE_ORDER',:id,'REABERTURA_TECNICA',:actor,:reason,'SUPRIMENTOS')"""),
+        {"id": order_id, "actor": actor, "reason": reason or ""})
+    db.commit()
+    return {
+        "id": order_id,
+        "status": order["status"],
+        "technical_status": "ABERTA",
+        "replayed": False,
     }
 
 

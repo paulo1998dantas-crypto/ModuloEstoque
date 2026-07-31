@@ -135,6 +135,7 @@ from services.erp_service import (
     pending_purchase_order_lines_by_sku,
     purchase_order_financial_detail,
     purchase_orders_dashboard,
+    reopen_purchase_order_technical,
     register_purchase_order_financial_entry,
     reverse_receipt,
     sync_legacy_purchase_order,
@@ -2222,6 +2223,20 @@ def erp_technical_close_purchase_order(order_id):
         return jsonify({"ok": False, "error": str(exc)}), 400
 
 
+@app.route("/api/erp/purchase-orders/<order_id>/technical-reopen", methods=["POST"])
+@login_required
+@permission_required("suprimentos.purchase.technical_close")
+@erp_feature_required
+def erp_technical_reopen_purchase_order(order_id):
+    payload = request.get_json(silent=True) or {}
+    try:
+        return jsonify({"ok": True, **reopen_purchase_order_technical(
+            db(), order_id, current_user().username, payload.get("motivo", "")
+        )})
+    except ValueError as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 400
+
+
 @app.route("/api/erp/purchase-orders/<order_id>/correct-number", methods=["POST"])
 @login_required
 @permission_required("suprimentos.purchase.edit")
@@ -2382,6 +2397,19 @@ def erp_internal_technical_close_purchase_order(order_id):
     payload = request.get_json(silent=True) or {}
     try:
         return jsonify({"ok": True, **close_purchase_order_technical(
+            db(), order_id, request.headers.get("X-ERP-Actor", "ERP"), payload.get("motivo", "")
+        )})
+    except ValueError as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 400
+
+
+@app.route("/api/erp/internal/purchase-orders/<order_id>/technical-reopen", methods=["POST"])
+@erp_feature_required
+def erp_internal_technical_reopen_purchase_order(order_id):
+    if not _erp_internal_allowed(): return jsonify({"ok": False, "error": "Servico nao autorizado."}), 401
+    payload = request.get_json(silent=True) or {}
+    try:
+        return jsonify({"ok": True, **reopen_purchase_order_technical(
             db(), order_id, request.headers.get("X-ERP-Actor", "ERP"), payload.get("motivo", "")
         )})
     except ValueError as exc:

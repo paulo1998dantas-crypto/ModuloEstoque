@@ -25,6 +25,7 @@ PURCHASE_ORDER_SCHEMA = (
         categoria text not null,
         fornecedor_nome text not null,
         status text not null,
+        technical_status text not null default 'ABERTA',
         data_emissao date,
         data_necessidade date,
         destino text not null default '',
@@ -61,15 +62,15 @@ class PendingPurchaseOrdersTest(unittest.TestCase):
         self.db.close()
         self.engine.dispose()
 
-    def add_order(self, order_id, status):
+    def add_order(self, order_id, status, technical_status="ABERTA"):
         self.db.execute(
             text(
                 """
                 insert into erp_purchase_orders (
-                    id, numero_oc, categoria, fornecedor_nome, status,
+                    id, numero_oc, categoria, fornecedor_nome, status, technical_status,
                     data_necessidade, destino, valor_total_pedido
                 ) values (
-                    :id, :numero, 'GERAL', :fornecedor, :status,
+                    :id, :numero, 'GERAL', :fornecedor, :status, :technical_status,
                     '2026-08-01', 'ESTOQUE', 100
                 )
                 """
@@ -79,6 +80,7 @@ class PendingPurchaseOrdersTest(unittest.TestCase):
                 "numero": f"OC-{order_id}",
                 "fornecedor": f"Fornecedor {order_id}",
                 "status": status,
+                "technical_status": technical_status,
             },
         )
 
@@ -129,6 +131,8 @@ class PendingPurchaseOrdersTest(unittest.TestCase):
 
         self.add_order("over", "EMITIDA")
         self.add_line("over", 1, 3, 4, "PARCIALMENTE_RECEBIDA")
+        self.add_order("technical-closed", "EMITIDA", "CONCLUIDA")
+        self.add_line("technical-closed", 1, 3, 0, "PENDENTE")
         self.db.commit()
 
         rows = pending_purchase_orders(self.db)
@@ -159,6 +163,8 @@ class PendingPurchaseOrdersTest(unittest.TestCase):
         self.add_line("other-sku", 1, 3, 0, "PENDENTE")
         self.add_order("closed", "RECEBIDA")
         self.add_line("closed", 1, 9, 0, "PENDENTE")
+        self.add_order("technical-closed", "EMITIDA", "CONCLUIDA")
+        self.add_line("technical-closed", 1, 9, 0, "PENDENTE")
         self.db.execute(
             text(
                 "update erp_purchase_order_lines "
@@ -175,6 +181,12 @@ class PendingPurchaseOrdersTest(unittest.TestCase):
             text(
                 "update erp_purchase_order_lines "
                 "set sku_id=77,sku_codigo='MAT-001' where purchase_order_id='closed'"
+            )
+        )
+        self.db.execute(
+            text(
+                "update erp_purchase_order_lines "
+                "set sku_id=77,sku_codigo='MAT-001' where purchase_order_id='technical-closed'"
             )
         )
         self.db.commit()
@@ -237,12 +249,18 @@ class PurchaseOrdersDashboardTest(unittest.TestCase):
                     "technical_status": "ABERTA",
                     "financial_status": "ABERTA",
                 },
+                {
+                    "status": "EMITIDA",
+                    "quantidade_pendente": Decimal("8"),
+                    "technical_status": "CONCLUIDA",
+                    "financial_status": "ABERTA",
+                },
             ]
         )
 
         dashboard = purchase_orders_dashboard(database)
 
-        self.assertEqual(3, dashboard["metrics"]["total"])
+        self.assertEqual(4, dashboard["metrics"]["total"])
         self.assertEqual(1, dashboard["metrics"]["pendentes"])
         normalized_query = " ".join(database.statements[0].split())
         self.assertIn(
