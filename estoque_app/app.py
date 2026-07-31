@@ -52,6 +52,7 @@ from models import (
     now_utc,
 )
 from purchase_report import build_purchase_inspection_report
+from timezone_utils import format_sao_paulo
 from services.backup_service import create_backup
 from services.etiqueta_service import (
     create_label_job,
@@ -229,9 +230,7 @@ def inject_globals():
 
 @app.template_filter("dt")
 def format_datetime(value):
-    if not value:
-        return ""
-    return value.strftime("%d/%m/%Y %H:%M")
+    return format_sao_paulo(value)
 
 
 @app.template_filter("qty")
@@ -1982,7 +1981,7 @@ def api_label_job_local_result(job_id):
         job.status = "ERRO"
         job.erro = payload.get("error") or local_bridge_unavailable_message()
     database.commit()
-    return jsonify({"ok": True, "status": job.status, "printed_at": job.printed_at.strftime("%d/%m/%Y %H:%M:%S") if job.printed_at else ""})
+    return jsonify({"ok": True, "status": job.status, "printed_at": format_sao_paulo(job.printed_at, "%d/%m/%Y %H:%M:%S")})
 
 
 @app.route("/api/label-jobs/<int:job_id>/print", methods=["POST"])
@@ -2004,7 +2003,7 @@ def api_print_label_job(job_id):
         return jsonify({"ok": False, "status": "ERRO", "error": direct_print_unavailable_message()}), 400
     try:
         print_label_job(database, job, printer_name=configured_printer_name(database))
-        return jsonify({"ok": True, "status": job.status, "printed_at": job.printed_at.strftime("%d/%m/%Y %H:%M:%S")})
+        return jsonify({"ok": True, "status": job.status, "printed_at": format_sao_paulo(job.printed_at, "%d/%m/%Y %H:%M:%S")})
     except Exception as exc:
         return jsonify({"ok": False, "status": "ERRO", "error": str(exc)}), 500
 

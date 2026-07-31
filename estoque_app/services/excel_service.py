@@ -9,6 +9,7 @@ from sqlalchemy import func, or_
 
 from config import EXPORTS_DIR
 from models import BomComponent, InventoryCount, InventorySession, LabelPrintJob, Movement, SKU, StockBalance
+from timezone_utils import format_sao_paulo, now_sao_paulo
 from services.etiqueta_service import create_label_job
 from services.estoque_service import (
     bom_components_for_sku,
@@ -1435,7 +1436,7 @@ def create_template_files(base_dir):
 
 def _metadata(ws, title, user, filters=None):
     ws.append([title])
-    ws.append(["Gerado em", datetime.now().strftime("%d/%m/%Y %H:%M:%S")])
+    ws.append(["Gerado em", format_sao_paulo(now_sao_paulo(), "%d/%m/%Y %H:%M:%S")])
     ws.append(["Usuario", user.username if user else ""])
     ws.append(["Filtros", filters or "Sem filtros"])
     ws.append([])
@@ -1569,7 +1570,7 @@ def export_movements_report(db, user, tipo=None):
         tipo_display = "EMPENHO" if mv.tipo == "SAIDA" else mv.tipo
         ws.append([
             mv.id,
-            mv.created_at.strftime("%d/%m/%Y %H:%M:%S"),
+            format_sao_paulo(mv.created_at, "%d/%m/%Y %H:%M:%S"),
             mv.usuario.username,
             mv.sku.sku,
             mv.sku.descricao,
@@ -1689,7 +1690,7 @@ def export_inventory_report(db, user, session_id=None):
             decimal_to_str(count.quantidade_contada),
             decimal_to_str(count.diferenca),
             count.user.username,
-            count.counted_at.strftime("%d/%m/%Y %H:%M:%S"),
+            format_sao_paulo(count.counted_at, "%d/%m/%Y %H:%M:%S"),
         ])
     _autosize(ws)
     return _save_report(wb, "relatorio_inventario")

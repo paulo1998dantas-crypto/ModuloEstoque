@@ -1,4 +1,3 @@
-from datetime import datetime
 import logging
 from pathlib import Path
 import re
@@ -6,6 +5,7 @@ import sys
 
 from config import Config, EXPORTS_DIR
 from models import LabelPrintJob, now_utc
+from timezone_utils import now_sao_paulo
 
 
 logger = logging.getLogger(__name__)
@@ -88,7 +88,7 @@ def render_label_zpl(sku, descricao, quantidade=1):
     sku_text = _safe_zpl_text(sku)
     descricao_text = _safe_zpl_text(descricao)
     descricao_label, desc_font_h, desc_font_w, desc_lines, desc_y = description_layout(descricao_text)
-    data_text = datetime.now().strftime("%d/%m/%Y")
+    data_text = now_sao_paulo().strftime("%d/%m/%Y")
     quantidade_text = str(max(int(quantidade or 1), 1))
 
     zpl = template_path.read_text(encoding="utf-8")
@@ -135,7 +135,7 @@ def _extract_zpl_label_data(zpl):
     descricao = desc_match.group(1).replace("\\&", " ").strip() if desc_match else ""
 
     date_match = re.search(r"DATA EMISSAO:\s*([0-9/.-]+)", text)
-    data_text = date_match.group(1).strip() if date_match else datetime.now().strftime("%d/%m/%Y")
+    data_text = date_match.group(1).strip() if date_match else now_sao_paulo().strftime("%d/%m/%Y")
 
     qty_match = re.search(r"\^PQ(\d+)", text)
     quantidade = max(int(qty_match.group(1)) if qty_match else 1, 1)
@@ -203,7 +203,7 @@ def render_label_epl_from_zpl(zpl):
 
 def save_zpl_file(zpl, prefix="etiqueta"):
     EXPORTS_DIR.mkdir(parents=True, exist_ok=True)
-    stamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
+    stamp = now_sao_paulo().strftime("%Y%m%d_%H%M%S_%f")
     path = EXPORTS_DIR / f"{prefix}_{stamp}.zpl"
     path.write_text(zpl, encoding="utf-8")
     return path
