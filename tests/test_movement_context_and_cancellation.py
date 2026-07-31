@@ -627,6 +627,25 @@ class MovementContextAndCancellationTest(unittest.TestCase):
                 require_context=True,
             )
 
+    def test_terminal_work_orders_cannot_be_committed(self):
+        for status in ("FINALIZADA", "ENTREGUE", "RETIRADA", "CANCELADA"):
+            with self.subTest(status=status):
+                self.db.execute(
+                    text("update erp_work_orders set status=:status where id=:id"),
+                    {"id": self.work_order_id, "status": status},
+                )
+                self.db.commit()
+                with self.assertRaisesRegex(ValueError, "nao esta ativa"):
+                    register_movement(
+                        self.db,
+                        self.sku,
+                        "EMPENHO",
+                        1,
+                        self.user.id,
+                        work_order_id=self.work_order_id,
+                        require_context=True,
+                    )
+
     def test_commitment_with_active_consumption_cannot_be_canceled(self):
         register_movement(
             self.db,
