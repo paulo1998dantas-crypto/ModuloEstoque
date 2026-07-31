@@ -131,7 +131,7 @@ class PendingPurchaseOrdersTest(unittest.TestCase):
 
         self.add_order("over", "EMITIDA")
         self.add_line("over", 1, 3, 4, "PARCIALMENTE_RECEBIDA")
-        self.add_order("technical-closed", "EMITIDA", "CONCLUIDA")
+        self.add_order("technical-closed", "CONCLUIDA", "CONCLUIDA")
         self.add_line("technical-closed", 1, 3, 0, "PENDENTE")
         self.db.commit()
 
@@ -163,7 +163,7 @@ class PendingPurchaseOrdersTest(unittest.TestCase):
         self.add_line("other-sku", 1, 3, 0, "PENDENTE")
         self.add_order("closed", "RECEBIDA")
         self.add_line("closed", 1, 9, 0, "PENDENTE")
-        self.add_order("technical-closed", "EMITIDA", "CONCLUIDA")
+        self.add_order("technical-closed", "CONCLUIDA", "CONCLUIDA")
         self.add_line("technical-closed", 1, 9, 0, "PENDENTE")
         self.db.execute(
             text(
@@ -232,7 +232,7 @@ class PurchaseOrdersDashboardTest(unittest.TestCase):
         database = _DashboardDatabase(
             [
                 {
-                    "status": "EMITIDA",
+                    "status": "CONCLUIDA",
                     "quantidade_pendente": Decimal("0"),
                     "technical_status": "ABERTA",
                     "financial_status": "ABERTA",

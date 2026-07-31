@@ -833,7 +833,12 @@ def register_purchase_order_financial_entry(db, order_id, actor, data):
         for line_id, line in line_rows.items()
     }
     if entry_type == "COMPLETA":
-        if order["status"] != "RECEBIDA":
+        fully_received = bool(line_rows) and all(
+            Decimal(str(line["quantidade_recebida"]))
+            >= Decimal(str(line["quantidade_pedida"]))
+            for line in line_rows.values()
+        )
+        if not fully_received:
             raise ValueError(
                 "Conclusão financeira completa exige recebimento físico total no Estoque."
             )
@@ -882,7 +887,8 @@ def register_purchase_order_financial_entry(db, order_id, actor, data):
     financial_status = "CONCLUIDA" if closes else "PARCIALMENTE_CONCLUIDA"
     db.execute(text("""
         update erp_purchase_orders
-           set financial_status=:status,
+           set status=case when :closes then 'CONCLUIDA' else status end,
+               financial_status=:status,
                financial_closed_at=case when :closes then now() else null end,
                financial_closed_by=case when :closes then :actor else null end,
                financial_close_reason=case when :closes then :reason else '' end,
@@ -917,6 +923,7 @@ def register_purchase_order_financial_entry(db, order_id, actor, data):
     return {
         "id": entry_id,
         "purchase_order_id": order_id,
+        "status": "CONCLUIDA" if closes else order["status"],
         "financial_status": financial_status,
         "quantidade_lancada": total_quantity,
         "valor_lancado": value,
@@ -1102,7 +1109,12 @@ def cancel_purchase_order_by_idempotency_key(db, key, actor, reason):
 
 
 def close_purchase_order_technical(db, order_id, actor, reason):
-    """Record PCP/Compras completion without touching receipts or stock."""
+    """Conclude an O.C. operationally without touching receipts or stock.
+
+    The canonical status becomes CONCLUIDA so the order no longer appears as a
+    pending receipt.  Physical receipt details remain on the order lines and
+    goods receipts; reopening derives the operational status from those lines.
+    """
     order = _row(db.execute(text(
         "select id,status,technical_status from erp_purchase_orders where id=:id for update"
     ), {"id": str(order_id or "").strip()}).first())
@@ -1115,7 +1127,7 @@ def close_purchase_order_technical(db, order_id, actor, reason):
         return {"id": order_id, "status": order["status"], "technical_status": "CONCLUIDA", "replayed": True}
     db.execute(text("""
         update erp_purchase_orders
-           set technical_status='CONCLUIDA',technical_closed_at=now(),
+           set status='CONCLUIDA',technical_status='CONCLUIDA',technical_closed_at=now(),
                technical_closed_by=:actor,technical_close_reason=:reason,
                updated_at=now(),version=version+1
          where id=:id
@@ -1125,7 +1137,7 @@ def close_purchase_order_technical(db, order_id, actor, reason):
         {"id": order_id, "actor": actor, "reason": reason or ""})
     db.commit()
     return {
-        "id": order_id, "status": order["status"],
+        "id": order_id, "status": "CONCLUIDA",
         "technical_status": "CONCLUIDA", "replayed": False,
     }
 
@@ -1138,7 +1150,7 @@ def reopen_purchase_order_technical(db, order_id, actor, reason):
     the original technical closure and its subsequent reopening.
     """
     order = _row(db.execute(text(
-        "select id,status,technical_status from erp_purchase_orders where id=:id for update"
+        "select id,status,technical_status,financial_status from erp_purchase_orders where id=:id for update"
     ), {"id": str(order_id or "").strip()}).first())
     if not order:
         raise ValueError("O.C. integrada nao encontrada para reabertura tecnica.")
@@ -1152,20 +1164,37 @@ def reopen_purchase_order_technical(db, order_id, actor, reason):
             "technical_status": "ABERTA",
             "replayed": True,
         }
+    receipt_state = _row(db.execute(text("""
+        select count(*) filter(where status='RECEBIDA') as received_lines,
+               count(*) filter(where quantidade_recebida > 0) as received_any,
+               count(*) as total_lines
+          from erp_purchase_order_lines
+         where purchase_order_id=:id
+    """), {"id": order_id}).first())
+    if receipt_state["total_lines"] and receipt_state["received_lines"] == receipt_state["total_lines"]:
+        restored_status = "RECEBIDA"
+    elif receipt_state["received_any"]:
+        restored_status = "PARCIALMENTE_RECEBIDA"
+    else:
+        restored_status = "EMITIDA"
+    # A finance closure is final on its own.  Reopening only the technical
+    # closure must never make a financially closed O.C. receivable again.
+    if order.get("financial_status") == "CONCLUIDA":
+        restored_status = "CONCLUIDA"
     db.execute(text("""
         update erp_purchase_orders
-           set technical_status='ABERTA',technical_closed_at=null,
+           set status=:status,technical_status='ABERTA',technical_closed_at=null,
                technical_closed_by=null,technical_close_reason='',
                updated_at=now(),version=version+1
          where id=:id
-    """), {"id": order_id})
+    """), {"id": order_id, "status": restored_status})
     db.execute(text("""insert into erp_audit_events(entity_type,entity_id,action,actor,reason,origin)
         values ('PURCHASE_ORDER',:id,'REABERTURA_TECNICA',:actor,:reason,'SUPRIMENTOS')"""),
         {"id": order_id, "actor": actor, "reason": reason or ""})
     db.commit()
     return {
         "id": order_id,
-        "status": order["status"],
+        "status": restored_status,
         "technical_status": "ABERTA",
         "replayed": False,
     }
@@ -1181,17 +1210,23 @@ def close_purchase_order_financial(db, order_id, actor, reason):
     """), {"id": str(order_id or "").strip()}).first())
     if not order:
         raise ValueError("O.C. integrada nao encontrada para conclusao financeira.")
-    if order["status"] != "RECEBIDA":
+    order_id = str(order["id"])
+    if order["financial_status"] == "CONCLUIDA":
+        return {"id": order_id, "status": order["status"], "financial_status": "CONCLUIDA", "replayed": True}
+    receipt_state = _row(db.execute(text("""
+        select count(*) filter(where quantidade_recebida >= quantidade_pedida) as received_lines,
+               count(*) as total_lines
+          from erp_purchase_order_lines
+         where purchase_order_id=:id
+    """), {"id": order_id}).first())
+    if not receipt_state["total_lines"] or receipt_state["received_lines"] != receipt_state["total_lines"]:
         raise ValueError(
             "Conclusao financeira bloqueada: o Almoxarifado precisa concluir "
             "o recebimento total no Modulo Estoque."
         )
-    order_id = str(order["id"])
-    if order["financial_status"] == "CONCLUIDA":
-        return {"id": order_id, "status": order["status"], "financial_status": "CONCLUIDA", "replayed": True}
     db.execute(text("""
         update erp_purchase_orders
-           set financial_status='CONCLUIDA',financial_closed_at=now(),
+           set status='CONCLUIDA',financial_status='CONCLUIDA',financial_closed_at=now(),
                financial_closed_by=:actor,financial_close_reason=:reason,
                updated_at=now(),version=version+1
          where id=:id
@@ -1201,7 +1236,7 @@ def close_purchase_order_financial(db, order_id, actor, reason):
         {"id": order_id, "actor": actor, "reason": reason or ""})
     db.commit()
     return {
-        "id": order_id, "status": order["status"],
+        "id": order_id, "status": "CONCLUIDA",
         "financial_status": "CONCLUIDA", "replayed": False,
     }
 
@@ -1290,7 +1325,7 @@ def reverse_receipt(db, receipt_id, actor, user_id, reason):
     db.execute(text("update erp_goods_receipts set status='ESTORNADO',reversed_at=now(),motivo_excecao=:reason where id=:id"),{'id':receipt_id,'reason':reason or ''})
     if receipt['purchase_order_id']:
         order_before = _row(db.execute(text("""
-            select financial_status
+            select financial_status,technical_status
               from erp_purchase_orders
              where id=:id
              for update
@@ -1308,6 +1343,11 @@ def reverse_receipt(db, receipt_id, actor, user_id, reason):
             order_status = 'PARCIALMENTE_RECEBIDA'
         else:
             order_status = 'EMITIDA'
+        canonical_status = (
+            'CONCLUIDA'
+            if order_before and order_before.get('technical_status') == 'CONCLUIDA'
+            else order_status
+        )
         db.execute(text("""
             update erp_purchase_orders
                set status=:status,
@@ -1317,7 +1357,7 @@ def reverse_receipt(db, receipt_id, actor, user_id, reason):
                    financial_close_reason=case when :status='RECEBIDA' then financial_close_reason else '' end,
                    updated_at=now(),version=version+1
              where id=:id
-        """), {'id': receipt['purchase_order_id'], 'status': order_status})
+        """), {'id': receipt['purchase_order_id'], 'status': canonical_status})
         if (
             order_status != 'RECEBIDA'
             and order_before
