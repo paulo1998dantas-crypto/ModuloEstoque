@@ -1,7 +1,8 @@
 import os
+import time
 from functools import wraps
 
-from flask import flash, jsonify, redirect, request, session, url_for
+from flask import flash, g, has_request_context, jsonify, redirect, request, session, url_for
 from sqlalchemy import inspect
 from werkzeug.security import check_password_hash, generate_password_hash
 
@@ -17,6 +18,7 @@ from models import (
     ErpUserRole,
     User,
 )
+from portal_sso import enabled as portal_sso_enabled, portal_login_url
 
 
 DEFAULT_SETTINGS = {
@@ -27,6 +29,15 @@ DEFAULT_SETTINGS = {
 }
 
 ADMIN_BOOTSTRAP_FLAG = "admin_default_password_seeded"
+
+# A checagem do contrato RBAC usa o inspector do SQLAlchemy e consulta vários
+# metadados do PostgreSQL. O esquema só muda durante migrations controladas;
+# manter o resultado por poucos segundos evita repetir esse custo em cada menu,
+# sem armazenar dados operacionais ou permissões de usuários.
+_RBAC_SCHEMA_CACHE = {"checked_at": 0.0, "value": False}
+_RBAC_SCHEMA_CACHE_TTL_SECONDS = max(
+    1, int(os.environ.get("ERP_RBAC_SCHEMA_CACHE_TTL_SECONDS", "30"))
+)
 
 ROLE_DEFINITIONS = {
     "ADMIN": "Administrador",
@@ -198,10 +209,17 @@ def rbac_schema_ready(db=None):
     account receives a membership as soon as the additive schema exists, even
     while authorization is still running in legacy mode.
     """
+    now = time.monotonic()
+    cached = _RBAC_SCHEMA_CACHE
+    if now - cached["checked_at"] < _RBAC_SCHEMA_CACHE_TTL_SECONDS:
+        return bool(cached["value"])
+
     database = db or SessionLocal()
     close_database = db is None
     try:
-        return _rbac_tables_exist(database)
+        available = _rbac_tables_exist(database)
+        _RBAC_SCHEMA_CACHE.update(checked_at=now, value=available)
+        return available
     finally:
         if close_database:
             database.close()
@@ -296,12 +314,18 @@ def record_auth_audit(
 def effective_roles(user, db=None):
     if not user:
         return set()
+    cache_key = f"erp_effective_roles_{user.id}"
+    if has_request_context() and hasattr(g, cache_key):
+        return getattr(g, cache_key)
     database = db or SessionLocal()
     if shared_rbac_enabled():
         # Shared mode is intentionally fail-closed.  The legacy users.role
         # column is only authoritative while the feature flag is disabled.
         if not rbac_schema_ready(database):
-            return set()
+            roles = set()
+            if has_request_context():
+                setattr(g, cache_key, roles)
+            return roles
         roles = {
             canonical_role(role_code)
             for (role_code,) in database.query(ErpUserRole.role_code)
@@ -310,22 +334,36 @@ def effective_roles(user, db=None):
             .filter(ErpRole.active.is_(True))
             .all()
         }
+        if has_request_context():
+            setattr(g, cache_key, roles)
         return roles
     legacy_role = canonical_role(user.role)
-    return {legacy_role} if legacy_role else set()
+    roles = {legacy_role} if legacy_role else set()
+    if has_request_context():
+        setattr(g, cache_key, roles)
+    return roles
 
 
 def effective_permissions(user, db=None):
     if not user or not user.active:
         return set()
+    cache_key = f"erp_effective_permissions_{user.id}"
+    if has_request_context() and hasattr(g, cache_key):
+        return getattr(g, cache_key)
     database = db or SessionLocal()
     roles = effective_roles(user, database)
     if "ADMIN" in roles:
-        return set(PERMISSION_DEFINITIONS)
+        permissions = set(PERMISSION_DEFINITIONS)
+        if has_request_context():
+            setattr(g, cache_key, permissions)
+        return permissions
 
     if shared_rbac_enabled():
         if not rbac_schema_ready(database):
-            return set()
+            permissions = set()
+            if has_request_context():
+                setattr(g, cache_key, permissions)
+            return permissions
         role_permissions = {
             permission_code
             for (permission_code,) in database.query(ErpRolePermission.permission_code)
@@ -345,11 +383,15 @@ def effective_permissions(user, db=None):
                 role_permissions.add(permission_code)
             else:
                 role_permissions.discard(permission_code)
+        if has_request_context():
+            setattr(g, cache_key, role_permissions)
         return role_permissions
 
     permissions = set()
     for role in roles:
         permissions.update(ROLE_PERMISSION_MAP.get(role, set()))
+    if has_request_context():
+        setattr(g, cache_key, permissions)
     return permissions
 
 
@@ -372,19 +414,29 @@ def verify_password(password_hash, password):
 
 
 def current_user():
+    if has_request_context() and hasattr(g, "erp_current_user"):
+        return g.erp_current_user
     user_id = session.get("user_id")
     if not user_id:
+        if has_request_context():
+            g.erp_current_user = None
         return None
     db = SessionLocal()
     user = db.get(User, user_id)
     if not user or not user.active:
         session.clear()
+        if has_request_context():
+            g.erp_current_user = None
         return None
     if shared_rbac_enabled():
         session_version = session.get("auth_version")
         if session_version is None or int(session_version) != int(user.auth_version or 1):
             session.clear()
+            if has_request_context():
+                g.erp_current_user = None
             return None
+    if has_request_context():
+        g.erp_current_user = user
     return user
 
 
@@ -392,6 +444,9 @@ def login_required(view):
     @wraps(view)
     def wrapped(*args, **kwargs):
         if not current_user():
+            if portal_sso_enabled():
+                target = request.full_path if request.query_string else request.path
+                return redirect(portal_login_url("ESTOQUE", target))
             return redirect(url_for("login", next=request.path))
         return view(*args, **kwargs)
 
@@ -406,6 +461,9 @@ def permission_required(permission):
             if not user:
                 if request.path.startswith("/api/"):
                     return jsonify({"ok": False, "error": "Autenticacao obrigatoria."}), 401
+                if portal_sso_enabled():
+                    target = request.full_path if request.query_string else request.path
+                    return redirect(portal_login_url("ESTOQUE", target))
                 return redirect(url_for("login", next=request.path))
             if shared_rbac_enabled() and not rbac_schema_ready():
                 message = "Autorizacao compartilhada temporariamente indisponivel."

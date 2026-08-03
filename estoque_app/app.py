@@ -51,6 +51,7 @@ from models import (
     User,
     now_utc,
 )
+from portal_sso import consume_ticket, enabled as portal_sso_enabled, normalize_next, portal_login_url, portal_logout_url
 from purchase_report import build_purchase_inspection_report
 from timezone_utils import format_sao_paulo
 from services.backup_service import create_backup
@@ -463,6 +464,9 @@ def healthz():
 
 @app.route("/login", methods=["GET", "POST"])
 def login():
+    if portal_sso_enabled():
+        target = request.args.get("next") or url_for("dashboard")
+        return redirect(portal_login_url("ESTOQUE", target))
     if request.method == "POST":
         database = db()
         if shared_rbac_enabled() and not rbac_schema_ready(database):
@@ -487,10 +491,39 @@ def login():
     return render_template("login.html")
 
 
+@app.route("/_sso/consume")
+def portal_sso_consume():
+    """Exchange a short-lived Portal assertion for this app's own session."""
+    if not portal_sso_enabled():
+        return "SSO central desativado.", 404
+    try:
+        claims = consume_ticket(request.args.get("ticket"), "ESTOQUE")
+        database = db()
+        user = database.get(User, claims["uid"])
+        if (
+            not user
+            or not user.active
+            or str(user.username or "").casefold() != claims["username"].casefold()
+            or int(user.auth_version or 1) != claims["auth_version"]
+        ):
+            raise ValueError("Usuario sem sessao valida para este modulo.")
+        session.clear()
+        session["user_id"] = user.id
+        session["auth_version"] = int(user.auth_version or 1)
+        response = redirect(normalize_next(claims.get("next"), url_for("dashboard")))
+        response.headers["Cache-Control"] = "no-store"
+        response.headers["Referrer-Policy"] = "no-referrer"
+        return response
+    except ValueError as exc:
+        return str(exc), 401
+
+
 @app.route("/logout")
 def logout():
     session.clear()
     flash("Sessao encerrada.", "info")
+    if portal_sso_enabled():
+        return redirect(portal_logout_url())
     return redirect(url_for("login"))
 
 

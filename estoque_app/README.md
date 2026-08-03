@@ -30,6 +30,16 @@ ESTOQUE_ADMIN_USER
 ESTOQUE_ADMIN_PASSWORD
 ```
 
+### Login central pelo Portal Operacional
+
+O estoque pode redirecionar usuários não autenticados para o Portal
+Operacional, preservando o destino solicitado. Essa troca não muda permissões
+nem saldo: depois do redirecionamento, o próprio Estoque valida novamente o
+usuário antes de abrir a sessão. Para ativar junto com os demais módulos,
+configure `ERP_PORTAL_SSO_ENABLED=1`, `ERP_PORTAL_URL` e o mesmo
+`ERP_PORTAL_SSO_SECRET` configurado no Portal. Mantenha o valor `0` até o
+Portal estar publicado e validado.
+
 Comando de build:
 
 ```text

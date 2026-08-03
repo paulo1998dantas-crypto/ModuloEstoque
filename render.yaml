@@ -25,6 +25,14 @@ services:
         value: "false"
       - key: ERP_SHARED_RBAC_ENABLED
         value: "false"
+      - key: ERP_PORTAL_SSO_ENABLED
+        value: "0"
+      - key: ERP_PORTAL_URL
+        value: https://ji-portal-operacional.onrender.com
+      - key: ERP_PORTAL_SSO_SECRET
+        sync: false
+      - key: ERP_RBAC_SCHEMA_CACHE_TTL_SECONDS
+        value: "30"
       - key: ERP_BACKEND_TOKEN
         sync: false
       - key: DATABASE_URL
