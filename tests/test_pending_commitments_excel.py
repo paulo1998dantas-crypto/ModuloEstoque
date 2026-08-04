@@ -1,11 +1,13 @@
+import json
 import sys
 import tempfile
 import unittest
 from pathlib import Path
 from unittest.mock import patch
+from uuid import uuid4
 
 from openpyxl import Workbook, load_workbook
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, text
 from sqlalchemy.orm import sessionmaker
 
 
@@ -107,6 +109,93 @@ class PendingCommitmentsExcelTest(unittest.TestCase):
             ],
         )
         self.assertEqual(balance_before, self.sku.balance.saldo_atual)
+
+    def test_export_formats_shared_commitment_candidates_for_active_work_order(self):
+        work_order_id = uuid4().hex
+        vehicle_id = uuid4().hex
+        entry_id = uuid4().hex
+        composition = json.dumps(
+            [
+                {
+                    "codigo": self.sku.sku,
+                    "descricao": self.sku.descricao,
+                    "unidade": self.sku.unidade,
+                    "qtd": 10,
+                    "level": 0,
+                }
+            ]
+        )
+        with self.engine.begin() as connection:
+            connection.execute(
+                text(
+                    "create table erp_vehicles "
+                    "(id text primary key,chassi text not null,marca text,modelo text,versao text)"
+                )
+            )
+            connection.execute(
+                text(
+                    "create table erp_vehicle_entries "
+                    "(id text primary key,vehicle_id text not null,item_number integer not null)"
+                )
+            )
+            connection.execute(
+                text(
+                    "create table erp_work_orders "
+                    "(id text primary key,vehicle_entry_id text not null,numero_os text not null,"
+                    "cliente_nome text,status text not null,technical_status text default 'ABERTA')"
+                )
+            )
+            connection.execute(
+                text(
+                    "create table suprimentos_documentos "
+                    "(id integer primary key,tipo text,erp_work_order_id text,numero text,status text,"
+                    "composicao text,updated_at text)"
+                )
+            )
+            connection.execute(
+                text("insert into erp_vehicles values (:id,:chassi,'JI','Van','V1')"),
+                {"id": vehicle_id, "chassi": "9BRTESTE000001234"},
+            )
+            connection.execute(
+                text("insert into erp_vehicle_entries values (:id,:vehicle_id,3100)"),
+                {"id": entry_id, "vehicle_id": vehicle_id},
+            )
+            connection.execute(
+                text(
+                    "insert into erp_work_orders values "
+                    "(:id,:entry_id,'3100','CLIENTE','ATIVA','ABERTA')"
+                ),
+                {"id": work_order_id, "entry_id": entry_id},
+            )
+            connection.execute(
+                text(
+                    "insert into suprimentos_documentos values "
+                    "(1,'os',:work_id,'3100','emitido',:composition,'2026-08-03')"
+                ),
+                {"work_id": work_order_id, "composition": composition},
+            )
+
+        with tempfile.TemporaryDirectory() as directory:
+            path = self._export(directory)
+            workbook = load_workbook(path, data_only=True)
+            ws = workbook["Necessidades O.S."]
+            header_row = next(
+                row_number
+                for row_number in range(1, 26)
+                if "EMPENHOS_EM_FLUXO"
+                in {cell.value for cell in ws[row_number] if cell.value}
+            )
+            headers = {
+                cell.value: index
+                for index, cell in enumerate(ws[header_row], start=1)
+                if cell.value
+            }
+            shared_commitments = ws.cell(
+                header_row + 1, headers["EMPENHOS_EM_FLUXO"]
+            ).value
+
+        self.assertIn(f"#{self.commitment.id}", shared_commitments)
+        self.assertIn(self.sku.sku, shared_commitments)
 
     def test_exported_workbook_can_be_edited_for_audited_correction_preview(self):
         with tempfile.TemporaryDirectory() as directory:

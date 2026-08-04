@@ -1695,6 +1695,33 @@ def export_movements_report(db, user, tipo=None):
     return _save_report(wb, prefix)
 
 
+def _shared_commitment_candidate_label(candidate, target_unit):
+    source_code = candidate.get("source_codigo") or candidate.get("codigo") or ""
+    source_unit = candidate.get("source_unidade") or candidate.get("unidade") or "UN"
+    pending = candidate.get("quantidade_pendente_origem")
+    if pending is None:
+        pending = candidate.get("saldo_pendente_origem")
+    if pending is None:
+        pending = candidate.get("quantidade_pendente") or 0
+    context = (
+        candidate.get("setor_ou_referencia")
+        or candidate.get("setor")
+        or candidate.get("referencia")
+        or candidate.get("documento")
+        or ""
+    )
+    return "#{} {}: {} {} (fator {}; equiv. {} {}){}".format(
+        candidate.get("movement_id") or candidate.get("id") or "",
+        source_code,
+        pending,
+        source_unit,
+        candidate.get("fator_cobertura") or 0,
+        candidate.get("quantidade_equivalente") or 0,
+        target_unit or "UN",
+        f" - {context}" if context else "",
+    )
+
+
 def export_pending_commitments_report(db, user):
     wb = Workbook()
     ws = wb.active
@@ -1822,20 +1849,7 @@ def export_pending_commitments_report(db, user):
                 float(line["quantidade_pendente"]),
                 float(line.get("saldo_fluxo_compartilhado") or 0),
                 " | ".join(
-                    "#{} {}: {} {} (fator {}; equiv. {} {}){}".format(
-                        candidate["movement_id"],
-                        candidate["source_codigo"],
-                        candidate["quantidade_pendente_origem"],
-                        candidate["source_unidade"] or "UN",
-                        candidate["fator_cobertura"],
-                        candidate["quantidade_equivalente"],
-                        line["unidade"] or "UN",
-                        (
-                            f" - {candidate['setor_ou_referencia']}"
-                            if candidate.get("setor_ou_referencia")
-                            else ""
-                        ),
-                    )
+                    _shared_commitment_candidate_label(candidate, line["unidade"])
                     for candidate in line.get("empenhos_compartilhados", [])
                 ),
                 line["setor"],
