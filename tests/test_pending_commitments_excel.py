@@ -22,6 +22,7 @@ from services.estoque_service import (  # noqa: E402
 from services.excel_service import (  # noqa: E402
     export_pending_commitments_report,
     import_pending_commitment_consumptions,
+    parse_commitment_corrections_from_excel,
     parse_mass_materials_from_excel,
     parse_pending_commitment_consumptions_from_excel,
 )
@@ -72,7 +73,9 @@ class PendingCommitmentsExcelTest(unittest.TestCase):
         balance_before = self.sku.balance.saldo_atual
         with tempfile.TemporaryDirectory() as directory:
             path = self._export(directory)
-            ws = load_workbook(path, data_only=True)["Empenhos pendentes"]
+            workbook = load_workbook(path, data_only=True)
+            self.assertIn("Necessidades O.S.", workbook.sheetnames)
+            ws = workbook["Empenhos pendentes"]
             header_row, headers = self._header_map(ws)
             rows = list(ws.iter_rows(min_row=header_row + 1, values_only=True))
 
@@ -88,6 +91,28 @@ class PendingCommitmentsExcelTest(unittest.TestCase):
             ],
         )
         self.assertEqual(balance_before, self.sku.balance.saldo_atual)
+
+    def test_exported_workbook_can_be_edited_for_audited_correction_preview(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = self._export(directory)
+            wb = load_workbook(path)
+            ws = wb["Empenhos pendentes"]
+            header_row, headers = self._header_map(ws)
+            ws.cell(header_row + 1, headers["QUANTIDADE_EMPENHADA"]).value = 8
+            ws.cell(header_row + 1, headers["DOCUMENTO_EMPENHO"]).value = "OS 3100"
+            ws.cell(header_row + 1, headers["OBSERVACAO_EMPENHO"]).value = "Reconciliado"
+            ws.cell(header_row + 1, headers["ACAO_CORRECAO"]).value = "CORRIGIR"
+            ws.cell(header_row + 1, headers["MOTIVO_CORRECAO"]).value = "Marco zero"
+            wb.save(path)
+
+            parsed = parse_commitment_corrections_from_excel(path)
+
+        self.assertEqual([], parsed["errors"])
+        self.assertEqual(1, len(parsed["rows"]))
+        self.assertEqual(self.commitment.id, parsed["rows"][0]["movement_id"])
+        self.assertEqual(8, parsed["rows"][0]["quantidade_empenhada"])
+        self.assertEqual("OS 3100", parsed["rows"][0]["documento_empenho"])
+        self.assertEqual("CORRIGIR", parsed["rows"][0]["acao_correcao"])
 
     def test_same_exported_file_imports_linked_partial_consumption(self):
         with tempfile.TemporaryDirectory() as directory:

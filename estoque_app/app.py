@@ -1,4 +1,5 @@
 import hmac
+import json
 import logging
 import os
 import sys
@@ -81,6 +82,7 @@ from services.excel_service import (
     label_queue_summary,
     mass_material_rows_from_form,
     parse_mass_materials_from_excel,
+    parse_commitment_corrections_from_excel,
     parse_pending_commitment_consumptions_from_excel,
     skip_preparation_rows_for_consumption,
 )
@@ -120,6 +122,10 @@ from services.estoque_service import (
     to_decimal,
     to_optional_decimal,
     create_or_update_sku,
+)
+from services.commitment_correction_service import (
+    apply_commitment_corrections,
+    preview_commitment_corrections,
 )
 from services.erp_service import (
     active_work_orders,
@@ -1355,6 +1361,66 @@ def baixa():
         sku=sku,
         sku_code=sku_code,
         idempotency_key=idempotency_key,
+    )
+
+
+@app.route("/empenhos/corrigir", methods=["GET", "POST"])
+@login_required
+@permission_required("estoque.movement.cancel_any")
+def correct_commitments():
+    database = db()
+    preview = None
+    payload_json = ""
+    if request.method == "POST":
+        try:
+            action = request.form.get("action", "preview")
+            if action == "apply":
+                rows = json.loads(request.form.get("payload_json") or "[]")
+                if not rows:
+                    raise ValueError("A previa expirou ou nao possui alteracoes.")
+                result = apply_commitment_corrections(
+                    database,
+                    rows,
+                    session["user_id"],
+                    global_reason=request.form.get("global_reason", ""),
+                )
+                flash(
+                    "Correcao concluida: "
+                    f"{result['processed']} empenho(s), "
+                    f"{result['linked']} vinculo(s) de O.S. e "
+                    f"{result['canceled']} cancelamento(s). Nenhum saldo fisico foi alterado.",
+                    "success",
+                )
+                return redirect(url_for("correct_commitments"))
+
+            file = request.files.get("file")
+            if not file or not file.filename:
+                raise ValueError("Selecione a planilha exportada de empenhos pendentes.")
+            parsed = parse_commitment_corrections_from_excel(file)
+            if parsed["errors"]:
+                preview = {
+                    "operations": [],
+                    "errors": parsed["errors"],
+                    "changed": 0,
+                    "unchanged": 0,
+                    "ignored": 0,
+                    "total_rows": len(parsed["rows"]),
+                }
+            else:
+                preview = preview_commitment_corrections(database, parsed["rows"])
+                changed_rows = [
+                    operation["row"]
+                    for operation in preview["operations"]
+                    if operation["changes"] and not operation["errors"]
+                ]
+                payload_json = json.dumps(changed_rows, ensure_ascii=False, default=str)
+        except Exception as exc:
+            database.rollback()
+            flash(f"Falha ao revisar empenhos: {exc}", "danger")
+    return render_template(
+        "commitment_correction.html",
+        preview=preview,
+        payload_json=payload_json,
     )
 
 

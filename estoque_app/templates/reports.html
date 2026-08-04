@@ -24,8 +24,14 @@
     </a>
     <a class="report-card" href="{{ url_for('export_report', tipo='empenhos_pendentes') }}">
         <strong>Empenhos pendentes</strong>
-        <span>Exporte, analise e preencha a coluna EMPENHO para retornar a planilha na tela Baixa.</span>
+        <span>Duas abas: empenhos para baixa/correcao e necessidades que ainda faltam expedir por O.S.</span>
     </a>
+    {% if can('estoque.movement.cancel_any') %}
+    <a class="report-card" href="{{ url_for('correct_commitments') }}">
+        <strong>Correcao de empenhos</strong>
+        <span>Importe a planilha, revise a previa e corrija vinculos ou dados sem alterar o saldo fisico.</span>
+    </a>
+    {% endif %}
     <a class="report-card" href="{{ url_for('export_report', tipo='baixas') }}">
         <strong>Baixas</strong>
         <span>Consumo real importado por planilha.</span>

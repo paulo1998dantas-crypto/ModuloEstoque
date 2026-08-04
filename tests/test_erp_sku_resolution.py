@@ -48,6 +48,10 @@ ERP_TEST_SCHEMA = (
         financial_closed_at datetime,
         financial_closed_by text,
         financial_close_reason text not null default '',
+        technical_status text not null default 'ABERTA',
+        technical_closed_at datetime,
+        technical_closed_by text,
+        technical_close_reason text not null default '',
         idempotency_key text unique,
         created_at datetime not null default current_timestamp,
         updated_at datetime not null default current_timestamp

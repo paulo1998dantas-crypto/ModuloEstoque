@@ -1,0 +1,94 @@
+{% extends "base.html" %}
+{% block title %}Correcao de empenhos - Estoque{% endblock %}
+{% block content %}
+<section class="page-head">
+    <div>
+        <h1>Correcao de empenhos</h1>
+        <p>Revise vinculo com O.S./chassi, COD, quantidade, documento ou observacao com previa e auditoria.</p>
+    </div>
+    <div class="button-row">
+        <a class="btn secondary" href="{{ url_for('export_report', tipo='empenhos_pendentes') }}">Exportar planilha atual</a>
+        <a class="btn secondary" href="{{ url_for('baixa') }}">Voltar para Baixa</a>
+    </div>
+</section>
+
+<section class="panel">
+    <div class="alert warning">
+        <strong>Esta rotina nao cria entrada, baixa ou ajuste de saldo.</strong>
+        <span>Ela corrige somente o empenho original e seu vinculo. Para cancelar, preencha explicitamente ACAO_CORRECAO = CANCELAR; apagar uma linha do Excel nao cancela nada.</span>
+    </div>
+    <form method="post" enctype="multipart/form-data" class="form-grid">
+        <input type="hidden" name="action" value="preview">
+        <label>Planilha de empenhos pendentes
+            <input type="file" name="file" accept=".xlsx,.xlsm,.xltx,.xltm" required>
+        </label>
+        <div class="muted">
+            Campos corrigiveis: COD, QUANTIDADE_EMPENHADA, DOCUMENTO_EMPENHO e OBSERVACAO_EMPENHO.
+            Use CORRIGIR, CANCELAR, DESVINCULAR ou IGNORAR e informe o motivo por linha.
+        </div>
+        <button class="btn primary" type="submit">Gerar previa sem aplicar</button>
+    </form>
+</section>
+
+{% if preview %}
+<section class="panel">
+    <div class="panel-head">
+        <h2>Previa da correcao</h2>
+        <div class="button-row">
+            <span class="badge">{{ preview.changed }} com alteracao</span>
+            <span class="badge">{{ preview.unchanged }} sem alteracao</span>
+            <span class="badge">{{ preview.ignored }} ignorados</span>
+            {% if preview.errors %}<span class="badge erro">{{ preview.errors|length }} erro(s)</span>{% endif %}
+        </div>
+    </div>
+    {% if preview.errors %}
+    <div class="alert danger">
+        <strong>Nada pode ser aplicado enquanto houver erros.</strong>
+        <ul>{% for error in preview.errors %}<li>{{ error }}</li>{% endfor %}</ul>
+    </div>
+    {% endif %}
+    <div class="table-wrap">
+        <table>
+            <thead>
+                <tr><th>Linha</th><th>ID</th><th>Acao</th><th>Alteracoes previstas</th><th>Avisos</th></tr>
+            </thead>
+            <tbody>
+                {% for operation in preview.operations %}
+                <tr>
+                    <td>{{ operation.linha }}</td>
+                    <td><strong>{{ operation.movement_id }}</strong></td>
+                    <td>{{ operation.action }}</td>
+                    <td>
+                        {% for change in operation.changes %}
+                        <div><strong>{{ change.field }}:</strong> {{ change.before }} &rarr; {{ change.after }}</div>
+                        {% endfor %}
+                        {% if not operation.changes %}<span class="muted">Sem alteracao</span>{% endif %}
+                    </td>
+                    <td>
+                        {% for warning in operation.warnings %}<div>{{ warning }}</div>{% endfor %}
+                        {% for error in operation.errors %}<div class="text-danger">{{ error }}</div>{% endfor %}
+                    </td>
+                </tr>
+                {% else %}
+                <tr><td colspan="5" class="empty">Nenhuma alteracao foi identificada.</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% if preview.changed and not preview.errors %}
+    <form method="post" class="form-grid">
+        <input type="hidden" name="action" value="apply">
+        <input type="hidden" name="payload_json" value='{{ payload_json|e }}'>
+        <label>Motivo geral (usado somente quando a linha nao tiver MOTIVO_CORRECAO)
+            <input name="global_reason" placeholder="Ex.: reconciliacao dos empenhos anteriores ao vinculo ERP">
+        </label>
+        <label class="checkbox-row">
+            <input type="checkbox" required>
+            Conferi a previa e entendo que o saldo fisico nao sera alterado.
+        </label>
+        <button class="btn primary" type="submit">Aplicar correcoes auditadas</button>
+    </form>
+    {% endif %}
+</section>
+{% endif %}
+{% endblock %}

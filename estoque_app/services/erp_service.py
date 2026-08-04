@@ -12,6 +12,7 @@ from services.estoque_service import (
     register_movement,
     to_decimal,
 )
+from services.work_order_needs_service import calculate_work_order_needs
 
 
 def _id():
@@ -596,7 +597,18 @@ def work_order_materials(db, work_order_id):
             Decimal("0"),
         ),
     }
-    return {"work_order": work_order, "totals": totals, "lines": rows}
+    needs = calculate_work_order_needs(
+        db,
+        work_order_id=work_order_id,
+        pending_only=True,
+    )
+    return {
+        "work_order": work_order,
+        "totals": totals,
+        "lines": rows,
+        "pending_lines": needs["lines"],
+        "need_summary": needs["summary"],
+    }
 
 
 def purchase_orders_dashboard(db, limit=1000):

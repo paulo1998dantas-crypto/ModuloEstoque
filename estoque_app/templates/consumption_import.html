@@ -8,6 +8,9 @@
     </div>
     <div class="button-row">
         <a class="btn secondary" href="{{ url_for('export_report', tipo='empenhos_pendentes') }}">Exportar empenhos pendentes</a>
+        {% if can('estoque.movement.cancel_any') %}
+        <a class="btn secondary" href="{{ url_for('correct_commitments') }}">Corrigir empenhos</a>
+        {% endif %}
         <a class="btn secondary" href="{{ url_for('download_template', name='baixa') }}">Baixar modelo</a>
     </div>
 </section>
@@ -84,7 +87,7 @@
 
     <section class="panel">
         <h2>Layout da planilha</h2>
-        <p class="muted">Para baixar empenhos, exporte os pendentes acima, analise o arquivo e preencha a coluna EMPENHO somente nas linhas desejadas. O ID_EMPENHO vincula cada baixa a reserva original.</p>
+        <p class="muted">Para baixar empenhos, exporte os pendentes acima, analise o arquivo e preencha a coluna EMPENHO somente nas linhas desejadas. O ID_EMPENHO vincula cada baixa a reserva original. A segunda aba mostra o que ainda falta expedir por O.S.</p>
         <div class="table-wrap">
             <table>
                 <thead>

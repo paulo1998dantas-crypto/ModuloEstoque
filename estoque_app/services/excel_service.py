@@ -5,6 +5,7 @@ import unicodedata
 
 from openpyxl import Workbook, load_workbook
 from openpyxl.styles import Font, PatternFill
+from openpyxl.worksheet.datavalidation import DataValidation
 from sqlalchemy import func, or_
 
 from config import EXPORTS_DIR
@@ -29,6 +30,7 @@ from services.estoque_service import (
     save_inventory_count,
     to_decimal,
 )
+from services.work_order_needs_service import calculate_work_order_needs
 
 
 SKU_IMPORT_COLUMNS = ["COD", "DESCRICAO", "UNIDADE", "GRUPO", "CATEGORIA", "SALDO_ATUAL"]
@@ -126,6 +128,8 @@ PENDING_COMMITMENT_CONSUMPTION_QTY_ALIASES = [
 ]
 PENDING_COMMITMENT_DOCUMENT_ALIASES = ["DOCUMENTO_BAIXA", "REFERENCIA_BAIXA"]
 PENDING_COMMITMENT_NOTE_ALIASES = ["OBSERVACAO_BAIXA", "OBS_BAIXA"]
+COMMITMENT_CORRECTION_ACTION_ALIASES = ["ACAO_CORRECAO", "ACAO", "OPERACAO"]
+COMMITMENT_CORRECTION_REASON_ALIASES = ["MOTIVO_CORRECAO", "MOTIVO", "JUSTIFICATIVA"]
 
 
 def _normalize_header(value):
@@ -774,6 +778,107 @@ def parse_pending_commitment_consumptions_from_excel(file_obj):
 
     if not rows and not errors:
         errors.append("Preencha a coluna EMPENHO em pelo menos uma linha para realizar a baixa.")
+    return {"rows": rows, "errors": errors}
+
+
+def parse_commitment_corrections_from_excel(file_obj):
+    """Le alteracoes do empenho original sem executar baixa ou alterar saldo."""
+    wb = _load_workbook_for_read(file_obj)
+    ws = wb["Empenhos pendentes"] if "Empenhos pendentes" in wb.sheetnames else wb.active
+    headers = {}
+    header_row = 1
+    id_header = None
+    for row_number in range(1, min(ws.max_row, 25) + 1):
+        candidate = _headers_at_row(ws, row_number)
+        candidate_id = _first_header(candidate, PENDING_COMMITMENT_ID_ALIASES)
+        if candidate_id:
+            headers = candidate
+            header_row = row_number
+            id_header = candidate_id
+            break
+    if not id_header:
+        raise ValueError(
+            "Coluna ID_EMPENHO ausente. Exporte novamente o relatorio de empenhos pendentes."
+        )
+
+    rows = []
+    errors = []
+    seen_ids = set()
+    for row_number in range(header_row + 1, ws.max_row + 1):
+        raw_id = _cell(ws, row_number, headers, id_header)
+        if not _has_quantity(raw_id):
+            continue
+        try:
+            movement_id = _positive_integer(raw_id)
+        except Exception as exc:
+            errors.append(f"Linha {row_number}: {exc}")
+            continue
+        if movement_id in seen_ids:
+            errors.append(
+                f"Linha {row_number}: ID_EMPENHO {movement_id} repetido na planilha."
+            )
+            continue
+        seen_ids.add(movement_id)
+        rows.append(
+            {
+                "linha": row_number,
+                "movement_id": movement_id,
+                "codigo": normalize_sku(
+                    _first_existing_cell(
+                        ws, row_number, headers, ["COD", "CODIGO", "SKU"], ""
+                    )
+                ),
+                "quantidade_empenhada": _first_existing_cell(
+                    ws,
+                    row_number,
+                    headers,
+                    ["QUANTIDADE_EMPENHADA", "QTD_EMPENHADA"],
+                    "",
+                ),
+                "documento_empenho": str(
+                    _first_existing_cell(
+                        ws,
+                        row_number,
+                        headers,
+                        ["DOCUMENTO_EMPENHO", "REFERENCIA_EMPENHO"],
+                        "",
+                    )
+                    or ""
+                ).strip(),
+                "observacao_empenho": str(
+                    _first_existing_cell(
+                        ws,
+                        row_number,
+                        headers,
+                        ["OBSERVACAO_EMPENHO", "OBS_EMPENHO"],
+                        "",
+                    )
+                    or ""
+                ).strip(),
+                "acao_correcao": str(
+                    _first_existing_cell(
+                        ws,
+                        row_number,
+                        headers,
+                        COMMITMENT_CORRECTION_ACTION_ALIASES,
+                        "",
+                    )
+                    or ""
+                ).strip(),
+                "motivo_correcao": str(
+                    _first_existing_cell(
+                        ws,
+                        row_number,
+                        headers,
+                        COMMITMENT_CORRECTION_REASON_ALIASES,
+                        "",
+                    )
+                    or ""
+                ).strip(),
+            }
+        )
+    if not rows and not errors:
+        errors.append("Nenhuma linha com ID_EMPENHO foi encontrada.")
     return {"rows": rows, "errors": errors}
 
 
@@ -1598,7 +1703,7 @@ def export_pending_commitments_report(db, user):
         ws,
         "Empenhos pendentes para analise e baixa",
         user,
-        "Preencha somente a coluna EMPENHO nas linhas que deseja baixar e importe este mesmo arquivo na tela Baixa.",
+        "Baixa: preencha EMPENHO/DOCUMENTO_BAIXA/OBSERVACAO_BAIXA. Correcao: altere os campos do empenho, informe ACAO_CORRECAO e MOTIVO_CORRECAO e use a tela Correcao de empenhos.",
     )
     headers = [
         "ID_EMPENHO",
@@ -1613,6 +1718,8 @@ def export_pending_commitments_report(db, user):
         "EMPENHO",
         "DOCUMENTO_BAIXA",
         "OBSERVACAO_BAIXA",
+        "ACAO_CORRECAO",
+        "MOTIVO_CORRECAO",
     ]
     ws.append(headers)
     header_row = ws.max_row
@@ -1641,6 +1748,8 @@ def export_pending_commitments_report(db, user):
                 "",
                 "",
                 "",
+                "",
+                "",
             ]
         )
 
@@ -1653,11 +1762,78 @@ def export_pending_commitments_report(db, user):
         ws.cell(row_number, 2).number_format = "dd/mm/yyyy hh:mm"
         for column in (6, 7, 10):
             ws.cell(row_number, column).number_format = "0.000"
-        for column in (10, 11, 12):
+        # Amarelo = campos operacionais aceitos na baixa ou na correcao auditada.
+        # DESCRICAO, UNIDADE e SALDO_PENDENTE permanecem somente para conferencia.
+        for column in (3, 6, 8, 9, 10, 11, 12, 13, 14):
             ws.cell(row_number, column).fill = input_fill
+    action_validation = DataValidation(
+        type="list",
+        formula1='"CORRIGIR,CANCELAR,DESVINCULAR,IGNORAR"',
+        allow_blank=True,
+    )
+    action_validation.error = "Use CORRIGIR, CANCELAR, DESVINCULAR ou IGNORAR."
+    action_validation.errorTitle = "Acao invalida"
+    ws.add_data_validation(action_validation)
+    if ws.max_row > header_row:
+        action_validation.add(f"M{header_row + 1}:M{ws.max_row}")
     ws.freeze_panes = f"A{header_row + 1}"
-    ws.auto_filter.ref = f"A{header_row}:L{max(header_row, ws.max_row)}"
+    ws.auto_filter.ref = f"A{header_row}:N{max(header_row, ws.max_row)}"
     _autosize(ws)
+
+    needs_ws = wb.create_sheet("Necessidades O.S.")
+    _metadata(
+        needs_ws,
+        "Necessidades pendentes por O.S. ativa",
+        user,
+        "O.S. tecnicamente concluidas nao participam. Empenho do produto final cobre o proprio item e os componentes da B.O.M.; baixa vinculada nao e contada duas vezes.",
+    )
+    needs_headers = [
+        "OS",
+        "ITEM",
+        "CHASSI",
+        "CLIENTE",
+        "COD",
+        "DESCRICAO",
+        "UNIDADE",
+        "NECESSIDADE_OS",
+        "COBERTO_EMPENHO_BAIXA",
+        "FALTA_EXPEDIR",
+        "SETOR",
+        "NIVEL_BOM",
+        "ITENS_PAI",
+    ]
+    needs_ws.append(needs_headers)
+    needs_header_row = needs_ws.max_row
+    needs = calculate_work_order_needs(db, pending_only=True)
+    for line in needs["lines"]:
+        needs_ws.append(
+            [
+                line["numero_os"],
+                line["item_number"],
+                line["chassi"],
+                line["cliente_nome"],
+                line["codigo"],
+                line["descricao"],
+                line["unidade"],
+                float(line["quantidade_necessaria"]),
+                float(line["quantidade_coberta"]),
+                float(line["quantidade_pendente"]),
+                line["setor"],
+                line["nivel_minimo"],
+                line["itens_pai"],
+            ]
+        )
+    for cell in needs_ws[needs_header_row]:
+        cell.font = Font(color="FFFFFF", bold=True)
+        cell.fill = header_fill
+    for row_number in range(needs_header_row + 1, needs_ws.max_row + 1):
+        for column in (8, 9, 10):
+            needs_ws.cell(row_number, column).number_format = "0.000"
+    needs_ws.freeze_panes = f"A{needs_header_row + 1}"
+    needs_ws.auto_filter.ref = (
+        f"A{needs_header_row}:M{max(needs_header_row, needs_ws.max_row)}"
+    )
+    _autosize(needs_ws)
     return _save_report(wb, "empenhos_pendentes")
 
 
