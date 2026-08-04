@@ -75,6 +75,22 @@ class PendingCommitmentsExcelTest(unittest.TestCase):
             path = self._export(directory)
             workbook = load_workbook(path, data_only=True)
             self.assertIn("Necessidades O.S.", workbook.sheetnames)
+            needs_headers = next(
+                {
+                    cell.value
+                    for cell in workbook["Necessidades O.S."][row_number]
+                    if cell.value
+                }
+                for row_number in range(1, 26)
+                if "FALTA_EXPEDIR"
+                in {
+                    cell.value
+                    for cell in workbook["Necessidades O.S."][row_number]
+                    if cell.value
+                }
+            )
+            self.assertIn("SALDO_EM_FLUXO_NAO_APROPRIADO", needs_headers)
+            self.assertIn("EMPENHOS_EM_FLUXO", needs_headers)
             ws = workbook["Empenhos pendentes"]
             header_row, headers = self._header_map(ws)
             rows = list(ws.iter_rows(min_row=header_row + 1, values_only=True))

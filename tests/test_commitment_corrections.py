@@ -15,6 +15,7 @@ from models import ErpMovementReferenceHistory, Movement, SKU, User  # noqa: E40
 from services.commitment_correction_service import (  # noqa: E402
     apply_commitment_corrections,
     preview_commitment_corrections,
+    resolve_any_work_order_reference,
 )
 from services.estoque_service import (  # noqa: E402
     register_consumption_from_commitment,
@@ -159,6 +160,94 @@ class CommitmentCorrectionsTest(unittest.TestCase):
 
         self.assertIn("O.S. 3100", str(linked["operations"][0]["changes"]))
         self.assertNotIn("O.S. 3100", str(purchase_order["operations"][0]["changes"]))
+
+    def test_reference_accepts_full_chassis_last_eight_and_last_four_case_insensitive(self):
+        catalog = [
+            {
+                "id": self.old_work_order,
+                "numero_os": "3000",
+                "item_number": 3000,
+                "numero_norm": "3000",
+                "item_norm": "3000",
+                "chassi_norm": self.chassis,
+                "chassi_reduzido": self.chassis[-8:],
+                "chassi_final": self.chassis[-4:],
+            },
+            {
+                "id": self.new_work_order,
+                "numero_os": "3100",
+                "item_number": 3100,
+                "numero_norm": "3100",
+                "item_norm": "3100",
+                "chassi_norm": self.chassis,
+                "chassi_reduzido": self.chassis[-8:],
+                "chassi_final": self.chassis[-4:],
+            },
+        ]
+
+        references = (
+            self.chassis.lower(),
+            f"chassi {self.chassis[-8:].lower()}",
+            f"final {self.chassis[-4:].lower()}",
+        )
+        for reference in references:
+            with self.subTest(reference=reference):
+                resolved = resolve_any_work_order_reference(catalog, reference)
+                self.assertEqual(self.new_work_order, resolved["id"])
+
+    def test_explicit_os_or_item_number_has_priority_over_duplicate_chassis(self):
+        catalog = [
+            {
+                "id": self.old_work_order,
+                "numero_os": "3000",
+                "item_number": 3000,
+                "numero_norm": "3000",
+                "item_norm": "3000",
+                "chassi_norm": self.chassis,
+                "chassi_reduzido": self.chassis[-8:],
+                "chassi_final": self.chassis[-4:],
+            },
+            {
+                "id": self.new_work_order,
+                "numero_os": "3100",
+                "item_number": 3100,
+                "numero_norm": "3100",
+                "item_norm": "3100",
+                "chassi_norm": self.chassis,
+                "chassi_reduzido": self.chassis[-8:],
+                "chassi_final": self.chassis[-4:],
+            },
+        ]
+
+        resolved = resolve_any_work_order_reference(
+            catalog, f"O.S. 3000 / chassi {self.chassis[-8:]}"
+        )
+
+        self.assertEqual(self.old_work_order, resolved["id"])
+
+    def test_unmatched_reference_is_not_linked_and_does_not_change_balance_or_quantity(self):
+        commitment = register_movement(
+            self.db, self.sku, "EMPENHO", 4, self.user.id, documento="SEM VINCULO"
+        )
+        balance_before = self.sku.balance.saldo_atual
+        quantity_before = commitment.quantidade
+
+        preview = preview_commitment_corrections(
+            self.db,
+            [self._row(commitment, documento_empenho="referencia desconhecida ZX90")],
+        )
+        result = apply_commitment_corrections(
+            self.db,
+            [self._row(commitment, documento_empenho="referencia desconhecida ZX90")],
+            self.user.id,
+        )
+
+        self.db.refresh(commitment)
+        self.assertIsNone(commitment.work_order_id)
+        self.assertEqual(quantity_before, commitment.quantidade)
+        self.assertEqual(balance_before, self.sku.balance.saldo_atual)
+        self.assertEqual(0, result["linked"])
+        self.assertTrue(preview["operations"][0]["warnings"])
 
     def test_quantity_below_consumed_and_cancel_with_consumption_are_blocked(self):
         commitment = register_movement(self.db, self.sku, "EMPENHO", 5, self.user.id)

@@ -3,7 +3,7 @@ import re
 from collections import defaultdict
 from decimal import Decimal, InvalidOperation
 
-from sqlalchemy import inspect, text
+from sqlalchemy import func, inspect, text
 
 from models import BomComponent, Movement, SKU
 
@@ -126,6 +126,81 @@ def _explode_coverage(code, quantity, children):
     return result
 
 
+def _shared_commitment_candidates(db, children, needed_codes):
+    """Return active, unallocated commitments that can cover each needed SKU.
+
+    A shared commitment remains outside any O.S. until an administrator creates
+    a linked BAIXA from it.  Its balance is therefore informative only: it must
+    never reduce several O.S. needs merely because the same pool is visible to
+    all of them.
+    """
+    needed_codes = {_normalize_code(code) for code in needed_codes if code}
+    if not needed_codes:
+        return defaultdict(list)
+
+    commitments = (
+        db.query(Movement)
+        .filter(
+            Movement.tipo.in_(COMMITMENT_TYPES),
+            Movement.movement_status == ACTIVE_MOVEMENT_STATUS,
+            Movement.work_order_id.is_(None),
+        )
+        .order_by(Movement.created_at.asc(), Movement.id.asc())
+        .all()
+    )
+    if not commitments:
+        return defaultdict(list)
+
+    commitment_ids = [movement.id for movement in commitments]
+    consumed = {
+        movement_id: _decimal(quantity)
+        for movement_id, quantity in (
+            db.query(
+                Movement.related_movement_id,
+                func.coalesce(func.sum(Movement.quantidade), 0),
+            )
+            .filter(
+                Movement.related_movement_id.in_(commitment_ids),
+                Movement.tipo == "BAIXA",
+                Movement.movement_status == ACTIVE_MOVEMENT_STATUS,
+            )
+            .group_by(Movement.related_movement_id)
+            .all()
+        )
+    }
+
+    by_needed_code = defaultdict(list)
+    for movement in commitments:
+        pending = max(
+            _decimal(movement.quantidade) - consumed.get(movement.id, Decimal("0")),
+            Decimal("0"),
+        )
+        if pending <= 0 or not movement.sku:
+            continue
+        source_code = _normalize_code(movement.sku.sku)
+        coverage_per_unit = _explode_coverage(source_code, Decimal("1"), children)
+        for needed_code in needed_codes.intersection(coverage_per_unit):
+            factor = coverage_per_unit[needed_code]
+            if factor <= 0:
+                continue
+            by_needed_code[needed_code].append(
+                {
+                    "movement_id": movement.id,
+                    "codigo": source_code,
+                    "descricao": movement.sku.descricao or "",
+                    "unidade": movement.sku.unidade or "",
+                    "quantidade_pendente": pending,
+                    "fator_cobertura": factor,
+                    "quantidade_equivalente": pending * factor,
+                    "setor": movement.setor or "",
+                    "referencia": movement.reference_text or "",
+                    "documento": movement.documento or "",
+                    "created_at": movement.created_at,
+                }
+            )
+    return by_needed_code
+
+
 def calculate_work_order_needs(db, work_order_id=None, pending_only=False):
     """Calcula necessidade vigente sem gravar saldos ou movimentos.
 
@@ -226,6 +301,21 @@ def calculate_work_order_needs(db, work_order_id=None, pending_only=False):
             }
             all_lines.append(row)
 
+    shared_candidates = _shared_commitment_candidates(
+        db,
+        children,
+        {line["codigo"] for line in all_lines if line["quantidade_pendente"] > 0},
+    )
+    shared_movement_ids = set()
+    for line in all_lines:
+        candidates = shared_candidates.get(line["codigo"], [])
+        line["saldo_fluxo_compartilhado"] = sum(
+            (candidate["quantidade_equivalente"] for candidate in candidates),
+            Decimal("0"),
+        )
+        line["empenhos_compartilhados"] = candidates
+        shared_movement_ids.update(candidate["movement_id"] for candidate in candidates)
+
     summary = {
         "work_orders": len({line["work_order_id"] for line in all_lines}),
         "need_items": len(all_lines),
@@ -244,6 +334,7 @@ def calculate_work_order_needs(db, work_order_id=None, pending_only=False):
         "quantidade_pendente": sum(
             (line["quantidade_pendente"] for line in all_lines), Decimal("0")
         ),
+        "empenhos_compartilhados": len(shared_movement_ids),
     }
     lines = (
         [line for line in all_lines if line["quantidade_pendente"] > 0]

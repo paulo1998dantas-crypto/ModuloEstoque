@@ -1785,7 +1785,7 @@ def export_pending_commitments_report(db, user):
         needs_ws,
         "Necessidades pendentes por O.S. ativa",
         user,
-        "O.S. tecnicamente concluidas nao participam. Empenho do produto final cobre o proprio item e os componentes da B.O.M.; baixa vinculada nao e contada duas vezes.",
+        "O.S. tecnicamente concluidas nao participam. Empenho do produto final cobre o proprio item e os componentes da B.O.M.; baixa vinculada nao e contada duas vezes. Saldo em fluxo compartilhado e apenas informativo ate o ADMIN apropriar uma baixa para a O.S.",
     )
     needs_headers = [
         "OS",
@@ -1798,6 +1798,8 @@ def export_pending_commitments_report(db, user):
         "NECESSIDADE_OS",
         "COBERTO_EMPENHO_BAIXA",
         "FALTA_EXPEDIR",
+        "SALDO_EM_FLUXO_NAO_APROPRIADO",
+        "EMPENHOS_EM_FLUXO",
         "SETOR",
         "NIVEL_BOM",
         "ITENS_PAI",
@@ -1818,6 +1820,24 @@ def export_pending_commitments_report(db, user):
                 float(line["quantidade_necessaria"]),
                 float(line["quantidade_coberta"]),
                 float(line["quantidade_pendente"]),
+                float(line.get("saldo_fluxo_compartilhado") or 0),
+                " | ".join(
+                    "#{} {}: {} {} (fator {}; equiv. {} {}){}".format(
+                        candidate["movement_id"],
+                        candidate["source_codigo"],
+                        candidate["quantidade_pendente_origem"],
+                        candidate["source_unidade"] or "UN",
+                        candidate["fator_cobertura"],
+                        candidate["quantidade_equivalente"],
+                        line["unidade"] or "UN",
+                        (
+                            f" - {candidate['setor_ou_referencia']}"
+                            if candidate.get("setor_ou_referencia")
+                            else ""
+                        ),
+                    )
+                    for candidate in line.get("empenhos_compartilhados", [])
+                ),
                 line["setor"],
                 line["nivel_minimo"],
                 line["itens_pai"],
@@ -1827,11 +1847,11 @@ def export_pending_commitments_report(db, user):
         cell.font = Font(color="FFFFFF", bold=True)
         cell.fill = header_fill
     for row_number in range(needs_header_row + 1, needs_ws.max_row + 1):
-        for column in (8, 9, 10):
+        for column in (8, 9, 10, 11):
             needs_ws.cell(row_number, column).number_format = "0.000"
     needs_ws.freeze_panes = f"A{needs_header_row + 1}"
     needs_ws.auto_filter.ref = (
-        f"A{needs_header_row}:M{max(needs_header_row, needs_ws.max_row)}"
+        f"A{needs_header_row}:O{max(needs_header_row, needs_ws.max_row)}"
     )
     _autosize(needs_ws)
     return _save_report(wb, "empenhos_pendentes")

@@ -111,6 +111,9 @@ apagam tabelas, auditoria, vínculos nem reabrem acesso direto da Data API.
   `ERP_MOVEMENT_CONTEXT_ENABLED=true`.
 - Baixas vinculadas herdam o contexto do empenho; a correção posterior exige
   motivo e gera histórico.
+- Baixa direta pela coluna/ID do empenho e correção auditada do empenho são
+  exclusivas do perfil ADMIN. A baixa manual normal por COD permanece conforme
+  as permissões operacionais do usuário.
 - Cancelamentos preservam a movimentação original e, quando necessário, geram
   movimento compensatório. Recebimentos devem ser estornados pela própria
   Inspeção de Recebimento.

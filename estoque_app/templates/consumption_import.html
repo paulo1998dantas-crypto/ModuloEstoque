@@ -8,7 +8,7 @@
     </div>
     <div class="button-row">
         <a class="btn secondary" href="{{ url_for('export_report', tipo='empenhos_pendentes') }}">Exportar empenhos pendentes</a>
-        {% if can('estoque.movement.cancel_any') %}
+        {% if can('estoque.commitment.reconcile_admin') %}
         <a class="btn secondary" href="{{ url_for('correct_commitments') }}">Corrigir empenhos</a>
         {% endif %}
         <a class="btn secondary" href="{{ url_for('download_template', name='baixa') }}">Baixar modelo</a>
@@ -83,11 +83,14 @@
             <textarea name="observacao" rows="3"></textarea>
         </label>
         <button class="btn primary large" type="submit">Importar baixa</button>
+        {% if not can('estoque.commitment.reconcile_admin') %}
+        <p class="muted">Planilhas comuns de consumo podem ser importadas. A baixa pela coluna ID_EMPENHO e exclusiva do ADMIN.</p>
+        {% endif %}
     </form>
 
     <section class="panel">
         <h2>Layout da planilha</h2>
-        <p class="muted">Para baixar empenhos, exporte os pendentes acima, analise o arquivo e preencha a coluna EMPENHO somente nas linhas desejadas. O ID_EMPENHO vincula cada baixa a reserva original. A segunda aba mostra o que ainda falta expedir por O.S.</p>
+        <p class="muted">Para baixar empenhos por ID, o ADMIN exporta os pendentes acima, analisa o arquivo e preenche a coluna EMPENHO somente nas linhas desejadas. O ID_EMPENHO vincula cada baixa a reserva original. A segunda aba mostra o que ainda falta expedir por O.S.</p>
         <div class="table-wrap">
             <table>
                 <thead>

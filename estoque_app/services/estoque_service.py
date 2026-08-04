@@ -731,6 +731,7 @@ def register_consumption_from_commitment(
     operation_id=None,
     parent_movement_id=None,
     idempotency_key=None,
+    preserve_parent_context=False,
 ):
     if commitment is None:
         raise ValueError("Empenho nao encontrado.")
@@ -747,7 +748,7 @@ def register_consumption_from_commitment(
         )
         if replayed is not None:
             expected_context = movement_context_from_movement(commitment)
-            if correct_context or any((work_order_id, setor, reference_text)):
+            if preserve_parent_context or correct_context or any((work_order_id, setor, reference_text)):
                 expected_context = _requested_movement_context(
                     work_order_id=work_order_id,
                     setor=setor,
@@ -767,6 +768,9 @@ def register_consumption_from_commitment(
                 context_kind=expected_context["context_kind"],
                 setor=expected_context["setor"],
                 reference_text=expected_context["reference_text"],
+                source_type=source_type,
+                operation_id=operation_id,
+                parent_movement_id=parent_movement_id,
             ):
                 raise ValueError(
                     "Chave de idempotencia ja utilizada por outra movimentacao."
@@ -783,6 +787,10 @@ def register_consumption_from_commitment(
     )
     if commitment is None or commitment.tipo not in COMMITMENT_TYPES:
         raise ValueError("Empenho nao encontrado.")
+    if preserve_parent_context and commitment.work_order_id:
+        raise ValueError(
+            "O empenho informado ja pertence a uma O.S.; use apenas saldo compartilhado sem vinculo."
+        )
     pending = pending_commitment_for_movement(db, commitment)
     quantidade = pending if requested_quantity is None else requested_quantity
     if quantidade <= 0:
@@ -796,7 +804,15 @@ def register_consumption_from_commitment(
     if observacao:
         note = f"{note} {observacao}"
     inherited_context = movement_context_from_movement(commitment)
-    if correct_context or any((work_order_id, setor, reference_text)):
+    if preserve_parent_context:
+        inherited_context = resolve_movement_context(
+            db,
+            work_order_id=work_order_id,
+            setor=setor,
+            reference_text=reference_text,
+            require_context=True,
+        )
+    elif correct_context or any((work_order_id, setor, reference_text)):
         inherited_context = resolve_movement_context(
             db,
             work_order_id=work_order_id,
@@ -848,6 +864,44 @@ def register_consumption_from_commitment(
         source_line_id=source_line_id,
         operation_id=operation_id,
         parent_movement_id=parent_movement_id,
+        idempotency_key=idempotency_key,
+    )
+
+
+def allocate_shared_commitment_to_work_order(
+    db,
+    commitment,
+    quantidade,
+    usuario_id,
+    work_order_id,
+    reason,
+    idempotency_key=None,
+):
+    """Consume part of an unlinked commitment and assign only that BAIXA to an O.S.
+
+    The parent remains in the shared pool with its remaining quantity.  This is
+    deliberately different from correcting the parent context: a loose sector
+    commitment may feed several vehicles, but each physical consumption is
+    linked to exactly one active O.S. and changes stock exactly once.
+    """
+    reason = str(reason or "").strip()
+    if not reason:
+        raise ValueError("Informe o motivo da apropriacao do saldo compartilhado.")
+    if commitment is None or commitment.tipo not in COMMITMENT_TYPES:
+        raise ValueError("Empenho compartilhado nao encontrado.")
+    if commitment.work_order_id:
+        raise ValueError("O empenho ja esta vinculado a uma O.S. e nao pertence ao fluxo compartilhado.")
+    return register_consumption_from_commitment(
+        db,
+        commitment,
+        quantidade,
+        usuario_id,
+        documento=f"APROPRIACAO-OS-{work_order_id}",
+        observacao=f"Apropriacao de saldo compartilhado para O.S.: {reason}",
+        allow_negative=False,
+        work_order_id=work_order_id,
+        preserve_parent_context=True,
+        source_type="SHARED_COMMITMENT_ALLOCATION",
         idempotency_key=idempotency_key,
     )
 

@@ -53,6 +53,10 @@ PERMISSION_DEFINITIONS = {
     "estoque.entry.create": ("estoque", "Registrar entrada manual"),
     "estoque.inspection.receive": ("estoque", "Inspecionar recebimento de O.C."),
     "estoque.commitment.create": ("estoque", "Criar empenhos"),
+    "estoque.commitment.reconcile_admin": (
+        "estoque",
+        "Baixar por ID ou corrigir empenhos",
+    ),
     "estoque.consumption.create": ("estoque", "Registrar baixas"),
     "estoque.labels.use": ("estoque", "Gerar e imprimir etiquetas"),
     "estoque.stock.view": ("estoque", "Consultar estoque"),
@@ -150,6 +154,7 @@ ROLE_PERMISSION_MAP = {
     - {
         "estoque.users.manage",
         "estoque.settings.manage",
+        "estoque.commitment.reconcile_admin",
         "mes.legacy.import",
         "mes.users.manage",
         "suprimentos.master_data.manage",
@@ -161,6 +166,7 @@ ROLE_PERMISSION_MAP = {
         - {
             "estoque.users.manage",
             "estoque.settings.manage",
+            "estoque.commitment.reconcile_admin",
             "mes.legacy.import",
             "mes.users.manage",
             "suprimentos.master_data.manage",
@@ -171,6 +177,7 @@ ROLE_PERMISSION_MAP = {
     "ADMIN": set(PERMISSION_DEFINITIONS),
 }
 LEGACY_ADMIN_ONLY_PERMISSIONS = {
+    "estoque.commitment.reconcile_admin",
     "estoque.movement.cancel_any",
     "estoque.skus.manage",
     "estoque.inventory.manage",

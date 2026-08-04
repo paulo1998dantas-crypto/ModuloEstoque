@@ -65,17 +65,35 @@ def _work_order_catalog(db):
         row["item_norm"] = _normalized(row.get("item_number"))
         row["chassi_norm"] = _compact(row.get("chassi"))
         row["chassi_reduzido"] = row["chassi_norm"][-8:]
+        row["chassi_final"] = row["chassi_norm"][-4:]
         catalog.append(row)
     return catalog
 
 
+def _latest_work_order_key(row):
+    try:
+        item_number = int(row.get("item_number") or 0)
+    except (TypeError, ValueError):
+        item_number = 0
+    numero_digits = re.findall(r"\d+", _normalized(row.get("numero_os")))
+    numero_number = int(numero_digits[-1]) if numero_digits else 0
+    return item_number, numero_number, _normalized(row.get("numero_os"))
+
+
 def resolve_any_work_order_reference(catalog, reference):
-    """Resolve O.S. historica; chassi repetido escolhe a ocorrencia mais recente."""
+    """Resolve referencia historica sem depender de uma O.S. ainda ativa.
+
+    A prioridade evita que os quatro ultimos caracteres de um chassi se
+    sobreponham a um numero de O.S./ITEM explicitamente informado. Quando uma
+    referencia de chassi pertence a mais de uma passagem do mesmo veiculo, a
+    ocorrencia com maior ITEM (e depois maior numero de O.S.) e escolhida.
+    """
     raw = _text(reference)
     if not raw:
         return None
     normalized = _normalized(raw)
     compact = _compact(raw)
+    tokens = set(re.findall(r"[A-Z0-9]{4,}", normalized))
     explicit_numbers = {
         match
         for match in re.findall(
@@ -106,31 +124,30 @@ def resolve_any_work_order_reference(catalog, reference):
             or row["numero_norm"] in free_numbers
             or row["item_norm"] in free_numbers
         )
-        chassis_match = bool(
-            row["chassi_norm"]
-            and (
-                row["chassi_norm"] == compact
-                or row["chassi_norm"] in compact
-                or (
-                    len(row["chassi_reduzido"]) == 8
-                    and re.search(
-                        rf"(?<![A-Z0-9]){re.escape(row['chassi_reduzido'])}(?![A-Z0-9])",
-                        normalized,
-                    )
-                )
-            )
-        )
-        if number_match or chassis_match:
-            matches.append(row)
+        score = 400 if number_match else 0
+        chassi = row["chassi_norm"]
+        suffix8 = row["chassi_reduzido"]
+        suffix4 = row["chassi_final"]
+        if not score and chassi and (
+            chassi == compact or (len(chassi) >= 8 and chassi in compact)
+        ):
+            score = 300
+        if not score and len(suffix8) == 8 and (
+            compact == suffix8 or suffix8 in tokens
+        ):
+            score = 200
+        if not score and len(suffix4) == 4 and (
+            compact == suffix4 or suffix4 in tokens
+        ):
+            score = 100
+        if score:
+            matches.append((score, row))
     if not matches:
         return None
     return max(
         matches,
-        key=lambda row: (
-            int(row.get("item_number") or 0),
-            _normalized(row.get("numero_os")),
-        ),
-    )
+        key=lambda match: (match[0], *_latest_work_order_key(match[1])),
+    )[1]
 
 
 def _active_related_consumed(db, movement_id):

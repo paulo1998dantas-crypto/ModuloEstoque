@@ -92,6 +92,7 @@ from services.cadastro_supabase_service import (
     sync_skus_from_cadastro,
 )
 from services.estoque_service import (
+    allocate_shared_commitment_to_work_order,
     adjust_balance_to_count,
     append_manual_entry_exception,
     build_backflush_preview,
@@ -1284,6 +1285,13 @@ def baixa():
                     return redirect(url_for("baixa"))
                 pending_preview = parse_pending_commitment_consumptions_from_excel(file)
                 if pending_preview is not None:
+                    if not can(user, "estoque.commitment.reconcile_admin"):
+                        flash(
+                            "Somente ADMIN pode baixar pela coluna ID_EMPENHO. "
+                            "A baixa manual normal continua disponivel.",
+                            "danger",
+                        )
+                        return redirect(url_for("baixa"))
                     if pending_preview["errors"]:
                         result = {"errors": pending_preview["errors"]}
                         flash("A planilha possui erros. Nenhuma baixa foi registrada.", "danger")
@@ -1366,7 +1374,8 @@ def baixa():
 
 @app.route("/empenhos/corrigir", methods=["GET", "POST"])
 @login_required
-@permission_required("estoque.movement.cancel_any")
+@roles_required("ADMIN")
+@permission_required("estoque.commitment.reconcile_admin")
 def correct_commitments():
     database = db()
     preview = None
@@ -1636,7 +1645,8 @@ def movements():
 
 @app.route("/movimentacoes/<int:movement_id>/baixar-empenho", methods=["POST"])
 @login_required
-@permission_required("estoque.consumption.create")
+@roles_required("ADMIN")
+@permission_required("estoque.commitment.reconcile_admin")
 def consume_commitment_route(movement_id):
     database = db()
     user = current_user()
@@ -2586,6 +2596,53 @@ def erp_internal_work_order_materials(work_order_id):
         return jsonify({"ok": True, **work_order_materials(db(), work_order_id)})
     except ValueError as exc:
         return jsonify({"ok": False, "error": str(exc)}), 404
+
+
+@app.route(
+    "/api/erp/internal/work-orders/<work_order_id>/materials/shared-consumption",
+    methods=["POST"],
+)
+@erp_feature_required
+def erp_internal_allocate_shared_commitment(work_order_id):
+    if not _erp_internal_allowed():
+        return jsonify({"ok": False, "error": "Servico nao autorizado."}), 401
+    database = db()
+    actor = _erp_actor_user(database, request.headers.get("X-ERP-Actor", "ERP"))
+    if (
+        not actor
+        or "ADMIN" not in effective_roles(actor, database)
+        or not can(actor, "estoque.commitment.reconcile_admin", database)
+    ):
+        return jsonify({"ok": False, "error": "Apenas ADMIN pode baixar saldo compartilhado por ID de empenho."}), 403
+    payload = request.get_json(silent=True) or {}
+    try:
+        movement_id = int(payload.get("movement_id"))
+        commitment = database.get(Movement, movement_id)
+        baixa = allocate_shared_commitment_to_work_order(
+            database,
+            commitment,
+            payload.get("quantidade"),
+            actor.id,
+            work_order_id,
+            payload.get("motivo"),
+            idempotency_key=payload.get("idempotency_key"),
+        )
+        return jsonify(
+            {
+                "ok": True,
+                "movement_id": baixa.id,
+                "related_movement_id": baixa.related_movement_id,
+                "quantidade": decimal_to_str(baixa.quantidade),
+                "work_order_id": str(baixa.work_order_id),
+            }
+        )
+    except (TypeError, ValueError) as exc:
+        database.rollback()
+        return jsonify({"ok": False, "error": str(exc)}), 400
+    except Exception:
+        database.rollback()
+        app.logger.exception("Falha ao apropriar empenho compartilhado para O.S.")
+        return jsonify({"ok": False, "error": "Falha transacional ao apropriar o empenho."}), 500
 
 
 @app.route("/api/erp/internal/reports/purchases-inspections.xlsx")

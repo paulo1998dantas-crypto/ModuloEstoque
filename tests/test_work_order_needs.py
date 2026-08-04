@@ -13,8 +13,9 @@ APP_DIR = Path(__file__).resolve().parents[1] / "estoque_app"
 sys.path.insert(0, str(APP_DIR))
 
 from database import Base  # noqa: E402
-from models import BomComponent, SKU, User  # noqa: E402
+from models import BomComponent, Movement, SKU, User  # noqa: E402
 from services.estoque_service import (  # noqa: E402
+    allocate_shared_commitment_to_work_order,
     register_consumption_from_commitment,
     register_movement,
 )
@@ -118,6 +119,93 @@ class WorkOrderNeedsTest(unittest.TestCase):
         self.assertEqual(Decimal("0.5"), rows["CJ-001"]["quantidade_pendente"])
         self.assertEqual(Decimal("1.0"), rows["PP-001"]["quantidade_pendente"])
         self.assertEqual(Decimal("1.0"), rows["MP-001"]["quantidade_pendente"])
+
+    def test_shared_pool_is_visible_but_only_covers_need_after_admin_allocation(self):
+        shared = register_movement(
+            self.db,
+            self.parent,
+            "EMPENHO",
+            1,
+            self.user.id,
+            setor="PRODUCAO",
+        )
+        before = calculate_work_order_needs(self.db, self.work_order_id)
+        before_rows = self._by_code(before)
+
+        self.assertEqual(Decimal("1"), before_rows["CJ-001"]["quantidade_pendente"])
+        self.assertEqual(Decimal("1"), before_rows["CJ-001"]["saldo_fluxo_compartilhado"])
+        self.assertEqual(Decimal("6"), before_rows["MP-001"]["saldo_fluxo_compartilhado"])
+        self.assertEqual(shared.id, before_rows["MP-001"]["empenhos_compartilhados"][0]["movement_id"])
+
+        baixa = allocate_shared_commitment_to_work_order(
+            self.db,
+            shared,
+            Decimal("0.5"),
+            self.user.id,
+            self.work_order_id,
+            "Consumo real do material compartilhado.",
+            idempotency_key="shared-pool-test",
+        )
+        self.db.refresh(shared)
+        self.assertIsNone(shared.work_order_id)
+        self.assertEqual(self.work_order_id, str(baixa.work_order_id).replace("-", ""))
+        self.assertEqual(shared.id, baixa.related_movement_id)
+        self.assertEqual("SHARED_COMMITMENT_ALLOCATION", baixa.source_type)
+
+        after = calculate_work_order_needs(self.db, self.work_order_id)
+        after_rows = self._by_code(after)
+        self.assertEqual(Decimal("0.5"), after_rows["CJ-001"]["quantidade_pendente"])
+        self.assertEqual(Decimal("1.0"), after_rows["PP-001"]["quantidade_pendente"])
+        self.assertEqual(Decimal("3.0"), after_rows["MP-001"]["quantidade_pendente"])
+        self.assertEqual(Decimal("0.5"), after_rows["CJ-001"]["saldo_fluxo_compartilhado"])
+
+    def test_shared_allocation_is_idempotent_and_rejects_linked_parent(self):
+        shared = register_movement(
+            self.db, self.leaf, "EMPENHO", 2, self.user.id, setor="PRODUCAO"
+        )
+        first = allocate_shared_commitment_to_work_order(
+            self.db,
+            shared,
+            1,
+            self.user.id,
+            self.work_order_id,
+            "Rateio controlado.",
+            idempotency_key="shared-pool-retry",
+        )
+        replayed = allocate_shared_commitment_to_work_order(
+            self.db,
+            shared,
+            1,
+            self.user.id,
+            self.work_order_id,
+            "Rateio controlado.",
+            idempotency_key="shared-pool-retry",
+        )
+        self.assertEqual(first.id, replayed.id)
+        self.assertEqual(
+            1,
+            self.db.query(Movement)
+            .filter(Movement.idempotency_key == "shared-pool-retry")
+            .count(),
+        )
+
+        linked = register_movement(
+            self.db,
+            self.leaf,
+            "EMPENHO",
+            1,
+            self.user.id,
+            work_order_id=self.work_order_id,
+        )
+        with self.assertRaisesRegex(ValueError, "ja esta vinculado"):
+            allocate_shared_commitment_to_work_order(
+                self.db,
+                linked,
+                1,
+                self.user.id,
+                self.work_order_id,
+                "Nao permitido.",
+            )
 
     def test_technically_closed_work_order_is_excluded(self):
         self.db.execute(

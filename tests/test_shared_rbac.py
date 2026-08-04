@@ -12,6 +12,8 @@ APP_DIR = Path(__file__).resolve().parents[1] / "estoque_app"
 sys.path.insert(0, str(APP_DIR))
 
 from auth import (  # noqa: E402
+    PERMISSION_DEFINITIONS,
+    ROLE_PERMISSION_MAP,
     can,
     effective_permissions,
     effective_roles,
@@ -101,6 +103,54 @@ class SharedRbacTest(unittest.TestCase):
         )
         self.assertTrue(can(self.user, "estoque.entry.create", self.db))
         self.assertTrue(can(self.user, "suprimentos.purchase.create", self.db))
+
+    def test_commitment_reconciliation_permission_is_mapped_only_to_admin(self):
+        permission = "estoque.commitment.reconcile_admin"
+        self.assertIn(permission, PERMISSION_DEFINITIONS)
+        self.assertIn(permission, ROLE_PERMISSION_MAP["ADMIN"])
+        for role_code, permissions in ROLE_PERMISSION_MAP.items():
+            if role_code != "ADMIN":
+                self.assertNotIn(permission, permissions, role_code)
+
+    def test_legacy_commitment_reconciliation_is_admin_only(self):
+        permission = "estoque.commitment.reconcile_admin"
+        with patch.dict(os.environ, {"ERP_SHARED_RBAC_ENABLED": "false"}):
+            for role_code in (
+                "OPERADOR",
+                "COMPRADOR",
+                "FINANCEIRO",
+                "PCP",
+                "ENGENHARIA",
+            ):
+                user = User(
+                    username=f"legacy-{role_code.lower()}",
+                    password_hash="hash",
+                    role=role_code,
+                    active=True,
+                )
+                self.assertFalse(can(user, permission), role_code)
+            admin = User(
+                username="legacy-admin",
+                password_hash="hash",
+                role="ADM",
+                active=True,
+            )
+            self.assertTrue(can(admin, permission))
+
+    def test_startup_seeds_commitment_reconciliation_only_for_admin(self):
+        permission = "estoque.commitment.reconcile_admin"
+        with patch("auth.SessionLocal", self.Session):
+            ensure_initial_data()
+
+        self.db.expire_all()
+        self.assertIsNotNone(self.db.get(ErpPermission, permission))
+        role_codes = {
+            role_code
+            for (role_code,) in self.db.query(ErpRolePermission.role_code)
+            .filter(ErpRolePermission.permission_code == permission)
+            .all()
+        }
+        self.assertEqual({"ADMIN"}, role_codes)
 
     def test_user_override_can_deny_and_allow(self):
         self.db.add_all(

@@ -81,7 +81,7 @@
                     <td>{{ mv.documento or "" }}</td>
                     <td>{{ mv.observacao or "" }}</td>
                     <td>
-                        {% if mv.tipo in ['EMPENHO', 'SAIDA'] and mv.pending_commitment > 0 %}
+                        {% if can('estoque.commitment.reconcile_admin') and mv.tipo in ['EMPENHO', 'SAIDA'] and mv.pending_commitment > 0 %}
                             <form method="post" action="{{ url_for('consume_commitment_route', movement_id=mv.id) }}" class="button-row" data-commitment-consumption
                                 data-commitment-id="{{ mv.id }}"
                                 data-commitment-sku="{{ mv.sku.sku }}"
@@ -139,6 +139,7 @@
     </div>
 </section>
 
+{% if can('estoque.commitment.reconcile_admin') %}
 <div class="modal-backdrop" data-commitment-modal hidden>
     <div class="modal-panel compact-modal" role="dialog" aria-modal="true" aria-labelledby="commitment-modal-title">
         <h2 id="commitment-modal-title">Confirmar baixa do empenho</h2>
@@ -193,4 +194,5 @@
         </form>
     </div>
 </div>
+{% endif %}
 {% endblock %}

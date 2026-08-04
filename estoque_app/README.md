@@ -259,6 +259,10 @@ Tambem e possivel baixa-los pela interface.
 11. Para somar saldos em massa, use `Inventario ADM > Somar saldo em massa` com `COD`, `UNIDADE_DE_MEDIDA` e `SALDO_SOMAR`.
 12. Para baixa do consumo real, use `Baixa` e importe a planilha com `COD`, `UNIDADE_DE_MEDIDA` e `SALDO_CONSUMIDO`.
 
+A baixa comum por COD continua disponivel aos perfis operacionais autorizados.
+Somente o perfil ADMIN pode baixar diretamente por `ID_EMPENHO` na planilha de
+empenhos pendentes ou aplicar correcoes auditadas nesses empenhos.
+
 Os campos de leitura recebem foco automatico e aceitam leitores USB que funcionam como teclado.
 
 ## Inventario e etiquetas em massa
