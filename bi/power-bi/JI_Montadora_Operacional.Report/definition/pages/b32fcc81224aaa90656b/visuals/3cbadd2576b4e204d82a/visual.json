@@ -1,0 +1,252 @@
+{
+  "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/visualContainer/2.11.0/schema.json",
+  "name": "3cbadd2576b4e204d82a",
+  "position": {
+    "x": 20,
+    "y": 238,
+    "z": 10,
+    "height": 462,
+    "width": 1240,
+    "tabOrder": 10
+  },
+  "visual": {
+    "visualType": "tableEx",
+    "query": {
+      "queryState": {
+        "Values": {
+          "projections": [
+            {
+              "field": {
+                "Column": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "fato_compras_transito"
+                    }
+                  },
+                  "Property": "numero_oc"
+                }
+              },
+              "queryRef": "fato_compras_transito.numero_oc",
+              "nativeQueryRef": "numero_oc"
+            },
+            {
+              "field": {
+                "Column": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "fato_compras_transito"
+                    }
+                  },
+                  "Property": "fornecedor"
+                }
+              },
+              "queryRef": "fato_compras_transito.fornecedor",
+              "nativeQueryRef": "fornecedor"
+            },
+            {
+              "field": {
+                "Column": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "fato_compras_transito"
+                    }
+                  },
+                  "Property": "codigo"
+                }
+              },
+              "queryRef": "fato_compras_transito.codigo",
+              "nativeQueryRef": "codigo"
+            },
+            {
+              "field": {
+                "Column": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "fato_compras_transito"
+                    }
+                  },
+                  "Property": "descricao"
+                }
+              },
+              "queryRef": "fato_compras_transito.descricao",
+              "nativeQueryRef": "descricao"
+            },
+            {
+              "field": {
+                "Column": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "fato_compras_transito"
+                    }
+                  },
+                  "Property": "quantidade_pendente"
+                }
+              },
+              "queryRef": "fato_compras_transito.quantidade_pendente",
+              "nativeQueryRef": "quantidade_pendente"
+            },
+            {
+              "field": {
+                "Column": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "fato_compras_transito"
+                    }
+                  },
+                  "Property": "valor_pendente"
+                }
+              },
+              "queryRef": "fato_compras_transito.valor_pendente",
+              "nativeQueryRef": "valor_pendente"
+            },
+            {
+              "field": {
+                "Column": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "fato_compras_transito"
+                    }
+                  },
+                  "Property": "data_necessidade"
+                }
+              },
+              "queryRef": "fato_compras_transito.data_necessidade",
+              "nativeQueryRef": "data_necessidade"
+            },
+            {
+              "field": {
+                "Column": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "fato_compras_transito"
+                    }
+                  },
+                  "Property": "situacao_transito"
+                }
+              },
+              "queryRef": "fato_compras_transito.situacao_transito",
+              "nativeQueryRef": "situacao_transito"
+            }
+          ]
+        }
+      }
+    },
+    "drillFilterOtherVisuals": true
+  },
+  "filterConfig": {
+    "filters": [
+      {
+        "name": "82bdb0d7077c5ffba6e6",
+        "field": {
+          "Column": {
+            "Expression": {
+              "SourceRef": {
+                "Entity": "fato_compras_transito"
+              }
+            },
+            "Property": "numero_oc"
+          }
+        },
+        "type": "Categorical"
+      },
+      {
+        "name": "a7ef12c1ccc4764f64d6",
+        "field": {
+          "Column": {
+            "Expression": {
+              "SourceRef": {
+                "Entity": "fato_compras_transito"
+              }
+            },
+            "Property": "fornecedor"
+          }
+        },
+        "type": "Categorical"
+      },
+      {
+        "name": "9affe36a13a7764ac369",
+        "field": {
+          "Column": {
+            "Expression": {
+              "SourceRef": {
+                "Entity": "fato_compras_transito"
+              }
+            },
+            "Property": "codigo"
+          }
+        },
+        "type": "Categorical"
+      },
+      {
+        "name": "22fa8b3c242fa0919118",
+        "field": {
+          "Column": {
+            "Expression": {
+              "SourceRef": {
+                "Entity": "fato_compras_transito"
+              }
+            },
+            "Property": "descricao"
+          }
+        },
+        "type": "Categorical"
+      },
+      {
+        "name": "23b2e9a3f9ae32605b4f",
+        "field": {
+          "Column": {
+            "Expression": {
+              "SourceRef": {
+                "Entity": "fato_compras_transito"
+              }
+            },
+            "Property": "quantidade_pendente"
+          }
+        },
+        "type": "Advanced"
+      },
+      {
+        "name": "4cd8d949c93ac2dbfbff",
+        "field": {
+          "Column": {
+            "Expression": {
+              "SourceRef": {
+                "Entity": "fato_compras_transito"
+              }
+            },
+            "Property": "valor_pendente"
+          }
+        },
+        "type": "Advanced"
+      },
+      {
+        "name": "e5f01ff1d2ccaa5f3bbc",
+        "field": {
+          "Column": {
+            "Expression": {
+              "SourceRef": {
+                "Entity": "fato_compras_transito"
+              }
+            },
+            "Property": "data_necessidade"
+          }
+        },
+        "type": "Advanced"
+      },
+      {
+        "name": "51cd11e62bbb67d8ca22",
+        "field": {
+          "Column": {
+            "Expression": {
+              "SourceRef": {
+                "Entity": "fato_compras_transito"
+              }
+            },
+            "Property": "situacao_transito"
+          }
+        },
+        "type": "Categorical"
+      }
+    ]
+  }
+}

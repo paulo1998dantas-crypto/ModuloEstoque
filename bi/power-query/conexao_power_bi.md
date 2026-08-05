@@ -2,15 +2,15 @@
 
 ## 1. Obter o endpoint
 
-No Dashboard Supabase, abra **Connect** e copie os dados do **Session Pooler**. Use porta `5432`. Não copie senha para arquivos ou GitHub.
+O protótipo validado usa a conexão PostgreSQL direta com SSL, na porta `5432`. Não copie senha para arquivos ou GitHub.
 
 Parâmetros sugeridos no Power BI:
 
-- `pServidor`: `aws-0-us-west-2.pooler.supabase.com:5432`.
+- `pServidor`: `db.rodtxswtqbsbtukmvobn.supabase.co:5432`.
 - `pBanco`: `postgres`.
-- Usuário PostgreSQL: `login_privado.rodtxswtqbsbtukmvobn`.
+- Usuário PostgreSQL: `login_privado`.
 
-Escolher o conector **PostgreSQL database**, modo **Importar**. Na primeira autenticação, usar o login consultivo criado pelo template SQL e guardar a senha apenas no Power BI/Gateway.
+Escolher o conector **PostgreSQL database**, modo **Importar**. Na primeira autenticação, usar o login consultivo criado pelo template SQL e guardar a senha apenas no Power BI/Gateway. O Session Pooler não foi usado neste protótipo porque não reconheceu esse login PostgreSQL personalizado.
 
 ## 2. Função Power Query
 

@@ -1,0 +1,418 @@
+/// View consultiva bi.fato_mrp no Supabase.
+table fato_mrp
+	lineageTag: a94a37cf-bee0-4788-bea4-b4c84d77e261
+
+	measure 'SKUs com Saldo' = CALCULATE(DISTINCTCOUNT(fato_estoque_atual[sku_id]), fato_estoque_atual[estoque_atual] > 0)
+		formatString: 0
+		displayFolder: 1. Estoque
+		lineageTag: 617c760c-484f-445f-aeb5-861f63f7c61b
+
+	measure 'SKUs Empenhados' = CALCULATE(DISTINCTCOUNT(fato_estoque_atual[sku_id]), fato_estoque_atual[empenhado_total] > 0)
+		formatString: 0
+		displayFolder: 1. Estoque
+		lineageTag: bfe0b2c6-b804-4900-8074-e8147b35a90c
+
+	measure 'SKUs com Disponivel' = CALCULATE(DISTINCTCOUNT(fato_estoque_atual[sku_id]), fato_estoque_atual[estoque_disponivel] > 0)
+		formatString: 0
+		displayFolder: 1. Estoque
+		lineageTag: 3c3e238b-9edd-495a-9978-c5ab295a8101
+
+	measure 'SKUs Zerados' = CALCULATE(DISTINCTCOUNT(fato_estoque_atual[sku_id]), fato_estoque_atual[status_estoque] = "ZERADO")
+		formatString: 0
+		displayFolder: 1. Estoque
+		lineageTag: daaa5ff3-1107-4a43-b903-6aa96593ab55
+
+	measure 'SKUs Baixos' = CALCULATE(DISTINCTCOUNT(fato_estoque_atual[sku_id]), fato_estoque_atual[status_estoque] IN {"BAIXO", "SALDO_COMPROMETIDO"})
+		formatString: 0
+		displayFolder: 1. Estoque
+		lineageTag: 5a960c47-5eca-4d5e-9b86-cabacc938bf8
+
+	measure Entradas = CALCULATE(SUM(fato_movimentacoes_estoque[quantidade]), fato_movimentacoes_estoque[tipo] = "ENTRADA", fato_movimentacoes_estoque[movement_status] = "ATIVA")
+		formatString: #,0.###
+		displayFolder: 1. Estoque
+		lineageTag: 83fcff56-043a-4d50-9e38-61eae0797c8f
+
+	measure Consumo = ABS(CALCULATE(SUM(fato_movimentacoes_estoque[quantidade]), fato_movimentacoes_estoque[tipo] = "BAIXA", fato_movimentacoes_estoque[movement_status] = "ATIVA"))
+		formatString: #,0.###
+		displayFolder: 1. Estoque
+		lineageTag: 530e9208-a15e-4034-9bc3-92209d6a86fa
+
+	measure 'O.S. no WIP' = CALCULATE(DISTINCTCOUNT(dim_ordem_servico[work_order_id]), dim_ordem_servico[em_wip] = TRUE())
+		formatString: 0
+		displayFolder: 2. PCP
+		lineageTag: d72ae1f0-b300-4449-8b5e-f4d818df7943
+
+	measure 'O.S. em Producao' = CALCULATE(DISTINCTCOUNT(dim_ordem_servico[work_order_id]), dim_ordem_servico[fase_wip] = "PRODUCAO")
+		formatString: 0
+		displayFolder: 2. PCP
+		lineageTag: 74a33760-9005-48a4-a287-c60087c42dba
+
+	measure 'O.S. Atrasadas' = CALCULATE(DISTINCTCOUNT(dim_ordem_servico[work_order_id]), dim_ordem_servico[entrega_atrasada] = TRUE())
+		formatString: 0
+		displayFolder: 2. PCP
+		lineageTag: 61dfd7d7-d918-4a59-8ae8-20cc7e25e934
+
+	measure 'Avanco Medio %' = AVERAGEX(FILTER(dim_ordem_servico, dim_ordem_servico[em_wip] = TRUE()), dim_ordem_servico[percentual_avanco]) / 100
+		formatString: 0.0%
+		displayFolder: 2. PCP
+		lineageTag: 070edc1c-24c6-4e1b-8b52-2c1b0e7f25af
+
+	measure 'O.S. com Material Pendente' = CALCULATE(DISTINCTCOUNT(fato_necessidades_os[work_order_id]), fato_necessidades_os[quantidade_pendente] > 0)
+		formatString: 0
+		displayFolder: 2. PCP
+		lineageTag: 7a190459-9032-4f94-ba8d-efb6209e4896
+
+	measure 'Linhas em Transito' = CALCULATE(COUNTROWS(fato_compras_transito), fato_compras_transito[em_transito] = TRUE())
+		formatString: 0
+		displayFolder: 3. Compras
+		lineageTag: ed21e42b-cd3f-4a25-8a33-674ea80690ef
+
+	measure 'Valor em Transito' = CALCULATE(SUM(fato_compras_transito[valor_pendente]), fato_compras_transito[em_transito] = TRUE())
+		formatString: R$ #,0.00
+		displayFolder: 3. Compras
+		lineageTag: 302a3686-b513-4cd5-8c5e-ccc288d95f73
+
+	measure 'Linhas Atrasadas' = CALCULATE(COUNTROWS(fato_compras_transito), fato_compras_transito[em_transito] = TRUE(), fato_compras_transito[situacao_transito] = "ATRASADA")
+		formatString: 0
+		displayFolder: 3. Compras
+		lineageTag: 455ab5a4-3b06-446b-b231-6b1fcc60c5d6
+
+	measure 'O.C. Abertas' = CALCULATE(DISTINCTCOUNT(fato_compras_transito[purchase_order_id]), fato_compras_transito[em_transito] = TRUE())
+		formatString: 0
+		displayFolder: 3. Compras
+		lineageTag: 34f16aaf-799e-43b1-96d6-b88ebc6a864d
+
+	measure 'Recebido Fisico' = CALCULATE(SUM(fato_recebimentos_inspecao[quantidade_fisica]), fato_recebimentos_inspecao[status_recebimento] = "CONFIRMADO")
+		formatString: #,0.###
+		displayFolder: 3. Compras
+		lineageTag: a8abb69b-05a5-4230-9099-69fc8a85f0af
+
+	measure 'Recebido Aprovado' = CALCULATE(SUM(fato_recebimentos_inspecao[quantidade_aprovada]), fato_recebimentos_inspecao[status_recebimento] = "CONFIRMADO")
+		formatString: #,0.###
+		displayFolder: 3. Compras
+		lineageTag: d96a3767-f22b-464c-abbf-c65050ca9c5d
+
+	measure 'Taxa Aprovacao %' = DIVIDE([Recebido Aprovado], [Recebido Fisico])
+		formatString: 0.0%
+		displayFolder: 3. Compras
+		lineageTag: d2ff4735-494f-4584-9855-dc99626c19af
+
+	measure 'SKUs com Demanda' = CALCULATE(DISTINCTCOUNT(fato_mrp[sku_id]), fato_mrp[necessidade_total] > 0)
+		formatString: 0
+		displayFolder: 4. MRP
+		lineageTag: ad750727-22bb-436c-a213-aef7b00c1eaa
+
+	measure 'SKUs Cobertos' = CALCULATE(DISTINCTCOUNT(fato_mrp[sku_id]), fato_mrp[status_mrp] = "COBERTO")
+		formatString: 0
+		displayFolder: 4. MRP
+		lineageTag: 34010036-041e-4371-b567-27824964354a
+
+	measure 'SKUs a Comprar' = CALCULATE(DISTINCTCOUNT(fato_mrp[sku_id]), fato_mrp[status_mrp] = "COMPRAR")
+		formatString: 0
+		displayFolder: 4. MRP
+		lineageTag: c7f5d949-c50f-4d58-8add-e2d5d1d4c50c
+
+	measure 'Forecasts sem Estrutura' = CALCULATE(DISTINCTCOUNT(fato_forecast[forecast_id]), fato_forecast[status] = "ATIVO", fato_forecast[possui_estrutura_materiais] = FALSE())
+		formatString: 0
+		displayFolder: 4. MRP
+		lineageTag: 94879931-6e91-4ac7-8a24-ff69ce7c05fd
+
+	measure 'Necessidade de Compra' = SUM(fato_mrp[necessidade_compra])
+		formatString: #,0.###
+		displayFolder: 4. MRP
+		lineageTag: 529d94e6-d94a-4bed-aae8-20ad5cac6cf1
+
+	measure 'Necessidade de Compra c/ Minimo' = SUM(fato_mrp[necessidade_compra_com_estoque_minimo])
+		formatString: #,0.###
+		displayFolder: 4. MRP
+		lineageTag: 30375925-0c0f-42ec-b6f7-550e564b8c08
+
+	measure 'Ultima Atualizacao' = MAX(fato_mrp[atualizado_em])
+		formatString: dd/MM/yyyy HH:mm
+		displayFolder: 4. MRP
+		lineageTag: a8920888-724a-4cb8-a4a2-b96024f768fa
+
+	measure 'Estoque Atual' = SUM(fato_estoque_atual[estoque_atual])
+		formatString: #,0.###
+		displayFolder: 1. Estoque
+
+	measure 'Empenhado Total' = SUM(fato_estoque_atual[empenhado_total])
+		formatString: #,0.###
+		displayFolder: 1. Estoque
+
+	measure 'Estoque Disponivel' = SUM(fato_estoque_atual[estoque_disponivel])
+		formatString: #,0.###
+		displayFolder: 1. Estoque
+
+	measure 'Necessidade Total' = SUM(fato_mrp[necessidade_total])
+		formatString: #,0.###
+		displayFolder: 4. MRP
+
+	measure 'Em Transito' = SUM(fato_mrp[quantidade_transito])
+		formatString: #,0.###
+		displayFolder: 4. MRP
+
+	measure 'MRP Estoque Disponivel' = SUM(fato_mrp[estoque_disponivel])
+		formatString: #,0.###
+		displayFolder: 4. MRP
+
+	column sku_id
+		dataType: int64
+		lineageTag: 322f32fd-b814-4a7e-8c2c-76616994b308
+		summarizeBy: none
+		sourceColumn: sku_id
+
+	column codigo
+		dataType: string
+		lineageTag: c262ac67-2d54-4eb4-92c5-75fa7e386c4b
+		summarizeBy: none
+		sourceColumn: codigo
+
+	column descricao
+		dataType: string
+		lineageTag: 6789a80f-7797-4a10-9d72-b21741f68839
+		summarizeBy: none
+		sourceColumn: descricao
+
+		annotation SummarizationSetBy = Automatic
+
+	column unidade
+		dataType: string
+		lineageTag: 1a1843bc-6403-493e-aec7-69c7a261c6f0
+		summarizeBy: none
+		sourceColumn: unidade
+
+		annotation SummarizationSetBy = Automatic
+
+	column grupo
+		dataType: string
+		lineageTag: 52fde83c-ad3f-4437-bfef-688d92648986
+		summarizeBy: none
+		sourceColumn: grupo
+
+		annotation SummarizationSetBy = Automatic
+
+	column categoria
+		dataType: string
+		lineageTag: d4ab5b5f-f3ca-46c2-8579-ae5767ae6094
+		summarizeBy: none
+		sourceColumn: categoria
+
+		annotation SummarizationSetBy = Automatic
+
+	column localizacao
+		dataType: string
+		lineageTag: 0ab9f846-5908-4cf4-b83a-a23f6765df0e
+		summarizeBy: none
+		sourceColumn: localizacao
+
+		annotation SummarizationSetBy = Automatic
+
+	column estoque_minimo
+		dataType: double
+		lineageTag: b172f649-24c6-4217-9e1a-75cb18a20a4f
+		summarizeBy: sum
+		sourceColumn: estoque_minimo
+
+		annotation SummarizationSetBy = Automatic
+
+		annotation PBI_FormatHint = {"isGeneralNumber":true}
+
+	column estoque_atual
+		dataType: double
+		lineageTag: 1207ef89-ba4b-4b0b-9285-c0f53c1b940a
+		summarizeBy: sum
+		sourceColumn: estoque_atual
+
+		annotation SummarizationSetBy = Automatic
+
+		annotation PBI_FormatHint = {"isGeneralNumber":true}
+
+	column empenhado_total
+		dataType: double
+		lineageTag: 2bbcf3bf-0acb-40a2-be0f-54cac24be974
+		summarizeBy: sum
+		sourceColumn: empenhado_total
+
+		annotation SummarizationSetBy = Automatic
+
+		annotation PBI_FormatHint = {"isGeneralNumber":true}
+
+	column empenhado_os
+		dataType: double
+		lineageTag: 6d9a81d7-d05d-427f-87d1-ed85790483f7
+		summarizeBy: sum
+		sourceColumn: empenhado_os
+
+		annotation SummarizationSetBy = Automatic
+
+		annotation PBI_FormatHint = {"isGeneralNumber":true}
+
+	column empenhado_fluxo
+		dataType: double
+		lineageTag: a779e092-2e49-496d-8030-e1d0ab176883
+		summarizeBy: sum
+		sourceColumn: empenhado_fluxo
+
+		annotation SummarizationSetBy = Automatic
+
+		annotation PBI_FormatHint = {"isGeneralNumber":true}
+
+	column estoque_disponivel
+		dataType: double
+		lineageTag: 0efca521-cba5-4c03-be6b-42818cf618fc
+		summarizeBy: sum
+		sourceColumn: estoque_disponivel
+
+		annotation SummarizationSetBy = Automatic
+
+		annotation PBI_FormatHint = {"isGeneralNumber":true}
+
+	column necessidade_os_pendente
+		dataType: double
+		lineageTag: 583e8a92-2dfe-4b3e-87dd-55cd9ad76e77
+		summarizeBy: sum
+		sourceColumn: necessidade_os_pendente
+
+		annotation SummarizationSetBy = Automatic
+
+		annotation PBI_FormatHint = {"isGeneralNumber":true}
+
+	column forecast_firme
+		dataType: double
+		lineageTag: 1f822e0f-353d-4768-9c22-88876bb52f99
+		summarizeBy: sum
+		sourceColumn: forecast_firme
+
+		annotation SummarizationSetBy = Automatic
+
+		annotation PBI_FormatHint = {"isGeneralNumber":true}
+
+	column forecast_preditivo_bruto
+		dataType: double
+		lineageTag: fee73259-3fdf-49e4-b1c2-07e3e4ed67c9
+		summarizeBy: sum
+		sourceColumn: forecast_preditivo_bruto
+
+		annotation SummarizationSetBy = Automatic
+
+		annotation PBI_FormatHint = {"isGeneralNumber":true}
+
+	column forecast_preditivo_ponderado
+		dataType: double
+		lineageTag: f9a1171c-0621-4d9b-940b-a00e6df7c556
+		summarizeBy: sum
+		sourceColumn: forecast_preditivo_ponderado
+
+		annotation SummarizationSetBy = Automatic
+
+		annotation PBI_FormatHint = {"isGeneralNumber":true}
+
+	column necessidade_total
+		dataType: double
+		lineageTag: f76bc112-24f9-4f2d-abcd-6054dfca01ac
+		summarizeBy: sum
+		sourceColumn: necessidade_total
+
+		annotation SummarizationSetBy = Automatic
+
+		annotation PBI_FormatHint = {"isGeneralNumber":true}
+
+	column quantidade_transito
+		dataType: double
+		lineageTag: b91f97b0-cda0-4449-9f22-7781e2174ae5
+		summarizeBy: sum
+		sourceColumn: quantidade_transito
+
+		annotation SummarizationSetBy = Automatic
+
+		annotation PBI_FormatHint = {"isGeneralNumber":true}
+
+	column saldo_projetado
+		dataType: double
+		lineageTag: d70ad65a-5015-45c5-8462-5ce4b53d906c
+		summarizeBy: sum
+		sourceColumn: saldo_projetado
+
+		annotation SummarizationSetBy = Automatic
+
+		annotation PBI_FormatHint = {"isGeneralNumber":true}
+
+	column necessidade_compra
+		dataType: double
+		lineageTag: 2356f7ee-33c6-40d3-81e4-40038e9df443
+		summarizeBy: sum
+		sourceColumn: necessidade_compra
+
+		annotation SummarizationSetBy = Automatic
+
+		annotation PBI_FormatHint = {"isGeneralNumber":true}
+
+	column necessidade_compra_com_estoque_minimo
+		dataType: double
+		lineageTag: ce06d263-903e-489a-a871-08cc8920a537
+		summarizeBy: sum
+		sourceColumn: necessidade_compra_com_estoque_minimo
+
+		annotation SummarizationSetBy = Automatic
+
+		annotation PBI_FormatHint = {"isGeneralNumber":true}
+
+	column ordens_pendentes
+		dataType: int64
+		lineageTag: 6f28eca4-adcd-4e0c-a684-711a655847be
+		summarizeBy: sum
+		sourceColumn: ordens_pendentes
+
+		annotation SummarizationSetBy = Automatic
+
+	column ordens_compra_abertas
+		dataType: int64
+		lineageTag: 245b16cc-92ad-4c4a-b149-3cfcf4b36610
+		summarizeBy: sum
+		sourceColumn: ordens_compra_abertas
+
+		annotation SummarizationSetBy = Automatic
+
+	column proxima_remessa
+		dataType: dateTime
+		formatString: dd/MM/yyyy
+		lineageTag: 76e75a70-fcd9-4698-886f-157c30998d7b
+		summarizeBy: none
+		sourceColumn: proxima_remessa
+
+		variation Variation
+			isDefault
+			relationship: 0130401d-b2c0-480c-a262-8d9ab671a084
+			defaultHierarchy: LocalDateTable_047dbd49-f528-4c7e-b025-4ab76bd224c2.'Hierarquia de datas'
+
+		annotation UnderlyingDateTimeDataType = Date
+
+		annotation SummarizationSetBy = Automatic
+
+	column status_mrp
+		dataType: string
+		lineageTag: 75239a3a-40b3-40eb-b9d2-1d897df9f780
+		summarizeBy: none
+		sourceColumn: status_mrp
+
+		annotation SummarizationSetBy = Automatic
+
+	column atualizado_em
+		dataType: dateTime
+		formatString: dd/MM/yyyy HH:mm
+		lineageTag: 59a97395-00fa-40bc-a7aa-bc677e5d61a8
+		summarizeBy: none
+		sourceColumn: atualizado_em
+
+		annotation SummarizationSetBy = Automatic
+
+	partition fato_mrp = m
+		mode: import
+		source =
+				let
+				    Fonte = PostgreSQL.Database("db.rodtxswtqbsbtukmvobn.supabase.co:5432", "postgres", [CreateNavigationProperties = false]),
+				    Dados = Fonte{[Schema = "bi", Item = "fato_mrp"]}[Data]
+				in
+				    Dados
+

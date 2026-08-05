@@ -1,0 +1,146 @@
+/// View consultiva bi.fato_empenhos_abertos no Supabase.
+table fato_empenhos_abertos
+	lineageTag: db1837a8-b25c-464e-883e-829f17caac0b
+
+	column commitment_id
+		dataType: int64
+		lineageTag: fb5ca4c7-e7dd-4235-b0f1-d8033174bcbd
+		summarizeBy: none
+		sourceColumn: commitment_id
+
+	column criado_em_utc
+		dataType: dateTime
+		formatString: dd/MM/yyyy HH:mm
+		lineageTag: 8cb1b09d-845f-4897-b34b-aeb2654aeb66
+		sourceColumn: criado_em_utc
+
+	column criado_em
+		dataType: dateTime
+		formatString: dd/MM/yyyy HH:mm
+		lineageTag: d84caba3-5495-4320-bb77-449e111c2e55
+		sourceColumn: criado_em
+
+	column tipo
+		dataType: string
+		lineageTag: 31076cab-6509-4da3-a430-e74186651515
+		sourceColumn: tipo
+
+	column sku_id
+		dataType: int64
+		lineageTag: 5f26dafa-2142-44df-879d-ff63f12bde6a
+		summarizeBy: none
+		sourceColumn: sku_id
+
+	column codigo
+		dataType: string
+		lineageTag: a67d20af-7a4b-442c-9b0f-f43c6e4355b5
+		summarizeBy: none
+		sourceColumn: codigo
+
+	column descricao
+		dataType: string
+		lineageTag: 0c8ce80e-6842-47ca-9a26-2dd0780d6a81
+		sourceColumn: descricao
+
+	column unidade
+		dataType: string
+		lineageTag: 27d96e04-e188-45e0-8118-ccf95cf224a4
+		sourceColumn: unidade
+
+	column grupo
+		dataType: string
+		lineageTag: 37189f87-63ae-4026-8eca-a4e8caaddf82
+		sourceColumn: grupo
+
+	column categoria
+		dataType: string
+		lineageTag: ebceb04a-2711-4bad-b14d-fdfa41c83b61
+		sourceColumn: categoria
+
+	column quantidade_original
+		dataType: double
+		lineageTag: a538890c-1691-414b-811a-ed689f28db0d
+		summarizeBy: sum
+		sourceColumn: quantidade_original
+
+		annotation SummarizationSetBy = Automatic
+
+		annotation PBI_FormatHint = {"isGeneralNumber":true}
+
+	column quantidade_baixada
+		dataType: double
+		lineageTag: b8f902f2-506b-4674-8bc3-23ce658374fb
+		summarizeBy: sum
+		sourceColumn: quantidade_baixada
+
+		annotation SummarizationSetBy = Automatic
+
+		annotation PBI_FormatHint = {"isGeneralNumber":true}
+
+	column quantidade_pendente
+		dataType: double
+		lineageTag: 0c3e2bcd-cce3-465a-a317-ce13f1f82bd9
+		summarizeBy: sum
+		sourceColumn: quantidade_pendente
+
+		annotation SummarizationSetBy = Automatic
+
+		annotation PBI_FormatHint = {"isGeneralNumber":true}
+
+	column work_order_id
+		dataType: string
+		lineageTag: 63e45cee-3ca6-4cb7-9849-676fc36bfa7e
+		summarizeBy: none
+		sourceColumn: work_order_id
+
+	column numero_os
+		dataType: string
+		lineageTag: 3b98b82e-6f63-4ca1-9047-594473e0b20f
+		summarizeBy: none
+		sourceColumn: numero_os
+
+	column item
+		dataType: int64
+		lineageTag: 0ac04c0f-0f61-403a-a7c7-e75a65940525
+		summarizeBy: none
+		sourceColumn: item
+
+	column cliente
+		dataType: string
+		lineageTag: a00ca4bb-c1e6-4f03-9c29-f51a97b604e1
+		sourceColumn: cliente
+
+	column tipo_vinculo
+		dataType: string
+		lineageTag: c9b43da8-c533-4d1c-9e31-6415e0e5a77f
+		sourceColumn: tipo_vinculo
+
+	column setor
+		dataType: string
+		lineageTag: af4a6b3e-a7ee-44f6-9d08-2ce370ef0b2d
+		sourceColumn: setor
+
+	column referencia
+		dataType: string
+		lineageTag: 61b3a93c-b682-475d-bd24-b11d96c0a9f3
+		sourceColumn: referencia
+
+	column documento
+		dataType: string
+		lineageTag: dec713fa-2ac5-4272-818f-c243c4495d83
+		sourceColumn: documento
+
+	column observacao
+		dataType: string
+		lineageTag: 3722b13b-7044-4171-866d-c259ce54b307
+		sourceColumn: observacao
+
+	partition fato_empenhos_abertos = m
+		mode: import
+		source =
+				let
+				    Fonte = PostgreSQL.Database("db.rodtxswtqbsbtukmvobn.supabase.co:5432", "postgres", [CreateNavigationProperties = false]),
+				    Dados = Fonte{[Schema = "bi", Item = "fato_empenhos_abertos"]}[Data]
+				in
+				    Dados
+

@@ -1,0 +1,264 @@
+/// View consultiva bi.fato_forecast no Supabase.
+table fato_forecast
+	lineageTag: 2dcffdcc-a81a-45fc-9044-5428240b3db6
+
+	column forecast_id
+		dataType: string
+		lineageTag: f37f69a1-95f1-426b-9f94-ce1e0728e1d4
+		summarizeBy: none
+		sourceColumn: forecast_id
+
+	column numero_forecast
+		dataType: int64
+		lineageTag: 16686e3a-74d3-4743-a390-e025093da3f2
+		summarizeBy: sum
+		sourceColumn: numero_forecast
+
+		annotation SummarizationSetBy = Automatic
+
+	column codigo_forecast
+		dataType: string
+		lineageTag: 308208dd-341d-43ab-9162-a07b1fae6767
+		summarizeBy: none
+		sourceColumn: codigo_forecast
+
+		annotation SummarizationSetBy = Automatic
+
+	column tipo_demanda
+		dataType: string
+		lineageTag: 766799b7-f6d7-4d0e-a409-64d30ac1bdf9
+		summarizeBy: none
+		sourceColumn: tipo_demanda
+
+		annotation SummarizationSetBy = Automatic
+
+	column status
+		dataType: string
+		lineageTag: ef88fff8-c4a2-4a20-b10a-c86f0f9b701c
+		summarizeBy: none
+		sourceColumn: status
+
+		annotation SummarizationSetBy = Automatic
+
+	column proposta_numero
+		dataType: string
+		lineageTag: f068d536-1144-4d30-9ddf-34eaccc55ee3
+		summarizeBy: none
+		sourceColumn: proposta_numero
+
+		annotation SummarizationSetBy = Automatic
+
+	column cliente
+		dataType: string
+		lineageTag: 5921e5c1-84d5-45ab-82c0-3666b0ce9f5f
+		summarizeBy: none
+		sourceColumn: cliente
+
+		annotation SummarizationSetBy = Automatic
+
+	column vendedor
+		dataType: string
+		lineageTag: 7b665dd7-f042-4f2b-a786-2d48bfa2fe19
+		summarizeBy: none
+		sourceColumn: vendedor
+
+		annotation SummarizationSetBy = Automatic
+
+	column mercado
+		dataType: string
+		lineageTag: 8566e7ae-02f1-4a65-9df1-4a76471e0728
+		summarizeBy: none
+		sourceColumn: mercado
+
+		annotation SummarizationSetBy = Automatic
+
+	column data_confirmacao
+		dataType: dateTime
+		formatString: dd/MM/yyyy
+		lineageTag: 2a3c47cf-77d7-44b7-9668-b26ad268eb6d
+		summarizeBy: none
+		sourceColumn: data_confirmacao
+
+		variation Variation
+			isDefault
+			relationship: 168f47d1-bf29-40f1-9e01-c6d19ca6b800
+			defaultHierarchy: LocalDateTable_669d374a-eb6b-4559-a58d-7df9a8646aaa.'Hierarquia de datas'
+
+		annotation UnderlyingDateTimeDataType = Date
+
+		annotation SummarizationSetBy = Automatic
+
+	column data_prevista_chegada
+		dataType: dateTime
+		formatString: dd/MM/yyyy
+		lineageTag: e0d970fe-0ff8-4ec6-939a-3ac28462059d
+		summarizeBy: none
+		sourceColumn: data_prevista_chegada
+
+		variation Variation
+			isDefault
+			relationship: 6cfc2433-e5f0-45d8-8620-b6a74939bc24
+			defaultHierarchy: LocalDateTable_d34781c4-748e-41a1-ba24-c49c8edaca34.'Hierarquia de datas'
+
+		annotation UnderlyingDateTimeDataType = Date
+
+		annotation SummarizationSetBy = Automatic
+
+	column data_entrega_prevista
+		dataType: dateTime
+		formatString: dd/MM/yyyy
+		lineageTag: dbf3e0d2-1a90-4d28-b5a1-38142e291d5a
+		summarizeBy: none
+		sourceColumn: data_entrega_prevista
+
+		annotation UnderlyingDateTimeDataType = Date
+
+		annotation SummarizationSetBy = Automatic
+
+	column quantidade_planejada
+		dataType: double
+		lineageTag: f8e94329-be4b-4a3f-886f-3f1bf66f46da
+		summarizeBy: sum
+		sourceColumn: quantidade_planejada
+
+		annotation SummarizationSetBy = Automatic
+
+		annotation PBI_FormatHint = {"isGeneralNumber":true}
+
+	column probabilidade
+		dataType: int64
+		lineageTag: 5193feef-739b-406e-a43d-e6f9be5146d9
+		summarizeBy: sum
+		sourceColumn: probabilidade
+
+		annotation SummarizationSetBy = Automatic
+
+	column quantidade_ponderada
+		dataType: double
+		lineageTag: 4025152c-b38c-4db1-bf12-8119cfe120dd
+		summarizeBy: sum
+		sourceColumn: quantidade_ponderada
+
+		annotation SummarizationSetBy = Automatic
+
+		annotation PBI_FormatHint = {"isGeneralNumber":true}
+
+	column tipo_servico
+		dataType: string
+		lineageTag: 730fb0cf-6ab7-4591-a866-fa65d48db7ea
+		summarizeBy: none
+		sourceColumn: tipo_servico
+
+		annotation SummarizationSetBy = Automatic
+
+	column tipo_veiculo
+		dataType: string
+		lineageTag: 7c429a2c-879a-473f-a1df-af2ac73ee0fc
+		summarizeBy: none
+		sourceColumn: tipo_veiculo
+
+		annotation SummarizationSetBy = Automatic
+
+	column linha
+		dataType: string
+		lineageTag: 541276d8-af28-4d44-82cf-2efa717ff0e7
+		summarizeBy: none
+		sourceColumn: linha
+
+		annotation SummarizationSetBy = Automatic
+
+	column transformacao_codigo
+		dataType: string
+		lineageTag: 2b53a291-c2e0-4d89-b5dd-7acd79fc1249
+		summarizeBy: none
+		sourceColumn: transformacao_codigo
+
+		annotation SummarizationSetBy = Automatic
+
+	column transformacao
+		dataType: string
+		lineageTag: 2eaf3c0c-5471-4451-8828-dbbcc544edec
+		summarizeBy: none
+		sourceColumn: transformacao
+
+		annotation SummarizationSetBy = Automatic
+
+	column produto_planejado_sku
+		dataType: string
+		lineageTag: 7b5785c9-dff2-46b7-92af-73852d300754
+		summarizeBy: none
+		sourceColumn: produto_planejado_sku
+
+		annotation SummarizationSetBy = Automatic
+
+	column produto_planejado_descricao
+		dataType: string
+		lineageTag: 01de5871-2cb2-4507-8601-1a3eba4b680a
+		summarizeBy: none
+		sourceColumn: produto_planejado_descricao
+
+		annotation SummarizationSetBy = Automatic
+
+	column vehicle_entry_id
+		dataType: string
+		lineageTag: 25e43edc-c32b-47c9-b780-28618d9e16dc
+		summarizeBy: none
+		sourceColumn: vehicle_entry_id
+
+	column work_order_id
+		dataType: string
+		lineageTag: e20d69e1-a0f2-4acc-9bb7-377d02aff2eb
+		summarizeBy: none
+		sourceColumn: work_order_id
+
+	column itens
+		dataType: int64
+		lineageTag: 035fcb91-4621-4c80-a71e-dfbd6d3b6938
+		summarizeBy: sum
+		sourceColumn: itens
+
+		annotation SummarizationSetBy = Automatic
+
+	column necessidades
+		dataType: int64
+		lineageTag: 30859e68-f779-44a5-96ea-f3614c5c917f
+		summarizeBy: sum
+		sourceColumn: necessidades
+
+		annotation SummarizationSetBy = Automatic
+
+	column possui_estrutura_materiais
+		dataType: boolean
+		lineageTag: 74de02df-e8c6-4343-b514-8b54224b47ea
+		summarizeBy: none
+		sourceColumn: possui_estrutura_materiais
+
+		annotation SummarizationSetBy = Automatic
+
+	column created_at
+		dataType: dateTime
+		formatString: dd/MM/yyyy HH:mm
+		lineageTag: b46ca37f-4af1-4866-83a5-d054b2432aa1
+		summarizeBy: none
+		sourceColumn: created_at
+
+		annotation SummarizationSetBy = Automatic
+
+	column updated_at
+		dataType: dateTime
+		formatString: dd/MM/yyyy HH:mm
+		lineageTag: 75f2841f-d100-4e63-9d7f-d0d5b3cf1e8c
+		summarizeBy: none
+		sourceColumn: updated_at
+
+		annotation SummarizationSetBy = Automatic
+
+	partition fato_forecast = m
+		mode: import
+		source =
+				let
+				    Fonte = PostgreSQL.Database("db.rodtxswtqbsbtukmvobn.supabase.co:5432", "postgres", [CreateNavigationProperties = false]),
+				    Dados = Fonte{[Schema = "bi", Item = "fato_forecast"]}[Data]
+				in
+				    Dados
+

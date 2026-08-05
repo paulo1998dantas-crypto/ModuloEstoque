@@ -1,0 +1,219 @@
+/// View consultiva bi.fato_necessidades_os no Supabase.
+table fato_necessidades_os
+	lineageTag: 5a0429ec-5f7f-4539-96cf-f4f7fb347f47
+
+	column work_order_id
+		dataType: string
+		lineageTag: a1138ff1-ea02-448e-b233-5fe4f3b2fe44
+		summarizeBy: none
+		sourceColumn: work_order_id
+
+	column numero_os
+		dataType: string
+		lineageTag: a994dd44-0767-40c3-9a0d-6fbc4f893552
+		summarizeBy: none
+		sourceColumn: numero_os
+
+	column item
+		dataType: int64
+		lineageTag: d769bc7d-e158-46da-83ef-e53d7906b6dd
+		summarizeBy: sum
+		sourceColumn: item
+
+		annotation SummarizationSetBy = Automatic
+
+	column chassi
+		dataType: string
+		lineageTag: 8b568f8f-5bad-41bc-9c9b-6a05613f01b2
+		summarizeBy: none
+		sourceColumn: chassi
+
+		annotation SummarizationSetBy = Automatic
+
+	column chassi_exibicao
+		dataType: string
+		lineageTag: a3c34ea7-108c-4c7d-a289-3544fc4ca446
+		summarizeBy: none
+		sourceColumn: chassi_exibicao
+
+		annotation SummarizationSetBy = Automatic
+
+	column cliente
+		dataType: string
+		lineageTag: a0eefee4-adfa-488b-9ba3-7c5b9ee0e226
+		summarizeBy: none
+		sourceColumn: cliente
+
+		annotation SummarizationSetBy = Automatic
+
+	column linha
+		dataType: string
+		lineageTag: 965a84d0-94f4-49e8-bf18-50a4657484e4
+		summarizeBy: none
+		sourceColumn: linha
+
+		annotation SummarizationSetBy = Automatic
+
+	column transformacao
+		dataType: string
+		lineageTag: 169ac303-cc2c-49f0-be55-4309b66770e6
+		summarizeBy: none
+		sourceColumn: transformacao
+
+		annotation SummarizationSetBy = Automatic
+
+	column status_os
+		dataType: string
+		lineageTag: 2190aaaa-49b8-4d6c-bdec-e4ce4503f821
+		summarizeBy: none
+		sourceColumn: status_os
+
+		annotation SummarizationSetBy = Automatic
+
+	column technical_status
+		dataType: string
+		lineageTag: a2c52f19-a27c-490d-a565-c449e8400667
+		summarizeBy: none
+		sourceColumn: technical_status
+
+		annotation SummarizationSetBy = Automatic
+
+	column data_comercial_prevista
+		dataType: dateTime
+		formatString: dd/MM/yyyy
+		lineageTag: 1357627e-1bab-4ca7-968a-ec29780f3f01
+		summarizeBy: none
+		sourceColumn: data_comercial_prevista
+
+		variation Variation
+			isDefault
+			relationship: 06a07b7a-b73c-4848-8c97-a76379e01882
+			defaultHierarchy: LocalDateTable_33fb887d-123e-4ebc-a229-729e46bf840b.'Hierarquia de datas'
+
+		annotation UnderlyingDateTimeDataType = Date
+
+		annotation SummarizationSetBy = Automatic
+
+	column data_entrega_vigente
+		dataType: dateTime
+		formatString: dd/MM/yyyy
+		lineageTag: fb646f56-e39e-42bf-a16c-aa1d7f04300f
+		summarizeBy: none
+		sourceColumn: data_entrega_vigente
+
+		variation Variation
+			isDefault
+			relationship: 739349fe-a89d-4004-a7a5-1d34b47a358d
+			defaultHierarchy: LocalDateTable_98ae6ff0-f2ca-4dea-ac8f-7fb3ad795df6.'Hierarquia de datas'
+
+		annotation UnderlyingDateTimeDataType = Date
+
+		annotation SummarizationSetBy = Automatic
+
+	column document_id
+		dataType: int64
+		lineageTag: 1ec30a06-167f-4d95-b0b3-3893b76eae6c
+		summarizeBy: sum
+		sourceColumn: document_id
+
+		annotation SummarizationSetBy = Automatic
+
+	column sku_id
+		dataType: int64
+		lineageTag: 02ec0f17-3200-424a-a3b8-6b182e6078c0
+		summarizeBy: none
+		sourceColumn: sku_id
+
+	column codigo
+		dataType: string
+		lineageTag: fa26723c-8504-46e6-af07-7f02cc75b473
+		summarizeBy: none
+		sourceColumn: codigo
+
+	column descricao
+		dataType: string
+		lineageTag: e2531b51-08e2-401b-b21c-91f6f61f5dae
+		summarizeBy: none
+		sourceColumn: descricao
+
+		annotation SummarizationSetBy = Automatic
+
+	column unidade
+		dataType: string
+		lineageTag: 3d87d746-0316-4a82-8679-eed6ce4598d1
+		summarizeBy: none
+		sourceColumn: unidade
+
+		annotation SummarizationSetBy = Automatic
+
+	column setor
+		dataType: string
+		lineageTag: 3225aab6-2836-462d-8ec5-c5aa199c4f21
+		summarizeBy: none
+		sourceColumn: setor
+
+		annotation SummarizationSetBy = Automatic
+
+	column nivel_bom
+		dataType: int64
+		lineageTag: 32bafb6d-e586-42d3-b718-d2e9024a8c7d
+		summarizeBy: sum
+		sourceColumn: nivel_bom
+
+		annotation SummarizationSetBy = Automatic
+
+	column itens_pai
+		dataType: string
+		lineageTag: 3583a6f1-89d5-4942-a005-708beea578a0
+		summarizeBy: none
+		sourceColumn: itens_pai
+
+		annotation SummarizationSetBy = Automatic
+
+	column quantidade_necessaria
+		dataType: double
+		lineageTag: a344b798-bc54-4204-850d-b9855718ec81
+		summarizeBy: sum
+		sourceColumn: quantidade_necessaria
+
+		annotation SummarizationSetBy = Automatic
+
+		annotation PBI_FormatHint = {"isGeneralNumber":true}
+
+	column quantidade_coberta
+		dataType: double
+		lineageTag: 6339383f-1825-4fdd-8f51-892850b0b647
+		summarizeBy: sum
+		sourceColumn: quantidade_coberta
+
+		annotation SummarizationSetBy = Automatic
+
+		annotation PBI_FormatHint = {"isGeneralNumber":true}
+
+	column quantidade_pendente
+		dataType: double
+		lineageTag: 39f0014e-2a9b-4315-81e6-f4b0f24ab890
+		summarizeBy: sum
+		sourceColumn: quantidade_pendente
+
+		annotation SummarizationSetBy = Automatic
+
+		annotation PBI_FormatHint = {"isGeneralNumber":true}
+
+	column status_necessidade
+		dataType: string
+		lineageTag: f7e54dc4-d466-4360-bbd1-6df1c3390cad
+		summarizeBy: none
+		sourceColumn: status_necessidade
+
+		annotation SummarizationSetBy = Automatic
+
+	partition fato_necessidades_os = m
+		mode: import
+		source =
+				let
+				    Fonte = PostgreSQL.Database("db.rodtxswtqbsbtukmvobn.supabase.co:5432", "postgres", [CreateNavigationProperties = false]),
+				    Dados = Fonte{[Schema = "bi", Item = "fato_necessidades_os"]}[Data]
+				in
+				    Dados
+

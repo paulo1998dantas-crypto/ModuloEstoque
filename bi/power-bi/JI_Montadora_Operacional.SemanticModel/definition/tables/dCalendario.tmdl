@@ -1,0 +1,81 @@
+/// Calendario operacional para filtros de periodo.
+table dCalendario
+	lineageTag: 7e818847-41e8-42f7-ae47-4c3f10e6ecce
+
+	column Data
+		dataType: dateTime
+		formatString: dd/MM/yyyy
+		lineageTag: 35b62bb5-c80f-418f-af15-fa6e05e727e4
+		summarizeBy: none
+		sourceColumn: Data
+
+		variation Variation
+			isDefault
+			relationship: ff3eb0f0-90af-4f52-a782-89130fae2959
+			defaultHierarchy: LocalDateTable_44ee9f06-a25e-4745-863a-78870fe9fa41.'Hierarquia de datas'
+
+		annotation UnderlyingDateTimeDataType = Date
+
+	column Ano
+		dataType: int64
+		formatString: 0
+		lineageTag: 847bbd54-fd71-45bb-a3fc-e024035bc9d2
+		summarizeBy: sum
+		sourceColumn: Ano
+
+		annotation SummarizationSetBy = Automatic
+
+	column MesNumero
+		dataType: int64
+		formatString: 0
+		lineageTag: ea5d0a25-78da-4a17-88a5-4d36bb4f8779
+		summarizeBy: sum
+		sourceColumn: MesNumero
+
+		annotation SummarizationSetBy = Automatic
+
+	column Mes
+		dataType: string
+		lineageTag: daeaf5b6-5d2e-46f7-b100-4907ff9befc0
+		summarizeBy: none
+		sourceColumn: Mes
+
+	column AnoMes
+		dataType: string
+		lineageTag: bfc4426a-c55d-4ee8-8950-976f2bb19fcd
+		summarizeBy: none
+		sourceColumn: AnoMes
+
+	column Trimestre
+		dataType: string
+		lineageTag: 3aa68c28-719b-4c6a-9571-e5cad4b506e8
+		summarizeBy: none
+		sourceColumn: Trimestre
+
+	column Semana
+		dataType: int64
+		formatString: 0
+		lineageTag: ce9214fa-0393-4c28-a7c3-5c6e779be4d4
+		summarizeBy: sum
+		sourceColumn: Semana
+
+		annotation SummarizationSetBy = Automatic
+
+	partition dCalendario = m
+		mode: import
+		source =
+				let
+				    Inicio = #date(2024, 1, 1),
+				    Fim = Date.EndOfYear(Date.AddYears(Date.From(DateTime.LocalNow()), 2)),
+				    Datas = List.Dates(Inicio, Duration.Days(Fim - Inicio) + 1, #duration(1, 0, 0, 0)),
+				    Tabela = Table.FromList(Datas, Splitter.SplitByNothing(), {"Data"}),
+				    Tipos = Table.TransformColumnTypes(Tabela, {{"Data", type date}}),
+				    Ano = Table.AddColumn(Tipos, "Ano", each Date.Year([Data]), Int64.Type),
+				    MesNumero = Table.AddColumn(Ano, "MesNumero", each Date.Month([Data]), Int64.Type),
+				    Mes = Table.AddColumn(MesNumero, "Mes", each Date.ToText([Data], "MMM", "pt-BR"), type text),
+				    AnoMes = Table.AddColumn(Mes, "AnoMes", each Date.ToText([Data], "yyyy-MM"), type text),
+				    Trimestre = Table.AddColumn(AnoMes, "Trimestre", each "T" & Text.From(Date.QuarterOfYear([Data])), type text),
+				    Semana = Table.AddColumn(Trimestre, "Semana", each Date.WeekOfYear([Data], Day.Monday), Int64.Type)
+				in
+				    Semana
+

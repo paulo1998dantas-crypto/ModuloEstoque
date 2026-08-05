@@ -1,0 +1,79 @@
+/// View consultiva bi.dim_sku no Supabase.
+table dim_sku
+	lineageTag: 2d9d3293-e74f-4d83-958b-5e2701d261a0
+
+	column sku_id
+		dataType: int64
+		lineageTag: 89b43ccd-49ef-43e8-8fef-e481a3a0ad2d
+		summarizeBy: none
+		sourceColumn: sku_id
+
+	column codigo
+		dataType: string
+		lineageTag: 99231e3a-a683-4597-8b07-897e656d1f8c
+		summarizeBy: none
+		sourceColumn: codigo
+
+	column descricao
+		dataType: string
+		lineageTag: 066f9b21-0b81-49db-a105-c33f50e470a8
+		sourceColumn: descricao
+
+	column unidade
+		dataType: string
+		lineageTag: ef4998fe-2f5d-469f-8ded-eb4ace6b90b8
+		sourceColumn: unidade
+
+	column grupo
+		dataType: string
+		lineageTag: 8affe4a3-5f90-4749-9772-34e45c900f5c
+		sourceColumn: grupo
+
+	column categoria
+		dataType: string
+		lineageTag: 7d75d918-97e7-4de3-8cc3-cce922994084
+		sourceColumn: categoria
+
+	column localizacao
+		dataType: string
+		lineageTag: 7473ed3e-2c9a-4c2b-b79c-2cd482470ac3
+		sourceColumn: localizacao
+
+	column estoque_minimo
+		dataType: double
+		lineageTag: dc9c3a94-fa6c-44f0-bd92-a6f680bfb6e4
+		summarizeBy: sum
+		sourceColumn: estoque_minimo
+
+		annotation SummarizationSetBy = Automatic
+
+		annotation PBI_FormatHint = {"isGeneralNumber":true}
+
+	column ativo
+		dataType: boolean
+		lineageTag: c9eadb9a-48ca-49af-b192-31744b30953a
+		sourceColumn: ativo
+
+	column created_at
+		dataType: dateTime
+		formatString: dd/MM/yyyy HH:mm
+		lineageTag: 9cc05c43-9386-4cc5-bc39-5fe302943a3d
+		sourceColumn: created_at
+
+	column updated_at
+		dataType: dateTime
+		formatString: dd/MM/yyyy HH:mm
+		lineageTag: 384e57e2-126b-48a3-ac3f-f21845ac5571
+		sourceColumn: updated_at
+
+	partition dim_sku = m
+		mode: import
+		source =
+				let
+				    Fonte = PostgreSQL.Database("db.rodtxswtqbsbtukmvobn.supabase.co:5432", "postgres", [CreateNavigationProperties = false]),
+				    Dados = Fonte{[Schema = "bi", Item = "dim_sku"]}[Data]
+				in
+				    Dados
+
+	annotation PBI_ResultType = Table
+

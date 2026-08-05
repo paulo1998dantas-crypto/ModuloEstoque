@@ -1,0 +1,179 @@
+/// View consultiva bi.fato_etapas_producao no Supabase.
+table fato_etapas_producao
+	lineageTag: a2d4c236-c458-4a17-b72f-d5f9ce46ccde
+
+	column work_order_stage_id
+		dataType: string
+		lineageTag: 338f811e-83b2-40ee-9492-b503648c50bc
+		summarizeBy: none
+		sourceColumn: work_order_stage_id
+
+	column work_order_id
+		dataType: string
+		lineageTag: ceb1ebc6-e038-44a2-a3bd-122e193b9620
+		summarizeBy: none
+		sourceColumn: work_order_id
+
+	column numero_os
+		dataType: string
+		lineageTag: 8f146b20-5c10-4893-9601-01e10957d037
+		summarizeBy: none
+		sourceColumn: numero_os
+
+	column item
+		dataType: int64
+		lineageTag: f9002e6a-3bb2-4398-bfa9-6630ffe7a23a
+		summarizeBy: sum
+		sourceColumn: item
+
+		annotation SummarizationSetBy = Automatic
+
+	column chassi_exibicao
+		dataType: string
+		lineageTag: a73e9dc7-e6b6-4b00-8e18-5d3f38e835de
+		summarizeBy: none
+		sourceColumn: chassi_exibicao
+
+		annotation SummarizationSetBy = Automatic
+
+	column cliente
+		dataType: string
+		lineageTag: 4d0b0a5b-4293-46cf-8a11-716b25b2a611
+		summarizeBy: none
+		sourceColumn: cliente
+
+		annotation SummarizationSetBy = Automatic
+
+	column etapa
+		dataType: string
+		lineageTag: 8f51d764-c6e3-42a1-bf3b-2bb555d9d10a
+		summarizeBy: none
+		sourceColumn: etapa
+
+		annotation SummarizationSetBy = Automatic
+
+	column ordem
+		dataType: int64
+		lineageTag: a598cf12-ae05-489d-83b1-5e25bb627677
+		summarizeBy: sum
+		sourceColumn: ordem
+
+		annotation SummarizationSetBy = Automatic
+
+	column aplicavel
+		dataType: boolean
+		lineageTag: 4c02e490-79cc-450b-a4e6-3efef2b18ba0
+		summarizeBy: none
+		sourceColumn: aplicavel
+
+		annotation SummarizationSetBy = Automatic
+
+	column parametrizado
+		dataType: boolean
+		lineageTag: 86aa2365-abec-493e-8712-64417ca9c7ab
+		summarizeBy: none
+		sourceColumn: parametrizado
+
+		annotation SummarizationSetBy = Automatic
+
+	column status
+		dataType: string
+		lineageTag: a70791f2-73a7-4c8f-9a5b-24e473459d1c
+		summarizeBy: none
+		sourceColumn: status
+
+		annotation SummarizationSetBy = Automatic
+
+	column semana_planejada
+		dataType: string
+		lineageTag: cbd4faa0-f990-43a5-9d61-9668c2ca0f8d
+		summarizeBy: none
+		sourceColumn: semana_planejada
+
+		annotation SummarizationSetBy = Automatic
+
+	column data_planejada
+		dataType: dateTime
+		formatString: dd/MM/yyyy
+		lineageTag: 75adeb18-4dcb-44e5-b1c2-26a6a5217bb9
+		summarizeBy: none
+		sourceColumn: data_planejada
+
+		variation Variation
+			isDefault
+			relationship: 047df780-0bb5-4ae7-84f3-0156e61627f9
+			defaultHierarchy: LocalDateTable_9c2b63e1-c583-4771-a5ff-8ad8938fee53.'Hierarquia de datas'
+
+		annotation UnderlyingDateTimeDataType = Date
+
+		annotation SummarizationSetBy = Automatic
+
+	column sequencia_planejada
+		dataType: int64
+		lineageTag: 725a740b-f36d-4e88-81b2-7546d9f184b2
+		summarizeBy: sum
+		sourceColumn: sequencia_planejada
+
+		annotation SummarizationSetBy = Automatic
+
+	column responsavel
+		dataType: string
+		lineageTag: 317c7ca2-6ec5-40f1-b709-527d368ab3a1
+		summarizeBy: none
+		sourceColumn: responsavel
+
+		annotation SummarizationSetBy = Automatic
+
+	column localizacao
+		dataType: string
+		lineageTag: 01ff3b75-bf73-4329-9f36-3be222d5e2a4
+		summarizeBy: none
+		sourceColumn: localizacao
+
+		annotation SummarizationSetBy = Automatic
+
+	column inicio
+		dataType: dateTime
+		formatString: dd/MM/yyyy HH:mm
+		lineageTag: a3f892cd-dae0-41ac-a84e-ed004c37c8e0
+		summarizeBy: none
+		sourceColumn: inicio
+
+		annotation SummarizationSetBy = Automatic
+
+	column termino
+		dataType: dateTime
+		formatString: dd/MM/yyyy HH:mm
+		lineageTag: bc75b700-3bef-40d5-9350-373f5369cee1
+		summarizeBy: none
+		sourceColumn: termino
+
+		annotation SummarizationSetBy = Automatic
+
+	column duracao_horas
+		dataType: double
+		lineageTag: 75755a39-0683-4ab5-9d9c-eff734143314
+		summarizeBy: sum
+		sourceColumn: duracao_horas
+
+		annotation SummarizationSetBy = Automatic
+
+		annotation PBI_FormatHint = {"isGeneralNumber":true}
+
+	column observacoes
+		dataType: string
+		lineageTag: dc839a31-a6d9-4966-9b98-27b84889fb98
+		summarizeBy: none
+		sourceColumn: observacoes
+
+		annotation SummarizationSetBy = Automatic
+
+	partition fato_etapas_producao = m
+		mode: import
+		source =
+				let
+				    Fonte = PostgreSQL.Database("db.rodtxswtqbsbtukmvobn.supabase.co:5432", "postgres", [CreateNavigationProperties = false]),
+				    Dados = Fonte{[Schema = "bi", Item = "fato_etapas_producao"]}[Data]
+				in
+				    Dados
+

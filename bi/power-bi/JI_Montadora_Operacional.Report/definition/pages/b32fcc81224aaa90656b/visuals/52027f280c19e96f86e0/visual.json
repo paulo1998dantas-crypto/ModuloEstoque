@@ -1,0 +1,74 @@
+{
+  "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/visualContainer/2.11.0/schema.json",
+  "name": "52027f280c19e96f86e0",
+  "position": {
+    "x": 516,
+    "y": 92,
+    "z": 7,
+    "height": 132,
+    "width": 236,
+    "tabOrder": 7
+  },
+  "visual": {
+    "visualType": "cardVisual",
+    "query": {
+      "queryState": {
+        "Data": {
+          "projections": [
+            {
+              "field": {
+                "Measure": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "fato_mrp"
+                    }
+                  },
+                  "Property": "Linhas Atrasadas"
+                }
+              },
+              "queryRef": "fato_mrp.Linhas Atrasadas",
+              "nativeQueryRef": "Linhas Atrasadas"
+            }
+          ]
+        }
+      },
+      "sortDefinition": {
+        "sort": [
+          {
+            "field": {
+              "Measure": {
+                "Expression": {
+                  "SourceRef": {
+                    "Entity": "fato_mrp"
+                  }
+                },
+                "Property": "Linhas Atrasadas"
+              }
+            },
+            "direction": "Descending"
+          }
+        ],
+        "isDefaultSort": true
+      }
+    },
+    "drillFilterOtherVisuals": true
+  },
+  "filterConfig": {
+    "filters": [
+      {
+        "name": "ad135bb2a390d3dc6332",
+        "field": {
+          "Measure": {
+            "Expression": {
+              "SourceRef": {
+                "Entity": "fato_mrp"
+              }
+            },
+            "Property": "Linhas Atrasadas"
+          }
+        },
+        "type": "Advanced"
+      }
+    ]
+  }
+}

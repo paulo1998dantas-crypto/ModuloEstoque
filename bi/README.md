@@ -7,7 +7,7 @@ Este diretório contém a fonte versionada do BI consultivo conectado ao Supabas
 - Fonte: PostgreSQL do projeto Supabase `rodtxswtqbsbtukmvobn`.
 - Camada semântica SQL: schema privado `bi`.
 - Segurança: grupo `powerbi_reader` sem login e sem privilégios nas tabelas `public`.
-- Conexão recomendada: PostgreSQL Session Pooler, porta 5432, em modo **Importar**.
+- Conexão validada: PostgreSQL direto com SSL, porta 5432, em modo **Importar**.
 - Credenciais: cadastradas somente na interface do Power BI/Gateway; nunca no GitHub.
 
 ## Páginas
@@ -29,6 +29,9 @@ Filtros globais: período, SKU, cliente e setor. Fornecedor é global nas págin
 - `model/dicionario_metricas.md`: regras de negócio dos indicadores.
 - `model/medidas_dax.md`: medidas DAX iniciais.
 - `model/layout_paginas.md`: composição dos visuais e interações.
+- `power-bi/JI_Montadora_Operacional.pbix`: arquivo pronto para abrir e revisar no Power BI Desktop.
+- `power-bi/JI_Montadora_Operacional.pbip`: projeto textual versionável do relatório e do modelo semântico.
+- `model/build_powerbi_report.js`: geração determinística das quatro páginas e seus visuais.
 
 ## Regra central do MRP
 

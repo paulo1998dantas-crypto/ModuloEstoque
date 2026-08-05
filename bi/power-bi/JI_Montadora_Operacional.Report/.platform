@@ -1,0 +1,11 @@
+{
+  "$schema": "https://developer.microsoft.com/json-schemas/fabric/gitIntegration/platformProperties/2.0.0/schema.json",
+  "metadata": {
+    "type": "Report",
+    "displayName": "JI_Montadora_Operacional"
+  },
+  "config": {
+    "version": "2.0",
+    "logicalId": "7236c2aa-9bba-4716-a6c3-3ff5a7b795ed"
+  }
+}

@@ -1,0 +1,197 @@
+/// View consultiva bi.fato_movimentacoes_estoque no Supabase.
+table fato_movimentacoes_estoque
+	lineageTag: b53c2fc7-b723-485b-b08b-7d00cd53c5fc
+
+	column movement_id
+		dataType: int64
+		lineageTag: 7d44c2a9-e9da-4e93-92f7-8fba6c6d03e1
+		summarizeBy: none
+		sourceColumn: movement_id
+
+	column data_movimento_utc
+		dataType: dateTime
+		formatString: dd/MM/yyyy HH:mm
+		lineageTag: 788da1af-0052-4b40-bd0e-3130150b4c5a
+		sourceColumn: data_movimento_utc
+
+	column data_movimento
+		dataType: dateTime
+		formatString: dd/MM/yyyy HH:mm
+		lineageTag: 6207be3f-798f-4250-91e3-e94e01c20a69
+		sourceColumn: data_movimento
+
+	column data
+		dataType: dateTime
+		formatString: dd/MM/yyyy
+		lineageTag: 19d800a5-6ab7-4515-bf6d-5c800a578fb9
+		summarizeBy: none
+		sourceColumn: data
+
+		annotation UnderlyingDateTimeDataType = Date
+
+		annotation SummarizationSetBy = Automatic
+
+	column sku_id
+		dataType: int64
+		lineageTag: 8e7b9441-a00a-478b-be30-374aaf0c28a3
+		summarizeBy: none
+		sourceColumn: sku_id
+
+	column codigo
+		dataType: string
+		lineageTag: 5169deec-c707-4904-880a-589a27541a26
+		summarizeBy: none
+		sourceColumn: codigo
+
+	column descricao
+		dataType: string
+		lineageTag: 2cd6f6ec-ce83-41ce-bd39-d41dbfd93c23
+		sourceColumn: descricao
+
+	column unidade
+		dataType: string
+		lineageTag: 413507f4-e2f7-4966-a587-b89e8676e4dd
+		sourceColumn: unidade
+
+	column grupo
+		dataType: string
+		lineageTag: 5d10319a-8927-4a0c-aaba-de183bdaecce
+		sourceColumn: grupo
+
+	column categoria
+		dataType: string
+		lineageTag: af9eadea-e25a-4171-af4a-7014b1f692f1
+		sourceColumn: categoria
+
+	column tipo
+		dataType: string
+		lineageTag: f48ca47f-945c-4342-bc67-729b05297e6e
+		sourceColumn: tipo
+
+	column quantidade
+		dataType: double
+		lineageTag: ffb75304-d0b6-4afe-be70-a35db6a6bde8
+		summarizeBy: sum
+		sourceColumn: quantidade
+
+		annotation SummarizationSetBy = Automatic
+
+		annotation PBI_FormatHint = {"isGeneralNumber":true}
+
+	column saldo_anterior
+		dataType: double
+		lineageTag: 2496e838-b63b-448c-8d4d-79cc286fc61a
+		summarizeBy: sum
+		sourceColumn: saldo_anterior
+
+		annotation SummarizationSetBy = Automatic
+
+		annotation PBI_FormatHint = {"isGeneralNumber":true}
+
+	column saldo_posterior
+		dataType: double
+		lineageTag: ab7d0e58-3fd7-442e-85e7-fb6453c0de0c
+		summarizeBy: sum
+		sourceColumn: saldo_posterior
+
+		annotation SummarizationSetBy = Automatic
+
+		annotation PBI_FormatHint = {"isGeneralNumber":true}
+
+	column variacao_saldo
+		dataType: double
+		lineageTag: 9bb87376-7590-411f-a500-7a3a72ae30df
+		summarizeBy: sum
+		sourceColumn: variacao_saldo
+
+		annotation SummarizationSetBy = Automatic
+
+		annotation PBI_FormatHint = {"isGeneralNumber":true}
+
+	column movement_status
+		dataType: string
+		lineageTag: cf8f3856-ced4-4357-a828-129e0780c842
+		sourceColumn: movement_status
+
+	column work_order_id
+		dataType: string
+		lineageTag: 385cb6c9-aecd-4786-b1fe-3a3789107c6c
+		summarizeBy: none
+		sourceColumn: work_order_id
+
+	column numero_os
+		dataType: string
+		lineageTag: 06c791ff-3c95-4f3a-ae59-12a2a062a592
+		summarizeBy: none
+		sourceColumn: numero_os
+
+	column item
+		dataType: int64
+		lineageTag: cb525195-f5ca-4077-bf24-9e399d83ff73
+		summarizeBy: none
+		sourceColumn: item
+
+	column chassi_exibicao
+		dataType: string
+		lineageTag: 92a9c5dc-0a18-49e3-8858-ec6f360dc30d
+		sourceColumn: chassi_exibicao
+
+	column contexto
+		dataType: string
+		lineageTag: 7a95b340-c8e8-4206-a1a6-c17bdedcdd90
+		sourceColumn: contexto
+
+	column setor
+		dataType: string
+		lineageTag: d57e798f-b49e-41da-be96-680819aec653
+		sourceColumn: setor
+
+	column referencia
+		dataType: string
+		lineageTag: 6b467525-6f63-4eda-a026-04500454cd66
+		sourceColumn: referencia
+
+	column documento
+		dataType: string
+		lineageTag: d7358e6a-2fa9-45fa-95a9-48bed7f99e07
+		sourceColumn: documento
+
+	column origem
+		dataType: string
+		lineageTag: 333e71a5-c7c1-4762-a999-f823224c72d5
+		sourceColumn: origem
+
+	column related_movement_id
+		dataType: int64
+		lineageTag: 9c233d80-ddbd-43b8-9edf-90349864d784
+		summarizeBy: none
+		sourceColumn: related_movement_id
+
+	column parent_movement_id
+		dataType: int64
+		lineageTag: 292c705f-c196-43fb-8884-6026b656c572
+		summarizeBy: none
+		sourceColumn: parent_movement_id
+
+	column operation_id
+		dataType: string
+		lineageTag: 1c972ebe-5c4c-43f6-9756-6e9df0e8d619
+		summarizeBy: none
+		sourceColumn: operation_id
+
+	column observacao
+		dataType: string
+		lineageTag: 19c51661-2370-45db-90fa-a35cb7db5c7f
+		sourceColumn: observacao
+
+	partition fato_movimentacoes_estoque = m
+		mode: import
+		source =
+				let
+				    Fonte = PostgreSQL.Database("db.rodtxswtqbsbtukmvobn.supabase.co:5432", "postgres", [CreateNavigationProperties = false]),
+				    Dados = Fonte{[Schema = "bi", Item = "fato_movimentacoes_estoque"]}[Data]
+				in
+				    Dados
+
+	annotation PBI_ResultType = Exception
+

@@ -1,0 +1,56 @@
+{
+  "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/visualContainer/2.11.0/schema.json",
+  "name": "2f2bc0ae3c799e8550a1",
+  "position": {
+    "x": 516,
+    "y": 10,
+    "z": 2,
+    "height": 70,
+    "width": 236,
+    "tabOrder": 2
+  },
+  "visual": {
+    "visualType": "slicer",
+    "query": {
+      "queryState": {
+        "Values": {
+          "projections": [
+            {
+              "field": {
+                "Column": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "fato_compras_transito"
+                    }
+                  },
+                  "Property": "situacao_transito"
+                }
+              },
+              "queryRef": "fato_compras_transito.situacao_transito",
+              "nativeQueryRef": "situacao_transito"
+            }
+          ]
+        }
+      }
+    },
+    "drillFilterOtherVisuals": true
+  },
+  "filterConfig": {
+    "filters": [
+      {
+        "name": "92bc0d83f94b295c4ead",
+        "field": {
+          "Column": {
+            "Expression": {
+              "SourceRef": {
+                "Entity": "fato_compras_transito"
+              }
+            },
+            "Property": "situacao_transito"
+          }
+        },
+        "type": "Categorical"
+      }
+    ]
+  }
+}

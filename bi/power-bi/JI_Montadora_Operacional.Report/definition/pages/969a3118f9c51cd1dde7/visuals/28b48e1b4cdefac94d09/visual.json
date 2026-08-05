@@ -1,0 +1,74 @@
+{
+  "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/visualContainer/2.11.0/schema.json",
+  "name": "28b48e1b4cdefac94d09",
+  "position": {
+    "x": 1012,
+    "y": 92,
+    "z": 9,
+    "height": 132,
+    "width": 236,
+    "tabOrder": 9
+  },
+  "visual": {
+    "visualType": "cardVisual",
+    "query": {
+      "queryState": {
+        "Data": {
+          "projections": [
+            {
+              "field": {
+                "Measure": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "fato_mrp"
+                    }
+                  },
+                  "Property": "SKUs a Comprar"
+                }
+              },
+              "queryRef": "fato_mrp.SKUs a Comprar",
+              "nativeQueryRef": "SKUs a Comprar"
+            }
+          ]
+        }
+      },
+      "sortDefinition": {
+        "sort": [
+          {
+            "field": {
+              "Measure": {
+                "Expression": {
+                  "SourceRef": {
+                    "Entity": "fato_mrp"
+                  }
+                },
+                "Property": "SKUs a Comprar"
+              }
+            },
+            "direction": "Descending"
+          }
+        ],
+        "isDefaultSort": true
+      }
+    },
+    "drillFilterOtherVisuals": true
+  },
+  "filterConfig": {
+    "filters": [
+      {
+        "name": "2e9c0daaa2093f408dd8",
+        "field": {
+          "Measure": {
+            "Expression": {
+              "SourceRef": {
+                "Entity": "fato_mrp"
+              }
+            },
+            "Property": "SKUs a Comprar"
+          }
+        },
+        "type": "Advanced"
+      }
+    ]
+  }
+}

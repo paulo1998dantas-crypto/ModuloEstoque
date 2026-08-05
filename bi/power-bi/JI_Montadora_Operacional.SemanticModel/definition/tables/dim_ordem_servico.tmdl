@@ -1,0 +1,416 @@
+/// View consultiva bi.dim_ordem_servico no Supabase.
+table dim_ordem_servico
+	lineageTag: 056ffb14-0277-4592-b430-bfa3d8e0d133
+
+	column work_order_id
+		dataType: string
+		lineageTag: 0194ec7c-ef6f-40da-a3a8-e4491ee71e05
+		summarizeBy: none
+		sourceColumn: work_order_id
+
+	column numero_os
+		dataType: string
+		lineageTag: a1952d2b-be89-48fe-a4ba-ee4a5e6fa26c
+		summarizeBy: none
+		sourceColumn: numero_os
+
+	column item
+		dataType: int64
+		lineageTag: d4dfabcf-c91c-4e39-b2d3-006c1c923bf8
+		summarizeBy: sum
+		sourceColumn: item
+
+		annotation SummarizationSetBy = Automatic
+
+	column vehicle_entry_id
+		dataType: string
+		lineageTag: 84747ae9-9eeb-4b35-8f29-3bf683d8f648
+		summarizeBy: none
+		sourceColumn: vehicle_entry_id
+
+	column vehicle_id
+		dataType: string
+		lineageTag: 6b9b884e-4541-4061-84f1-2e32a1333eae
+		summarizeBy: none
+		sourceColumn: vehicle_id
+
+	column chassi
+		dataType: string
+		lineageTag: 5d897ae5-6d4d-48ff-9e4b-600d0cfcd90c
+		summarizeBy: none
+		sourceColumn: chassi
+
+		annotation SummarizationSetBy = Automatic
+
+	column chassi_exibicao
+		dataType: string
+		lineageTag: fe8c0f52-ac7c-4216-a995-a1a63e10e68f
+		summarizeBy: none
+		sourceColumn: chassi_exibicao
+
+		annotation SummarizationSetBy = Automatic
+
+	column marca
+		dataType: string
+		lineageTag: a5bbeb1c-4331-4624-a225-8ba4faa55bac
+		summarizeBy: none
+		sourceColumn: marca
+
+		annotation SummarizationSetBy = Automatic
+
+	column modelo
+		dataType: string
+		lineageTag: 43eb84f3-0d7d-403e-a44d-6c49370866ba
+		summarizeBy: none
+		sourceColumn: modelo
+
+		annotation SummarizationSetBy = Automatic
+
+	column versao
+		dataType: string
+		lineageTag: 4ee16433-92e1-43f9-8991-334ed115ee6a
+		summarizeBy: none
+		sourceColumn: versao
+
+		annotation SummarizationSetBy = Automatic
+
+	column mmv
+		dataType: string
+		lineageTag: aa778c9c-eb1c-4f6c-9b3f-e00d88aea53f
+		summarizeBy: none
+		sourceColumn: mmv
+
+		annotation SummarizationSetBy = Automatic
+
+	column cliente
+		dataType: string
+		lineageTag: c517dd7d-d682-43ce-ae28-e6c4c6d4b4c2
+		summarizeBy: none
+		sourceColumn: cliente
+
+		annotation SummarizationSetBy = Automatic
+
+	column municipio
+		dataType: string
+		lineageTag: b9f3e4f3-e683-4147-9114-89048f4916a4
+		summarizeBy: none
+		sourceColumn: municipio
+
+		annotation SummarizationSetBy = Automatic
+
+	column uf
+		dataType: string
+		lineageTag: 0eba0103-dbdf-40ae-97bb-5e8b0aea1c52
+		summarizeBy: none
+		sourceColumn: uf
+
+		annotation SummarizationSetBy = Automatic
+
+	column vendedor
+		dataType: string
+		lineageTag: 0ea23b41-9fdf-43f8-98b8-13734c7fc08e
+		summarizeBy: none
+		sourceColumn: vendedor
+
+		annotation SummarizationSetBy = Automatic
+
+	column mercado
+		dataType: string
+		lineageTag: a029b603-2618-4184-a0b3-e36534737440
+		summarizeBy: none
+		sourceColumn: mercado
+
+		annotation SummarizationSetBy = Automatic
+
+	column tipo_servico
+		dataType: string
+		lineageTag: 46e26d07-0818-498e-84f8-a549165eee59
+		summarizeBy: none
+		sourceColumn: tipo_servico
+
+		annotation SummarizationSetBy = Automatic
+
+	column tipo_veiculo
+		dataType: string
+		lineageTag: cfe57054-c58f-470f-ba5a-436c018994de
+		summarizeBy: none
+		sourceColumn: tipo_veiculo
+
+		annotation SummarizationSetBy = Automatic
+
+	column linha
+		dataType: string
+		lineageTag: 2c1065c3-f333-47bf-8c9e-0954eb531efe
+		summarizeBy: none
+		sourceColumn: linha
+
+		annotation SummarizationSetBy = Automatic
+
+	column transformacao_codigo
+		dataType: string
+		lineageTag: 8e165cd1-2fc3-4f04-b310-0afd863ff8bf
+		summarizeBy: none
+		sourceColumn: transformacao_codigo
+
+		annotation SummarizationSetBy = Automatic
+
+	column transformacao
+		dataType: string
+		lineageTag: 64eb36a9-a8ed-4910-95e5-54eddde12f10
+		summarizeBy: none
+		sourceColumn: transformacao
+
+		annotation SummarizationSetBy = Automatic
+
+	column status
+		dataType: string
+		lineageTag: 7860cb31-f21f-4493-93d6-c16abfe779d8
+		summarizeBy: none
+		sourceColumn: status
+
+		annotation SummarizationSetBy = Automatic
+
+	column technical_status
+		dataType: string
+		lineageTag: 03348e83-e3ab-4663-a2a1-0d6efa41c286
+		summarizeBy: none
+		sourceColumn: technical_status
+
+		annotation SummarizationSetBy = Automatic
+
+	column stage_configuration_status
+		dataType: string
+		lineageTag: b9eac9c4-941a-478f-b098-9816ff5f73a9
+		summarizeBy: none
+		sourceColumn: stage_configuration_status
+
+		annotation SummarizationSetBy = Automatic
+
+	column data_chegada
+		dataType: dateTime
+		formatString: dd/MM/yyyy HH:mm
+		lineageTag: 7edbd327-f7c1-4855-939b-b1cd15646acf
+		summarizeBy: none
+		sourceColumn: data_chegada
+
+		annotation SummarizationSetBy = Automatic
+
+	column data_aprovacao
+		dataType: dateTime
+		formatString: dd/MM/yyyy
+		lineageTag: a30ae532-43b9-484b-8fbc-96882105d463
+		summarizeBy: none
+		sourceColumn: data_aprovacao
+
+		variation Variation
+			isDefault
+			relationship: 1b7ba84d-26cb-4c73-b051-ca083da414d3
+			defaultHierarchy: LocalDateTable_6e5ac764-0aa2-4f05-92b5-02475573657b.'Hierarquia de datas'
+
+		annotation UnderlyingDateTimeDataType = Date
+
+		annotation SummarizationSetBy = Automatic
+
+	column ativado_at
+		dataType: dateTime
+		formatString: dd/MM/yyyy HH:mm
+		lineageTag: 0d10ea4f-0402-452e-9ebf-4c997e336406
+		summarizeBy: none
+		sourceColumn: ativado_at
+
+		annotation SummarizationSetBy = Automatic
+
+	column data_comercial_prevista
+		dataType: dateTime
+		formatString: dd/MM/yyyy
+		lineageTag: 117939df-1325-4279-958e-727e6f963716
+		summarizeBy: none
+		sourceColumn: data_comercial_prevista
+
+		variation Variation
+			isDefault
+			relationship: eaa6785c-4573-4a93-b56d-d315591afa2b
+			defaultHierarchy: LocalDateTable_c222fd3f-7b77-4f77-9527-e7772ce68229.'Hierarquia de datas'
+
+		annotation UnderlyingDateTimeDataType = Date
+
+		annotation SummarizationSetBy = Automatic
+
+	column data_comercial_calculada
+		dataType: dateTime
+		formatString: dd/MM/yyyy
+		lineageTag: e0e0feb4-d38f-47f0-893a-9cfc31b321e9
+		summarizeBy: none
+		sourceColumn: data_comercial_calculada
+
+		variation Variation
+			isDefault
+			relationship: ba4273f3-a512-491a-9c21-526aeaeade7d
+			defaultHierarchy: LocalDateTable_eb084093-125e-49d9-9dae-c84b86911ddd.'Hierarquia de datas'
+
+		annotation UnderlyingDateTimeDataType = Date
+
+		annotation SummarizationSetBy = Automatic
+
+	column data_entrega_vigente
+		dataType: dateTime
+		formatString: dd/MM/yyyy
+		lineageTag: cae6e761-3558-4967-8465-8d1faab26e70
+		summarizeBy: none
+		sourceColumn: data_entrega_vigente
+
+		annotation UnderlyingDateTimeDataType = Date
+
+		annotation SummarizationSetBy = Automatic
+
+	column semana_planejada
+		dataType: string
+		lineageTag: 37f9ee49-926c-4cae-9163-b12ed48badc1
+		summarizeBy: none
+		sourceColumn: semana_planejada
+
+		annotation SummarizationSetBy = Automatic
+
+	column sequencia
+		dataType: int64
+		lineageTag: 42241aac-e241-4545-a2ab-fa517c9ab864
+		summarizeBy: sum
+		sourceColumn: sequencia
+
+		annotation SummarizationSetBy = Automatic
+
+	column prioridade_manual
+		dataType: int64
+		lineageTag: 463f6853-40df-44eb-b406-2253834a2fbb
+		summarizeBy: sum
+		sourceColumn: prioridade_manual
+
+		annotation SummarizationSetBy = Automatic
+
+	column termino_producao
+		dataType: dateTime
+		formatString: dd/MM/yyyy HH:mm
+		lineageTag: 647ec619-ad20-40a6-a659-7dc452f2a63a
+		summarizeBy: none
+		sourceColumn: termino_producao
+
+		annotation SummarizationSetBy = Automatic
+
+	column data_entrega
+		dataType: dateTime
+		formatString: dd/MM/yyyy HH:mm
+		lineageTag: 6b7c5a9c-5844-4215-96fa-76bafea11823
+		summarizeBy: none
+		sourceColumn: data_entrega
+
+		annotation SummarizationSetBy = Automatic
+
+	column created_at
+		dataType: dateTime
+		formatString: dd/MM/yyyy HH:mm
+		lineageTag: 2261cbee-158a-4e1d-9f70-5ea4e662d82d
+		summarizeBy: none
+		sourceColumn: created_at
+
+		annotation SummarizationSetBy = Automatic
+
+	column updated_at
+		dataType: dateTime
+		formatString: dd/MM/yyyy HH:mm
+		lineageTag: 12f91c0c-60dd-43d6-852e-61a6e9de19b8
+		summarizeBy: none
+		sourceColumn: updated_at
+
+		annotation SummarizationSetBy = Automatic
+
+	column etapas_total
+		dataType: int64
+		lineageTag: ef75926b-9abf-446f-9ea3-cc8e76ac5d8a
+		summarizeBy: sum
+		sourceColumn: etapas_total
+
+		annotation SummarizationSetBy = Automatic
+
+	column etapas_aplicaveis
+		dataType: int64
+		lineageTag: 2f34ad5f-710a-4a96-b172-e433849b2cb4
+		summarizeBy: sum
+		sourceColumn: etapas_aplicaveis
+
+		annotation SummarizationSetBy = Automatic
+
+	column etapas_concluidas
+		dataType: int64
+		lineageTag: 05f3326c-1bf1-4138-8518-6f08274e1a7b
+		summarizeBy: sum
+		sourceColumn: etapas_concluidas
+
+		annotation SummarizationSetBy = Automatic
+
+	column etapas_em_andamento
+		dataType: int64
+		lineageTag: 105e2ae5-de1d-4153-8bd8-68336e825cfc
+		summarizeBy: sum
+		sourceColumn: etapas_em_andamento
+
+		annotation SummarizationSetBy = Automatic
+
+	column etapas_pendentes
+		dataType: int64
+		lineageTag: adbe09de-81f9-479b-8b85-1f2c41b12593
+		summarizeBy: sum
+		sourceColumn: etapas_pendentes
+
+		annotation SummarizationSetBy = Automatic
+
+	column percentual_avanco
+		dataType: double
+		lineageTag: c40b6f9c-9221-4a71-9b12-9e6c820196f5
+		summarizeBy: sum
+		sourceColumn: percentual_avanco
+
+		annotation SummarizationSetBy = Automatic
+
+		annotation PBI_FormatHint = {"isGeneralNumber":true}
+
+	column em_wip
+		dataType: boolean
+		lineageTag: fefadac1-397e-4e8f-ac5c-7d3b99b97521
+		summarizeBy: none
+		sourceColumn: em_wip
+
+		annotation SummarizationSetBy = Automatic
+
+	column fase_wip
+		dataType: string
+		lineageTag: 1f184cf6-2853-4642-897e-ae1dd85230d7
+		summarizeBy: none
+		sourceColumn: fase_wip
+
+		annotation SummarizationSetBy = Automatic
+
+	column entrega_atrasada
+		dataType: boolean
+		lineageTag: d6f8d72b-1c9d-4106-8428-589989fe3b83
+		summarizeBy: none
+		sourceColumn: entrega_atrasada
+
+		annotation SummarizationSetBy = Automatic
+
+	column dias_no_wip
+		dataType: int64
+		lineageTag: ea5b8d69-92c4-47d1-8e61-4a615e212fe6
+		summarizeBy: sum
+		sourceColumn: dias_no_wip
+
+		annotation SummarizationSetBy = Automatic
+
+	partition dim_ordem_servico = m
+		mode: import
+		source =
+				let
+				    Fonte = PostgreSQL.Database("db.rodtxswtqbsbtukmvobn.supabase.co:5432", "postgres", [CreateNavigationProperties = false]),
+				    Dados = Fonte{[Schema = "bi", Item = "dim_ordem_servico"]}[Data]
+				in
+				    Dados
+

@@ -1,0 +1,141 @@
+relationship rel_dim_sku_fato_estoque_atual_sku_id
+	fromColumn: fato_estoque_atual.sku_id
+	toColumn: dim_sku.sku_id
+
+relationship rel_dim_sku_fato_empenhos_abertos_sku_id
+	fromColumn: fato_empenhos_abertos.sku_id
+	toColumn: dim_sku.sku_id
+
+relationship rel_dim_sku_fato_movimentacoes_estoque_sku_id
+	fromColumn: fato_movimentacoes_estoque.sku_id
+	toColumn: dim_sku.sku_id
+
+relationship rel_dim_sku_fato_inventarios_sku_id
+	fromColumn: fato_inventarios.sku_id
+	toColumn: dim_sku.sku_id
+
+relationship rel_dim_sku_fato_necessidades_os_sku_id
+	fromColumn: fato_necessidades_os.sku_id
+	toColumn: dim_sku.sku_id
+
+relationship rel_dim_sku_fato_compras_transito_sku_id
+	fromColumn: fato_compras_transito.sku_id
+	toColumn: dim_sku.sku_id
+
+relationship rel_dim_sku_fato_recebimentos_inspecao_sku_id
+	fromColumn: fato_recebimentos_inspecao.sku_id
+	toColumn: dim_sku.sku_id
+
+relationship rel_dim_sku_fato_forecast_necessidades_sku_id
+	fromColumn: fato_forecast_necessidades.sku_id
+	toColumn: dim_sku.sku_id
+
+relationship rel_dim_sku_fato_mrp_sku_id
+	fromColumn: fato_mrp.sku_id
+	toColumn: dim_sku.sku_id
+
+relationship rel_dim_ordem_servico_fato_etapas_producao_work_order_id
+	fromColumn: fato_etapas_producao.work_order_id
+	toColumn: dim_ordem_servico.work_order_id
+
+relationship rel_dim_ordem_servico_fato_necessidades_os_work_order_id
+	fromColumn: fato_necessidades_os.work_order_id
+	toColumn: dim_ordem_servico.work_order_id
+
+relationship rel_dim_ordem_servico_fato_empenhos_abertos_work_order_id
+	fromColumn: fato_empenhos_abertos.work_order_id
+	toColumn: dim_ordem_servico.work_order_id
+
+relationship rel_dim_ordem_servico_fato_movimentacoes_estoque_work_order_id
+	fromColumn: fato_movimentacoes_estoque.work_order_id
+	toColumn: dim_ordem_servico.work_order_id
+
+relationship rel_dim_ordem_servico_fato_compras_transito_work_order_id
+	fromColumn: fato_compras_transito.work_order_id
+	toColumn: dim_ordem_servico.work_order_id
+
+relationship rel_dCalendario_fato_movimentacoes_estoque_data
+	fromColumn: fato_movimentacoes_estoque.data
+	toColumn: dCalendario.Data
+
+relationship rel_dCalendario_fato_inventarios_data_contagem
+	fromColumn: fato_inventarios.data_contagem
+	toColumn: dCalendario.Data
+
+relationship rel_dCalendario_fato_compras_transito_data_necessidade
+	fromColumn: fato_compras_transito.data_necessidade
+	toColumn: dCalendario.Data
+
+relationship rel_dCalendario_fato_recebimentos_inspecao_data
+	fromColumn: fato_recebimentos_inspecao.data
+	toColumn: dCalendario.Data
+
+relationship rel_dCalendario_fato_forecast_data_entrega_prevista
+	fromColumn: fato_forecast.data_entrega_prevista
+	toColumn: dCalendario.Data
+
+relationship rel_dCalendario_dim_ordem_servico_data_entrega_vigente
+	isActive: false
+	fromColumn: dim_ordem_servico.data_entrega_vigente
+	toColumn: dCalendario.Data
+
+relationship 1b7ba84d-26cb-4c73-b051-ca083da414d3
+	joinOnDateBehavior: datePartOnly
+	fromColumn: dim_ordem_servico.data_aprovacao
+	toColumn: LocalDateTable_6e5ac764-0aa2-4f05-92b5-02475573657b.Date
+
+relationship eaa6785c-4573-4a93-b56d-d315591afa2b
+	joinOnDateBehavior: datePartOnly
+	fromColumn: dim_ordem_servico.data_comercial_prevista
+	toColumn: LocalDateTable_c222fd3f-7b77-4f77-9527-e7772ce68229.Date
+
+relationship ba4273f3-a512-491a-9c21-526aeaeade7d
+	joinOnDateBehavior: datePartOnly
+	fromColumn: dim_ordem_servico.data_comercial_calculada
+	toColumn: LocalDateTable_eb084093-125e-49d9-9dae-c84b86911ddd.Date
+
+relationship 047df780-0bb5-4ae7-84f3-0156e61627f9
+	joinOnDateBehavior: datePartOnly
+	fromColumn: fato_etapas_producao.data_planejada
+	toColumn: LocalDateTable_9c2b63e1-c583-4771-a5ff-8ad8938fee53.Date
+
+relationship 168f47d1-bf29-40f1-9e01-c6d19ca6b800
+	joinOnDateBehavior: datePartOnly
+	fromColumn: fato_forecast.data_confirmacao
+	toColumn: LocalDateTable_669d374a-eb6b-4559-a58d-7df9a8646aaa.Date
+
+relationship 6cfc2433-e5f0-45d8-8620-b6a74939bc24
+	joinOnDateBehavior: datePartOnly
+	fromColumn: fato_forecast.data_prevista_chegada
+	toColumn: LocalDateTable_d34781c4-748e-41a1-ba24-c49c8edaca34.Date
+
+relationship 0130401d-b2c0-480c-a262-8d9ab671a084
+	joinOnDateBehavior: datePartOnly
+	fromColumn: fato_mrp.proxima_remessa
+	toColumn: LocalDateTable_047dbd49-f528-4c7e-b025-4ab76bd224c2.Date
+
+relationship 06a07b7a-b73c-4848-8c97-a76379e01882
+	joinOnDateBehavior: datePartOnly
+	fromColumn: fato_necessidades_os.data_comercial_prevista
+	toColumn: LocalDateTable_33fb887d-123e-4ebc-a229-729e46bf840b.Date
+
+relationship 739349fe-a89d-4004-a7a5-1d34b47a358d
+	joinOnDateBehavior: datePartOnly
+	fromColumn: fato_necessidades_os.data_entrega_vigente
+	toColumn: LocalDateTable_98ae6ff0-f2ca-4dea-ac8f-7fb3ad795df6.Date
+
+relationship 02ed04f5-4751-4ef4-8913-ed74aa7cfd33
+	joinOnDateBehavior: datePartOnly
+	fromColumn: fato_recebimentos_inspecao.validade
+	toColumn: LocalDateTable_befe74f6-9ba9-43ae-9638-bfdb102cfa99.Date
+
+relationship 7beb15d7-c52f-4d27-8978-c9ac44a759c2
+	joinOnDateBehavior: datePartOnly
+	fromColumn: fato_recebimentos_inspecao.validade_certificado
+	toColumn: LocalDateTable_c4848510-9683-47a3-8337-aaec4d93938e.Date
+
+relationship ff3eb0f0-90af-4f52-a782-89130fae2959
+	joinOnDateBehavior: datePartOnly
+	fromColumn: dCalendario.Data
+	toColumn: LocalDateTable_44ee9f06-a25e-4745-863a-78870fe9fa41.Date
+

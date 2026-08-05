@@ -6,10 +6,10 @@ Os nomes abaixo pressupõem que as views foram importadas com o mesmo nome do sc
 
 ```DAX
 Estoque Atual =
-IF(HASONEVALUE(dim_sku[unidade]), SUM(fato_estoque_atual[estoque_atual]))
+SUM(fato_estoque_atual[estoque_atual])
 
 Empenhado Total =
-IF(HASONEVALUE(dim_sku[unidade]), SUM(fato_estoque_atual[empenhado_total]))
+SUM(fato_estoque_atual[empenhado_total])
 
 Empenhado O.S. =
 IF(HASONEVALUE(dim_sku[unidade]), SUM(fato_estoque_atual[empenhado_os]))
@@ -18,7 +18,7 @@ Empenhado em Fluxo =
 IF(HASONEVALUE(dim_sku[unidade]), SUM(fato_estoque_atual[empenhado_fluxo]))
 
 Estoque Disponível =
-IF(HASONEVALUE(dim_sku[unidade]), SUM(fato_estoque_atual[estoque_disponivel]))
+SUM(fato_estoque_atual[estoque_disponivel])
 
 SKUs com Saldo =
 CALCULATE(DISTINCTCOUNT(fato_estoque_atual[sku_id]), fato_estoque_atual[estoque_atual] > 0)
@@ -43,11 +43,11 @@ CALCULATE(
 )
 
 Consumo =
-CALCULATE(
+ABS(CALCULATE(
     SUM(fato_movimentacoes_estoque[quantidade]),
     fato_movimentacoes_estoque[tipo] = "BAIXA",
     fato_movimentacoes_estoque[movement_status] = "ATIVA"
-)
+))
 
 Divergência Inventário = SUM(fato_inventarios[diferenca])
 ```
@@ -128,23 +128,23 @@ CALCULATE(DISTINCTCOUNT(fato_forecast[forecast_id]), fato_forecast[status] = "AT
 Forecasts sem Estrutura =
 CALCULATE(DISTINCTCOUNT(fato_forecast[forecast_id]), fato_forecast[status] = "ATIVO", fato_forecast[possui_estrutura_materiais] = FALSE())
 
-Necessidade Total MRP =
-IF(HASONEVALUE(dim_sku[unidade]), SUM(fato_mrp[necessidade_total]))
+Necessidade Total =
+SUM(fato_mrp[necessidade_total])
 
-Trânsito MRP =
-IF(HASONEVALUE(dim_sku[unidade]), SUM(fato_mrp[quantidade_transito]))
+Em Trânsito =
+SUM(fato_mrp[quantidade_transito])
 
-Disponível MRP =
-IF(HASONEVALUE(dim_sku[unidade]), SUM(fato_mrp[estoque_disponivel]))
+MRP Estoque Disponível =
+SUM(fato_mrp[estoque_disponivel])
 
 Saldo Projetado =
 IF(HASONEVALUE(dim_sku[unidade]), SUM(fato_mrp[saldo_projetado]))
 
 Necessidade de Compra =
-IF(HASONEVALUE(dim_sku[unidade]), SUM(fato_mrp[necessidade_compra]))
+SUM(fato_mrp[necessidade_compra])
 
 Necessidade de Compra c/ Mínimo =
-IF(HASONEVALUE(dim_sku[unidade]), SUM(fato_mrp[necessidade_compra_com_estoque_minimo]))
+SUM(fato_mrp[necessidade_compra_com_estoque_minimo])
 
 SKUs com Demanda =
 CALCULATE(DISTINCTCOUNT(fato_mrp[sku_id]), fato_mrp[necessidade_total] > 0)
@@ -155,12 +155,7 @@ CALCULATE(DISTINCTCOUNT(fato_mrp[sku_id]), fato_mrp[status_mrp] = "COBERTO")
 SKUs a Comprar =
 CALCULATE(DISTINCTCOUNT(fato_mrp[sku_id]), fato_mrp[status_mrp] = "COMPRAR")
 
-Cobertura MRP % =
-VAR Necessidade = [Necessidade Total MRP]
-VAR Cobertura = [Disponível MRP] + [Trânsito MRP]
-RETURN IF(NOT HASONEVALUE(dim_sku[unidade]) || Necessidade = 0, BLANK(), MIN(DIVIDE(Cobertura, Necessidade), 1))
-
 Última Atualização = MAX(fato_mrp[atualizado_em])
 ```
 
-Formatar percentuais com uma casa decimal, quantidades com até três casas e valores monetários em BRL.
+Formatar percentuais com uma casa decimal, quantidades com até três casas e valores monetários em BRL. Os cartões executivos somam todas as unidades para atender à visão global solicitada; use o filtro de unidade quando a comparação física entre SKUs exigir homogeneidade.

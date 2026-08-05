@@ -1,0 +1,131 @@
+/// View consultiva bi.fato_forecast_necessidades no Supabase.
+table fato_forecast_necessidades
+	lineageTag: 3ce9eafc-5860-4979-8437-9e0b10f0cb26
+
+	column forecast_need_id
+		dataType: string
+		lineageTag: 6fecf20e-9229-4bc6-aa85-4f270866e9c1
+		summarizeBy: none
+		sourceColumn: forecast_need_id
+
+	column forecast_id
+		dataType: string
+		lineageTag: 7b061a5b-9cd5-4c76-96e7-3e1829c56e60
+		summarizeBy: none
+		sourceColumn: forecast_id
+
+	column codigo_forecast
+		dataType: string
+		lineageTag: f1a68c26-b571-4e35-9a5b-5508406fcdf9
+		sourceColumn: codigo_forecast
+
+	column tipo_demanda
+		dataType: string
+		lineageTag: 51f701c5-73a8-4adf-accc-341d81b36869
+		sourceColumn: tipo_demanda
+
+	column status_forecast
+		dataType: string
+		lineageTag: 66dca1f7-8479-4cee-a5bf-9ae9f65460cc
+		sourceColumn: status_forecast
+
+	column cliente
+		dataType: string
+		lineageTag: cf289f0b-8c38-4119-849b-ebf1807a2411
+		sourceColumn: cliente
+
+	column data_prevista_chegada
+		dataType: dateTime
+		formatString: dd/MM/yyyy
+		lineageTag: 2930db85-6891-4ad5-8b08-1da4c9b3d854
+		sourceColumn: data_prevista_chegada
+
+	column data_entrega_prevista
+		dataType: dateTime
+		formatString: dd/MM/yyyy
+		lineageTag: 852e829c-312d-4f5b-bc7d-6b18810f4c6b
+		sourceColumn: data_entrega_prevista
+
+	column probabilidade
+		dataType: int64
+		lineageTag: 67e07d6e-e148-4df3-af17-627f84e47c04
+		sourceColumn: probabilidade
+
+	column forecast_item_id
+		dataType: string
+		lineageTag: da3b48e5-0f85-496c-b854-1a3b030f9a02
+		summarizeBy: none
+		sourceColumn: forecast_item_id
+
+	column sku_id
+		dataType: int64
+		lineageTag: 0a79b4af-bb13-41dc-aa34-15aa7b3063f9
+		summarizeBy: none
+		sourceColumn: sku_id
+
+	column codigo
+		dataType: string
+		lineageTag: 26f70585-7bc8-4727-a304-51a9fd4322c1
+		summarizeBy: none
+		sourceColumn: codigo
+
+	column descricao
+		dataType: string
+		lineageTag: 2e522a15-53a3-4180-99f5-b3b6f65fe669
+		sourceColumn: descricao
+
+	column unidade
+		dataType: string
+		lineageTag: d1fd519d-14ee-4610-a3a9-b3da1f833be7
+		sourceColumn: unidade
+
+	column quantidade_planejada
+		dataType: double
+		lineageTag: cc7e1570-9c7b-4e42-9b3b-7d9beb6b8bfa
+		summarizeBy: sum
+		sourceColumn: quantidade_planejada
+
+		annotation SummarizationSetBy = Automatic
+
+		annotation PBI_FormatHint = {"isGeneralNumber":true}
+
+	column quantidade_ponderada
+		dataType: double
+		lineageTag: 00d69d02-6151-44a4-8ba1-aa42f10c4a01
+		summarizeBy: sum
+		sourceColumn: quantidade_ponderada
+
+		annotation SummarizationSetBy = Automatic
+
+		annotation PBI_FormatHint = {"isGeneralNumber":true}
+
+	column nivel_maximo
+		dataType: int64
+		lineageTag: 0b5ea82e-02f5-47c7-854c-055700aaf558
+		sourceColumn: nivel_maximo
+
+	column origem
+		dataType: string
+		lineageTag: af0c5d98-1675-4499-aa7c-40024e2d3ebf
+		sourceColumn: origem
+
+	column caminho_bom
+		dataType: string
+		lineageTag: 7636ac40-82c6-4e8d-830d-d22e7f2927d9
+		sourceColumn: caminho_bom
+
+	column created_at
+		dataType: dateTime
+		formatString: dd/MM/yyyy HH:mm
+		lineageTag: 7115ccce-7d74-4336-bb9e-75587ca6fe77
+		sourceColumn: created_at
+
+	partition fato_forecast_necessidades = m
+		mode: import
+		source =
+				let
+				    Fonte = PostgreSQL.Database("db.rodtxswtqbsbtukmvobn.supabase.co:5432", "postgres", [CreateNavigationProperties = false]),
+				    Dados = Value.NativeQuery(Fonte, "select ""forecast_need_id"", ""forecast_id"", ""codigo_forecast"", ""tipo_demanda"", ""status_forecast"", ""cliente"", ""data_prevista_chegada"", ""data_entrega_prevista"", ""probabilidade"", ""forecast_item_id"", ""sku_id"", ""codigo"", ""descricao"", ""unidade"", ""quantidade_planejada"", ""quantidade_ponderada"", ""nivel_maximo"", ""origem"", ""caminho_bom""::text as ""caminho_bom"", ""created_at"" from bi.""fato_forecast_necessidades""", null, [EnableFolding = true])
+				in
+				    Dados
+

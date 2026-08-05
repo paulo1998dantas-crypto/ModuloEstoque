@@ -1,0 +1,126 @@
+/// View consultiva bi.fato_inventarios no Supabase.
+table fato_inventarios
+	lineageTag: af02f43c-5f43-41dc-8ee0-edba0fa91c54
+
+	column inventory_count_id
+		dataType: int64
+		lineageTag: bfc9ec63-cccf-4910-bd5b-a6eed584953b
+		summarizeBy: none
+		sourceColumn: inventory_count_id
+
+	column session_id
+		dataType: int64
+		lineageTag: 17fb9037-9c1d-407d-852a-aad5f07fc516
+		summarizeBy: none
+		sourceColumn: session_id
+
+	column status_sessao
+		dataType: string
+		lineageTag: 5c64ea98-a1a4-4e73-8158-0b3c7240cbb6
+		sourceColumn: status_sessao
+
+	column opened_at
+		dataType: dateTime
+		formatString: dd/MM/yyyy HH:mm
+		lineageTag: 713acfad-5bd9-4d3c-af17-8ee1250d6e6c
+		sourceColumn: opened_at
+
+	column closed_at
+		dataType: dateTime
+		formatString: dd/MM/yyyy HH:mm
+		lineageTag: f4eed9ec-979c-4ac7-ae6f-8a8deb6fb29a
+		sourceColumn: closed_at
+
+	column counted_at
+		dataType: dateTime
+		formatString: dd/MM/yyyy HH:mm
+		lineageTag: c98af592-c563-4193-aab8-6b5a09f9253c
+		sourceColumn: counted_at
+
+	column data_contagem
+		dataType: dateTime
+		formatString: dd/MM/yyyy
+		lineageTag: 38b38006-d761-4f6c-87a0-c70c5fd79c21
+		summarizeBy: none
+		sourceColumn: data_contagem
+
+		annotation UnderlyingDateTimeDataType = Date
+
+		annotation SummarizationSetBy = Automatic
+
+	column sku_id
+		dataType: int64
+		lineageTag: c5bc94db-3cb3-4371-bb7b-853bf7691b12
+		summarizeBy: none
+		sourceColumn: sku_id
+
+	column codigo
+		dataType: string
+		lineageTag: 0a60ab2b-cebd-4ae4-be03-a66d5cfe4d18
+		summarizeBy: none
+		sourceColumn: codigo
+
+	column descricao
+		dataType: string
+		lineageTag: 6e51c595-de12-43db-a569-bdc9463433b5
+		sourceColumn: descricao
+
+	column unidade
+		dataType: string
+		lineageTag: 82e6a865-c8be-4503-aeec-cec882601661
+		sourceColumn: unidade
+
+	column grupo
+		dataType: string
+		lineageTag: 6446c673-5ef2-4ea6-bf64-b66baf1b7e1b
+		sourceColumn: grupo
+
+	column categoria
+		dataType: string
+		lineageTag: 533461f8-e074-4c1d-9d9d-3f7a2f2a83c8
+		sourceColumn: categoria
+
+	column saldo_sistema
+		dataType: double
+		lineageTag: f75ad628-e71e-4d0b-8295-d6a148e60777
+		summarizeBy: sum
+		sourceColumn: saldo_sistema
+
+		annotation SummarizationSetBy = Automatic
+
+		annotation PBI_FormatHint = {"isGeneralNumber":true}
+
+	column quantidade_contada
+		dataType: double
+		lineageTag: 10123163-e851-470e-b337-067bd591aef8
+		summarizeBy: sum
+		sourceColumn: quantidade_contada
+
+		annotation SummarizationSetBy = Automatic
+
+		annotation PBI_FormatHint = {"isGeneralNumber":true}
+
+	column diferenca
+		dataType: double
+		lineageTag: 0c343790-f4e9-4f43-b788-c7f46e044a1a
+		summarizeBy: sum
+		sourceColumn: diferenca
+
+		annotation SummarizationSetBy = Automatic
+
+		annotation PBI_FormatHint = {"isGeneralNumber":true}
+
+	column status_divergencia
+		dataType: string
+		lineageTag: 8c180c1b-8fd4-412e-8949-fba86fe31d23
+		sourceColumn: status_divergencia
+
+	partition fato_inventarios = m
+		mode: import
+		source =
+				let
+				    Fonte = PostgreSQL.Database("db.rodtxswtqbsbtukmvobn.supabase.co:5432", "postgres", [CreateNavigationProperties = false]),
+				    Dados = Fonte{[Schema = "bi", Item = "fato_inventarios"]}[Data]
+				in
+				    Dados
+

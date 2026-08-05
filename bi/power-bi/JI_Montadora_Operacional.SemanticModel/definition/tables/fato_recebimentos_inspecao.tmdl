@@ -1,0 +1,325 @@
+/// View consultiva bi.fato_recebimentos_inspecao no Supabase.
+table fato_recebimentos_inspecao
+	lineageTag: 863b0cee-78e6-42fc-812d-dd4e1b73c89b
+
+	column goods_receipt_id
+		dataType: string
+		lineageTag: ba29e4ef-508a-4654-8e4c-492c2a15f1f7
+		summarizeBy: none
+		sourceColumn: goods_receipt_id
+
+	column goods_receipt_line_id
+		dataType: string
+		lineageTag: 9b0d0abf-f139-43c0-9fe4-b42a708532d6
+		summarizeBy: none
+		sourceColumn: goods_receipt_line_id
+
+	column purchase_order_id
+		dataType: string
+		lineageTag: eb746aea-c7bb-4f19-8047-034375a98c36
+		summarizeBy: none
+		sourceColumn: purchase_order_id
+
+	column purchase_order_line_id
+		dataType: string
+		lineageTag: a63dccb9-4fa2-4b92-96d6-3c357a3d005c
+		summarizeBy: none
+		sourceColumn: purchase_order_line_id
+
+	column numero_oc
+		dataType: string
+		lineageTag: c69b2bb0-3e41-4b58-bd1b-a6e2c9ce40a6
+		summarizeBy: none
+		sourceColumn: numero_oc
+
+	column data_recebimento
+		dataType: dateTime
+		formatString: dd/MM/yyyy HH:mm
+		lineageTag: 58e72a9f-b4f7-4453-a47a-494a7e0f2052
+		summarizeBy: none
+		sourceColumn: data_recebimento
+
+		annotation SummarizationSetBy = Automatic
+
+	column data
+		dataType: dateTime
+		formatString: dd/MM/yyyy
+		lineageTag: 659b0bf0-ae94-45f3-923e-29e26d924c96
+		summarizeBy: none
+		sourceColumn: data
+
+		annotation UnderlyingDateTimeDataType = Date
+
+		annotation SummarizationSetBy = Automatic
+
+	column origem
+		dataType: string
+		lineageTag: 4d5a7d80-f614-44fb-92da-4f7a5c0f1f52
+		summarizeBy: none
+		sourceColumn: origem
+
+		annotation SummarizationSetBy = Automatic
+
+	column fornecedor
+		dataType: string
+		lineageTag: c88d35e7-ba14-4e12-a63c-5e9bf69aa7f2
+		summarizeBy: none
+		sourceColumn: fornecedor
+
+		annotation SummarizationSetBy = Automatic
+
+	column numero_nf
+		dataType: string
+		lineageTag: c0ad7326-f7ba-467b-8170-1415e418c72e
+		summarizeBy: none
+		sourceColumn: numero_nf
+
+	column operador
+		dataType: string
+		lineageTag: 70432be0-4ccc-49c4-bbd0-47fed5fcdd47
+		summarizeBy: none
+		sourceColumn: operador
+
+		annotation SummarizationSetBy = Automatic
+
+	column status_recebimento
+		dataType: string
+		lineageTag: 6bd62ef4-a62c-4996-8879-55e2577ca0b2
+		summarizeBy: none
+		sourceColumn: status_recebimento
+
+		annotation SummarizationSetBy = Automatic
+
+	column confirmed_at
+		dataType: dateTime
+		formatString: dd/MM/yyyy HH:mm
+		lineageTag: c8c8c86a-2891-4b56-b17c-27eb175440c9
+		summarizeBy: none
+		sourceColumn: confirmed_at
+
+		annotation SummarizationSetBy = Automatic
+
+	column reversed_at
+		dataType: dateTime
+		formatString: dd/MM/yyyy HH:mm
+		lineageTag: 7f882b1c-190b-411e-b795-23ec66e84542
+		summarizeBy: none
+		sourceColumn: reversed_at
+
+		annotation SummarizationSetBy = Automatic
+
+	column sku_id
+		dataType: int64
+		lineageTag: 717504c3-0998-449d-a8e7-39371460402a
+		summarizeBy: none
+		sourceColumn: sku_id
+
+	column codigo
+		dataType: string
+		lineageTag: 46fd4154-1ca2-49fd-90ee-10b17f317e69
+		summarizeBy: none
+		sourceColumn: codigo
+
+	column descricao
+		dataType: string
+		lineageTag: 0a9d65f5-0bd2-4c9a-bcdd-bdb10febccf0
+		summarizeBy: none
+		sourceColumn: descricao
+
+		annotation SummarizationSetBy = Automatic
+
+	column unidade
+		dataType: string
+		lineageTag: 686cf212-691b-4234-b7e9-abd0d3fb50e7
+		summarizeBy: none
+		sourceColumn: unidade
+
+		annotation SummarizationSetBy = Automatic
+
+	column quantidade_esperada
+		dataType: double
+		lineageTag: 516377d0-bed8-4435-b6bd-ce1ee923ea30
+		summarizeBy: sum
+		sourceColumn: quantidade_esperada
+
+		annotation SummarizationSetBy = Automatic
+
+		annotation PBI_FormatHint = {"isGeneralNumber":true}
+
+	column quantidade_recebida_anterior
+		dataType: double
+		lineageTag: c51f832c-0505-43a2-980b-bd1eaa6b2450
+		summarizeBy: sum
+		sourceColumn: quantidade_recebida_anterior
+
+		annotation SummarizationSetBy = Automatic
+
+		annotation PBI_FormatHint = {"isGeneralNumber":true}
+
+	column saldo_pendente
+		dataType: double
+		lineageTag: b3d6e207-c3dc-4a36-82de-d5c7df41eee8
+		summarizeBy: sum
+		sourceColumn: saldo_pendente
+
+		annotation SummarizationSetBy = Automatic
+
+		annotation PBI_FormatHint = {"isGeneralNumber":true}
+
+	column quantidade_fisica
+		dataType: double
+		lineageTag: c2e4aeb7-2369-4f56-b3bb-90d4991a5ab6
+		summarizeBy: sum
+		sourceColumn: quantidade_fisica
+
+		annotation SummarizationSetBy = Automatic
+
+		annotation PBI_FormatHint = {"isGeneralNumber":true}
+
+	column quantidade_aprovada
+		dataType: double
+		lineageTag: b1804cd7-e596-43e6-bc4e-cce411558430
+		summarizeBy: sum
+		sourceColumn: quantidade_aprovada
+
+		annotation SummarizationSetBy = Automatic
+
+		annotation PBI_FormatHint = {"isGeneralNumber":true}
+
+	column quantidade_condicional
+		dataType: double
+		lineageTag: 51a5ba16-98d1-4083-99a5-7ca99b4fd60d
+		summarizeBy: sum
+		sourceColumn: quantidade_condicional
+
+		annotation SummarizationSetBy = Automatic
+
+		annotation PBI_FormatHint = {"isGeneralNumber":true}
+
+	column quantidade_rejeitada
+		dataType: double
+		lineageTag: 6f0567a9-eb5c-4944-a105-faac4315518f
+		summarizeBy: sum
+		sourceColumn: quantidade_rejeitada
+
+		annotation SummarizationSetBy = Automatic
+
+		annotation PBI_FormatHint = {"isGeneralNumber":true}
+
+	column resultado_inspecao
+		dataType: string
+		lineageTag: 7ccb6ebf-5ffd-44f0-b467-f9e26b4646d0
+		summarizeBy: none
+		sourceColumn: resultado_inspecao
+
+		annotation SummarizationSetBy = Automatic
+
+	column justificativa_divergencia
+		dataType: string
+		lineageTag: 15884fd2-b959-4fb9-a9b6-52135c54fb6f
+		summarizeBy: none
+		sourceColumn: justificativa_divergencia
+
+		annotation SummarizationSetBy = Automatic
+
+	column lote
+		dataType: string
+		lineageTag: 8f4d45e1-2333-4151-ba2e-bfc8ece22c00
+		summarizeBy: none
+		sourceColumn: lote
+
+		annotation SummarizationSetBy = Automatic
+
+	column serie
+		dataType: string
+		lineageTag: 8e84cfd8-496f-47d6-b037-7190662bf98c
+		summarizeBy: none
+		sourceColumn: serie
+
+		annotation SummarizationSetBy = Automatic
+
+	column validade
+		dataType: dateTime
+		formatString: dd/MM/yyyy
+		lineageTag: 70fcca7e-823d-4a94-bcd3-c21a2328284e
+		summarizeBy: none
+		sourceColumn: validade
+
+		variation Variation
+			isDefault
+			relationship: 02ed04f5-4751-4ef4-8913-ed74aa7cfd33
+			defaultHierarchy: LocalDateTable_befe74f6-9ba9-43ae-9638-bfdb102cfa99.'Hierarquia de datas'
+
+		annotation UnderlyingDateTimeDataType = Date
+
+		annotation SummarizationSetBy = Automatic
+
+	column localizacao
+		dataType: string
+		lineageTag: 2c3245a3-2572-468c-bc37-bbf5c44f6c36
+		summarizeBy: none
+		sourceColumn: localizacao
+
+		annotation SummarizationSetBy = Automatic
+
+	column certificado_exigido
+		dataType: boolean
+		lineageTag: 620c6969-9761-4902-b8db-68a50ebadef0
+		summarizeBy: none
+		sourceColumn: certificado_exigido
+
+		annotation SummarizationSetBy = Automatic
+
+	column certificado_apresentado
+		dataType: boolean
+		lineageTag: ae66b73c-8f16-48a4-b851-d3a388ca1577
+		summarizeBy: none
+		sourceColumn: certificado_apresentado
+
+		annotation SummarizationSetBy = Automatic
+
+	column validade_certificado
+		dataType: dateTime
+		formatString: dd/MM/yyyy
+		lineageTag: faa12ff9-f609-4a35-90cd-d957b022dbaa
+		summarizeBy: none
+		sourceColumn: validade_certificado
+
+		variation Variation
+			isDefault
+			relationship: 7beb15d7-c52f-4d27-8978-c9ac44a759c2
+			defaultHierarchy: LocalDateTable_c4848510-9683-47a3-8337-aaec4d93938e.'Hierarquia de datas'
+
+		annotation UnderlyingDateTimeDataType = Date
+
+		annotation SummarizationSetBy = Automatic
+
+	column valor_unitario_pedido
+		dataType: double
+		lineageTag: 699024d9-a3fe-4edf-b665-eaeb641de43e
+		summarizeBy: sum
+		sourceColumn: valor_unitario_pedido
+
+		annotation SummarizationSetBy = Automatic
+
+		annotation PBI_FormatHint = {"isGeneralNumber":true}
+
+	column valor_unitario_real
+		dataType: double
+		lineageTag: ac422b89-9769-44d0-b649-24085c00272a
+		summarizeBy: sum
+		sourceColumn: valor_unitario_real
+
+		annotation SummarizationSetBy = Automatic
+
+		annotation PBI_FormatHint = {"isGeneralNumber":true}
+
+	partition fato_recebimentos_inspecao = m
+		mode: import
+		source =
+				let
+				    Fonte = PostgreSQL.Database("db.rodtxswtqbsbtukmvobn.supabase.co:5432", "postgres", [CreateNavigationProperties = false]),
+				    Dados = Fonte{[Schema = "bi", Item = "fato_recebimentos_inspecao"]}[Data]
+				in
+				    Dados
+

@@ -1,0 +1,224 @@
+{
+  "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/visualContainer/2.11.0/schema.json",
+  "name": "a187fa1e712ecb6016ce",
+  "position": {
+    "x": 20,
+    "y": 238,
+    "z": 10,
+    "height": 462,
+    "width": 1240,
+    "tabOrder": 10
+  },
+  "visual": {
+    "visualType": "tableEx",
+    "query": {
+      "queryState": {
+        "Values": {
+          "projections": [
+            {
+              "field": {
+                "Column": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "fato_estoque_atual"
+                    }
+                  },
+                  "Property": "codigo"
+                }
+              },
+              "queryRef": "fato_estoque_atual.codigo",
+              "nativeQueryRef": "codigo"
+            },
+            {
+              "field": {
+                "Column": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "fato_estoque_atual"
+                    }
+                  },
+                  "Property": "descricao"
+                }
+              },
+              "queryRef": "fato_estoque_atual.descricao",
+              "nativeQueryRef": "descricao"
+            },
+            {
+              "field": {
+                "Column": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "fato_estoque_atual"
+                    }
+                  },
+                  "Property": "estoque_atual"
+                }
+              },
+              "queryRef": "fato_estoque_atual.estoque_atual",
+              "nativeQueryRef": "estoque_atual"
+            },
+            {
+              "field": {
+                "Column": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "fato_estoque_atual"
+                    }
+                  },
+                  "Property": "empenhado_total"
+                }
+              },
+              "queryRef": "fato_estoque_atual.empenhado_total",
+              "nativeQueryRef": "empenhado_total"
+            },
+            {
+              "field": {
+                "Column": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "fato_estoque_atual"
+                    }
+                  },
+                  "Property": "estoque_disponivel"
+                }
+              },
+              "queryRef": "fato_estoque_atual.estoque_disponivel",
+              "nativeQueryRef": "estoque_disponivel"
+            },
+            {
+              "field": {
+                "Column": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "fato_estoque_atual"
+                    }
+                  },
+                  "Property": "estoque_minimo"
+                }
+              },
+              "queryRef": "fato_estoque_atual.estoque_minimo",
+              "nativeQueryRef": "estoque_minimo"
+            },
+            {
+              "field": {
+                "Column": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "fato_estoque_atual"
+                    }
+                  },
+                  "Property": "status_estoque"
+                }
+              },
+              "queryRef": "fato_estoque_atual.status_estoque",
+              "nativeQueryRef": "status_estoque"
+            }
+          ]
+        }
+      }
+    },
+    "drillFilterOtherVisuals": true
+  },
+  "filterConfig": {
+    "filters": [
+      {
+        "name": "4b29c45d833f226096c0",
+        "field": {
+          "Column": {
+            "Expression": {
+              "SourceRef": {
+                "Entity": "fato_estoque_atual"
+              }
+            },
+            "Property": "codigo"
+          }
+        },
+        "type": "Categorical"
+      },
+      {
+        "name": "ebcd7c3e13748b6736bb",
+        "field": {
+          "Column": {
+            "Expression": {
+              "SourceRef": {
+                "Entity": "fato_estoque_atual"
+              }
+            },
+            "Property": "descricao"
+          }
+        },
+        "type": "Categorical"
+      },
+      {
+        "name": "69723195157fe048c890",
+        "field": {
+          "Column": {
+            "Expression": {
+              "SourceRef": {
+                "Entity": "fato_estoque_atual"
+              }
+            },
+            "Property": "estoque_atual"
+          }
+        },
+        "type": "Advanced"
+      },
+      {
+        "name": "b5c2cdc9d4c4e95e28fb",
+        "field": {
+          "Column": {
+            "Expression": {
+              "SourceRef": {
+                "Entity": "fato_estoque_atual"
+              }
+            },
+            "Property": "empenhado_total"
+          }
+        },
+        "type": "Advanced"
+      },
+      {
+        "name": "89b6bafb02a109b37854",
+        "field": {
+          "Column": {
+            "Expression": {
+              "SourceRef": {
+                "Entity": "fato_estoque_atual"
+              }
+            },
+            "Property": "estoque_disponivel"
+          }
+        },
+        "type": "Advanced"
+      },
+      {
+        "name": "2a3b4b5cb09fcf222ecf",
+        "field": {
+          "Column": {
+            "Expression": {
+              "SourceRef": {
+                "Entity": "fato_estoque_atual"
+              }
+            },
+            "Property": "estoque_minimo"
+          }
+        },
+        "type": "Advanced"
+      },
+      {
+        "name": "14ae08618733ec7c8d9d",
+        "field": {
+          "Column": {
+            "Expression": {
+              "SourceRef": {
+                "Entity": "fato_estoque_atual"
+              }
+            },
+            "Property": "status_estoque"
+          }
+        },
+        "type": "Categorical"
+      }
+    ]
+  }
+}

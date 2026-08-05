@@ -4,8 +4,8 @@ Formato recomendado: 16:9, fundo claro, faixa superior com título, horário da 
 
 ## 1. Visão Estoque
 
-- Cartões: SKUs com saldo, SKUs empenhados, SKUs com disponível, SKUs zerados e SKUs abaixo do mínimo.
-- Comparativo atual × empenhado × disponível por SKU; quantidades consolidadas apenas com uma unidade selecionada.
+- Cartões: estoque atual, empenhado total, estoque disponível, SKUs zerados e consumo.
+- Tabela comparativa de atual × empenhado × disponível por SKU.
 - Linha temporal: entradas e consumo por mês.
 - Matriz principal: SKU, descrição, grupo, localização, atual, empenhado O.S., empenhado fluxo, disponível, mínimo e status.
 - Painel inferior: divergência de inventário e últimos movimentos.
@@ -31,7 +31,7 @@ Formato recomendado: 16:9, fundo claro, faixa superior com título, horário da 
 
 ## 4. Visão MRP
 
-- Cartões: SKUs com demanda, SKUs cobertos, SKUs a comprar, O.S. pendentes e O.C. abertas.
+- Cartões: necessidade total, em trânsito, estoque disponível, necessidade de compra e SKUs a comprar.
 - Gráfico principal: colunas agrupadas por SKU com Necessidade × Disponível × Trânsito; filtro inicial `status_mrp = COMPRAR`.
 - Waterfall: necessidade → estoque disponível → trânsito → saldo projetado.
 - Matriz de ação: SKU, descrição, grupo, necessidade O.S., Forecast, disponível, trânsito, saldo projetado, compra e próxima remessa.

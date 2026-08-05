@@ -1,0 +1,190 @@
+{
+  "version": "1.1.0",
+  "diagrams": [
+    {
+      "ordinal": 0,
+      "scrollPosition": {
+        "x": 0,
+        "y": 0
+      },
+      "nodes": [
+        {
+          "location": {
+            "x": 50,
+            "y": 744.62491496772668
+          },
+          "nodeIndex": "dCalendario",
+          "size": {
+            "height": 248,
+            "width": 234
+          },
+          "zIndex": 0
+        },
+        {
+          "location": {
+            "x": 564.95129132072816,
+            "y": 1370.0634134325071
+          },
+          "nodeIndex": "dim_ordem_servico",
+          "size": {
+            "height": 300,
+            "width": 234
+          },
+          "zIndex": 0
+        },
+        {
+          "location": {
+            "x": 794.01592744895413,
+            "y": 563.62359505947779
+          },
+          "nodeIndex": "dim_sku",
+          "size": {
+            "height": 300,
+            "width": 234
+          },
+          "zIndex": 0
+        },
+        {
+          "location": {
+            "x": 441.30028016100823,
+            "y": 1017.5329429399987
+          },
+          "nodeIndex": "fato_compras_transito",
+          "size": {
+            "height": 300,
+            "width": 234
+          },
+          "zIndex": 0
+        },
+        {
+          "location": {
+            "x": 850.90555057121912,
+            "y": 1397.0723227102867
+          },
+          "nodeIndex": "fato_empenhos_abertos",
+          "size": {
+            "height": 300,
+            "width": 234
+          },
+          "zIndex": 0
+        },
+        {
+          "location": {
+            "x": 1372.0456517918919,
+            "y": 1005.731515158359
+          },
+          "nodeIndex": "fato_estoque_atual",
+          "size": {
+            "height": 300,
+            "width": 234
+          },
+          "zIndex": 0
+        },
+        {
+          "location": {
+            "x": 563.78930413724788,
+            "y": 1732.2173265567599
+          },
+          "nodeIndex": "fato_etapas_producao",
+          "size": {
+            "height": 300,
+            "width": 234
+          },
+          "zIndex": 0
+        },
+        {
+          "location": {
+            "x": 154.56956979332153,
+            "y": 1282.9576620090727
+          },
+          "nodeIndex": "fato_forecast",
+          "size": {
+            "height": 300,
+            "width": 234
+          },
+          "zIndex": 0
+        },
+        {
+          "location": {
+            "x": 993.84582149412324,
+            "y": -50
+          },
+          "nodeIndex": "fato_forecast_necessidades",
+          "size": {
+            "height": 300,
+            "width": 234
+          },
+          "zIndex": 0
+        },
+        {
+          "location": {
+            "x": 508.30211158080772,
+            "y": 313.66127088559847
+          },
+          "nodeIndex": "fato_inventarios",
+          "size": {
+            "height": 300,
+            "width": 234
+          },
+          "zIndex": 0
+        },
+        {
+          "location": {
+            "x": 335.42092920814736,
+            "y": 666.56173757914712
+          },
+          "nodeIndex": "fato_movimentacoes_estoque",
+          "size": {
+            "height": 300,
+            "width": 234
+          },
+          "zIndex": 0
+        },
+        {
+          "location": {
+            "x": 1079.6881742310932,
+            "y": 302.22953717478822
+          },
+          "nodeIndex": "fato_mrp",
+          "size": {
+            "height": 300,
+            "width": 234
+          },
+          "zIndex": 0
+        },
+        {
+          "location": {
+            "x": 1189.6084009526235,
+            "y": 655.34617810793293
+          },
+          "nodeIndex": "fato_necessidades_os",
+          "size": {
+            "height": 300,
+            "width": 234
+          },
+          "zIndex": 0
+        },
+        {
+          "location": {
+            "x": 222.58805608340646,
+            "y": 299.89498046541075
+          },
+          "nodeIndex": "fato_recebimentos_inspecao",
+          "size": {
+            "height": 300,
+            "width": 234
+          },
+          "zIndex": 0
+        }
+      ],
+      "name": "Todas as tabelas",
+      "zoomValue": 100,
+      "pinKeyFieldsToTop": false,
+      "showExtraHeaderInfo": false,
+      "hideKeyFieldsWhenCollapsed": false,
+      "tablesLocked": false
+    }
+  ],
+  "selectedDiagram": "Todas as tabelas",
+  "defaultDiagram": "Todas as tabelas"
+}

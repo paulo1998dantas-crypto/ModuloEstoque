@@ -19,3 +19,6 @@ estoque_app/logs/*.log
 
 *.tmp
 *.bak
+
+# Power BI Project local cache and per-user settings
+**/.pbi/

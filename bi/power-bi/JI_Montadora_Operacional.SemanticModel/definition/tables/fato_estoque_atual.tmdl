@@ -1,0 +1,141 @@
+/// View consultiva bi.fato_estoque_atual no Supabase.
+table fato_estoque_atual
+	lineageTag: f99f0b9b-038a-420b-98f1-c8e6dc897552
+
+	column sku_id
+		dataType: int64
+		lineageTag: a38c06d6-cd80-4a19-8175-70dd4ced69ff
+		summarizeBy: none
+		sourceColumn: sku_id
+
+	column codigo
+		dataType: string
+		lineageTag: e7237062-e3fc-4836-9ac2-1ef21530bbdd
+		summarizeBy: none
+		sourceColumn: codigo
+
+	column descricao
+		dataType: string
+		lineageTag: 66c043b6-85a6-467e-966f-142378cf1ef9
+		sourceColumn: descricao
+
+	column unidade
+		dataType: string
+		lineageTag: 83816ac8-a9aa-474b-a9c4-bf2349bea089
+		sourceColumn: unidade
+
+	column grupo
+		dataType: string
+		lineageTag: 1366f49a-fcaf-4ff3-9061-5503dc934077
+		sourceColumn: grupo
+
+	column categoria
+		dataType: string
+		lineageTag: 8ebb03de-5fb6-4870-bba7-de1c68837d5e
+		sourceColumn: categoria
+
+	column localizacao
+		dataType: string
+		lineageTag: fe3bc007-025a-4bd2-a00c-80ea867e6157
+		sourceColumn: localizacao
+
+	column estoque_minimo
+		dataType: double
+		lineageTag: da43b542-5b9b-4b05-8133-f0bb8533b62d
+		summarizeBy: sum
+		sourceColumn: estoque_minimo
+
+		annotation SummarizationSetBy = Automatic
+
+		annotation PBI_FormatHint = {"isGeneralNumber":true}
+
+	column estoque_atual
+		dataType: double
+		lineageTag: 0c9e45db-7b88-4a6b-a7a3-d42f1c7c9e9f
+		summarizeBy: sum
+		sourceColumn: estoque_atual
+
+		annotation SummarizationSetBy = Automatic
+
+		annotation PBI_FormatHint = {"isGeneralNumber":true}
+
+	column empenhado_total
+		dataType: double
+		lineageTag: eeb8cdf5-03e7-47f8-99d8-1a4021c358d3
+		summarizeBy: sum
+		sourceColumn: empenhado_total
+
+		annotation SummarizationSetBy = Automatic
+
+		annotation PBI_FormatHint = {"isGeneralNumber":true}
+
+	column empenhado_os
+		dataType: double
+		lineageTag: 99b5d06e-d7ee-45d2-a1bf-b5a7598a80cf
+		summarizeBy: sum
+		sourceColumn: empenhado_os
+
+		annotation SummarizationSetBy = Automatic
+
+		annotation PBI_FormatHint = {"isGeneralNumber":true}
+
+	column empenhado_fluxo
+		dataType: double
+		lineageTag: be0cb918-f8ce-4bed-8ce0-2db9781031b6
+		summarizeBy: sum
+		sourceColumn: empenhado_fluxo
+
+		annotation SummarizationSetBy = Automatic
+
+		annotation PBI_FormatHint = {"isGeneralNumber":true}
+
+	column estoque_disponivel
+		dataType: double
+		lineageTag: 5c15f5e4-c0f0-4aab-83a5-999791b5e604
+		summarizeBy: sum
+		sourceColumn: estoque_disponivel
+
+		annotation SummarizationSetBy = Automatic
+
+		annotation PBI_FormatHint = {"isGeneralNumber":true}
+
+	column estoque_disponivel_contabil
+		dataType: double
+		lineageTag: e99e134b-d1cf-4988-91ac-aa15cedb5213
+		summarizeBy: sum
+		sourceColumn: estoque_disponivel_contabil
+
+		annotation SummarizationSetBy = Automatic
+
+		annotation PBI_FormatHint = {"isGeneralNumber":true}
+
+	column empenhos_ativos
+		dataType: int64
+		lineageTag: b903fb8b-d98e-4350-a569-48688bbf4a8f
+		sourceColumn: empenhos_ativos
+
+	column status_estoque
+		dataType: string
+		lineageTag: 8fa8c45d-1c82-4aff-b20f-31c237f2c510
+		sourceColumn: status_estoque
+
+	column saldo_atualizado_em
+		dataType: dateTime
+		formatString: dd/MM/yyyy HH:mm
+		lineageTag: 48011e71-6636-48d8-80ef-0c9ab07eadb1
+		sourceColumn: saldo_atualizado_em
+
+	column sku_ativo
+		dataType: boolean
+		lineageTag: 274fd9c3-4a62-4a85-abae-c04fb4b247c5
+		sourceColumn: sku_ativo
+
+	partition fato_estoque_atual = m
+		mode: import
+		source =
+				let
+				    Fonte = PostgreSQL.Database("db.rodtxswtqbsbtukmvobn.supabase.co:5432", "postgres", [CreateNavigationProperties = false]),
+				    Dados = Fonte{[Schema = "bi", Item = "fato_estoque_atual"]}[Data]
+				in
+				    Dados
+

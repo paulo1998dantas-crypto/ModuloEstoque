@@ -1,0 +1,8 @@
+{
+  "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/page/2.1.0/schema.json",
+  "name": "4e8b705666eed00fd370",
+  "displayName": "2. Visão PCP",
+  "displayOption": "FitToPage",
+  "height": 720,
+  "width": 1280
+}

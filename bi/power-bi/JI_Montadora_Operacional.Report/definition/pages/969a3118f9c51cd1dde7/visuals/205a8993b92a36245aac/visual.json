@@ -1,0 +1,252 @@
+{
+  "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/visualContainer/2.11.0/schema.json",
+  "name": "205a8993b92a36245aac",
+  "position": {
+    "x": 20,
+    "y": 238,
+    "z": 10,
+    "height": 462,
+    "width": 1240,
+    "tabOrder": 10
+  },
+  "visual": {
+    "visualType": "tableEx",
+    "query": {
+      "queryState": {
+        "Values": {
+          "projections": [
+            {
+              "field": {
+                "Column": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "fato_mrp"
+                    }
+                  },
+                  "Property": "codigo"
+                }
+              },
+              "queryRef": "fato_mrp.codigo",
+              "nativeQueryRef": "codigo"
+            },
+            {
+              "field": {
+                "Column": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "fato_mrp"
+                    }
+                  },
+                  "Property": "descricao"
+                }
+              },
+              "queryRef": "fato_mrp.descricao",
+              "nativeQueryRef": "descricao"
+            },
+            {
+              "field": {
+                "Column": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "fato_mrp"
+                    }
+                  },
+                  "Property": "necessidade_total"
+                }
+              },
+              "queryRef": "fato_mrp.necessidade_total",
+              "nativeQueryRef": "necessidade_total"
+            },
+            {
+              "field": {
+                "Column": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "fato_mrp"
+                    }
+                  },
+                  "Property": "estoque_disponivel"
+                }
+              },
+              "queryRef": "fato_mrp.estoque_disponivel",
+              "nativeQueryRef": "estoque_disponivel"
+            },
+            {
+              "field": {
+                "Column": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "fato_mrp"
+                    }
+                  },
+                  "Property": "quantidade_transito"
+                }
+              },
+              "queryRef": "fato_mrp.quantidade_transito",
+              "nativeQueryRef": "quantidade_transito"
+            },
+            {
+              "field": {
+                "Column": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "fato_mrp"
+                    }
+                  },
+                  "Property": "saldo_projetado"
+                }
+              },
+              "queryRef": "fato_mrp.saldo_projetado",
+              "nativeQueryRef": "saldo_projetado"
+            },
+            {
+              "field": {
+                "Column": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "fato_mrp"
+                    }
+                  },
+                  "Property": "necessidade_compra"
+                }
+              },
+              "queryRef": "fato_mrp.necessidade_compra",
+              "nativeQueryRef": "necessidade_compra"
+            },
+            {
+              "field": {
+                "Column": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "fato_mrp"
+                    }
+                  },
+                  "Property": "status_mrp"
+                }
+              },
+              "queryRef": "fato_mrp.status_mrp",
+              "nativeQueryRef": "status_mrp"
+            }
+          ]
+        }
+      }
+    },
+    "drillFilterOtherVisuals": true
+  },
+  "filterConfig": {
+    "filters": [
+      {
+        "name": "56b170bd32adfa7a0d38",
+        "field": {
+          "Column": {
+            "Expression": {
+              "SourceRef": {
+                "Entity": "fato_mrp"
+              }
+            },
+            "Property": "codigo"
+          }
+        },
+        "type": "Categorical"
+      },
+      {
+        "name": "37e7b3cd63aa0c46c1ec",
+        "field": {
+          "Column": {
+            "Expression": {
+              "SourceRef": {
+                "Entity": "fato_mrp"
+              }
+            },
+            "Property": "descricao"
+          }
+        },
+        "type": "Categorical"
+      },
+      {
+        "name": "bc0859785bcc3409e536",
+        "field": {
+          "Column": {
+            "Expression": {
+              "SourceRef": {
+                "Entity": "fato_mrp"
+              }
+            },
+            "Property": "necessidade_total"
+          }
+        },
+        "type": "Advanced"
+      },
+      {
+        "name": "342a7e200f1c241e8b71",
+        "field": {
+          "Column": {
+            "Expression": {
+              "SourceRef": {
+                "Entity": "fato_mrp"
+              }
+            },
+            "Property": "estoque_disponivel"
+          }
+        },
+        "type": "Advanced"
+      },
+      {
+        "name": "628834487136844c7189",
+        "field": {
+          "Column": {
+            "Expression": {
+              "SourceRef": {
+                "Entity": "fato_mrp"
+              }
+            },
+            "Property": "quantidade_transito"
+          }
+        },
+        "type": "Advanced"
+      },
+      {
+        "name": "664f34e4b9ac406ae01d",
+        "field": {
+          "Column": {
+            "Expression": {
+              "SourceRef": {
+                "Entity": "fato_mrp"
+              }
+            },
+            "Property": "saldo_projetado"
+          }
+        },
+        "type": "Advanced"
+      },
+      {
+        "name": "a45e0421ecabc29968db",
+        "field": {
+          "Column": {
+            "Expression": {
+              "SourceRef": {
+                "Entity": "fato_mrp"
+              }
+            },
+            "Property": "necessidade_compra"
+          }
+        },
+        "type": "Advanced"
+      },
+      {
+        "name": "c156bc26dac0b49cca59",
+        "field": {
+          "Column": {
+            "Expression": {
+              "SourceRef": {
+                "Entity": "fato_mrp"
+              }
+            },
+            "Property": "status_mrp"
+          }
+        },
+        "type": "Categorical"
+      }
+    ]
+  }
+}

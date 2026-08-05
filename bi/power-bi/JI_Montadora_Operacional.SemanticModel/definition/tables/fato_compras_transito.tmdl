@@ -1,0 +1,210 @@
+/// View consultiva bi.fato_compras_transito no Supabase.
+table fato_compras_transito
+	lineageTag: 00abcebe-83d9-4d60-8d9d-3cb1258cab38
+
+	column purchase_order_id
+		dataType: string
+		lineageTag: 49571401-f339-41c4-a32b-74f8392d8b2a
+		summarizeBy: none
+		sourceColumn: purchase_order_id
+
+	column purchase_order_line_id
+		dataType: string
+		lineageTag: 532d281e-57c6-44a7-9e31-ef9f162d376e
+		summarizeBy: none
+		sourceColumn: purchase_order_line_id
+
+	column numero_oc
+		dataType: string
+		lineageTag: 1685d854-d0ec-4ef5-a07a-c669e8a77c33
+		summarizeBy: none
+		sourceColumn: numero_oc
+
+	column numero_linha
+		dataType: int64
+		lineageTag: df8b21ed-5cc6-439c-a693-9d1f929c4f00
+		summarizeBy: none
+		sourceColumn: numero_linha
+
+	column fornecedor_id
+		dataType: string
+		lineageTag: 80523196-e2fa-4b73-a92a-2502b793bd6d
+		summarizeBy: none
+		sourceColumn: fornecedor_id
+
+	column fornecedor
+		dataType: string
+		lineageTag: c6e50153-c843-44e1-a7ed-9c3b04105be4
+		sourceColumn: fornecedor
+
+	column categoria_compra
+		dataType: string
+		lineageTag: 88961391-5b31-4155-8f6d-9d16b229bc37
+		sourceColumn: categoria_compra
+
+	column data_emissao
+		dataType: dateTime
+		formatString: dd/MM/yyyy HH:mm
+		lineageTag: 622a5dd1-d1b2-46f5-a2dc-9727614ff115
+		sourceColumn: data_emissao
+
+	column status_oc
+		dataType: string
+		lineageTag: 79adfdef-c149-49db-b19e-d589ac05ff8a
+		sourceColumn: status_oc
+
+	column technical_status
+		dataType: string
+		lineageTag: ec66d195-ac19-46f4-bf0e-962f4ea9ba99
+		sourceColumn: technical_status
+
+	column financial_status
+		dataType: string
+		lineageTag: 0cb6a50b-900d-40aa-ab0f-6a098dcf9ecc
+		sourceColumn: financial_status
+
+	column status_linha
+		dataType: string
+		lineageTag: 231823a0-a199-452d-8f2f-d87f11ad08c2
+		sourceColumn: status_linha
+
+	column sku_id
+		dataType: int64
+		lineageTag: 8909ac15-07ae-40ee-af5f-71c898e7c7d0
+		summarizeBy: none
+		sourceColumn: sku_id
+
+	column codigo
+		dataType: string
+		lineageTag: 1b201ac2-0e24-458b-9fd4-192c9a207670
+		summarizeBy: none
+		sourceColumn: codigo
+
+	column descricao
+		dataType: string
+		lineageTag: f4824f91-54ed-4f27-aa88-0d95f5ca2c30
+		sourceColumn: descricao
+
+	column unidade
+		dataType: string
+		lineageTag: e7a0ebf7-dce7-4ed4-8969-eb74084743a1
+		sourceColumn: unidade
+
+	column quantidade_pedida
+		dataType: double
+		lineageTag: b8d4ccd2-2af8-4ad5-99f0-c42ad7398504
+		summarizeBy: sum
+		sourceColumn: quantidade_pedida
+
+		annotation SummarizationSetBy = Automatic
+
+		annotation PBI_FormatHint = {"isGeneralNumber":true}
+
+	column quantidade_recebida
+		dataType: double
+		lineageTag: eddeb023-b30d-4e28-b75f-140b35960f99
+		summarizeBy: sum
+		sourceColumn: quantidade_recebida
+
+		annotation SummarizationSetBy = Automatic
+
+		annotation PBI_FormatHint = {"isGeneralNumber":true}
+
+	column quantidade_pendente
+		dataType: double
+		lineageTag: 458dc4d5-b46e-448c-9567-c1d15215b558
+		summarizeBy: sum
+		sourceColumn: quantidade_pendente
+
+		annotation SummarizationSetBy = Automatic
+
+		annotation PBI_FormatHint = {"isGeneralNumber":true}
+
+	column valor_unitario_pedido
+		dataType: double
+		lineageTag: db461df2-afd6-47e4-920e-b78d5093e2d1
+		summarizeBy: sum
+		sourceColumn: valor_unitario_pedido
+
+		annotation SummarizationSetBy = Automatic
+
+		annotation PBI_FormatHint = {"isGeneralNumber":true}
+
+	column valor_pedido
+		dataType: double
+		lineageTag: 9fb4343a-e45e-4abb-9a09-cb9180a4f059
+		summarizeBy: sum
+		sourceColumn: valor_pedido
+
+		annotation SummarizationSetBy = Automatic
+
+		annotation PBI_FormatHint = {"isGeneralNumber":true}
+
+	column valor_pendente
+		dataType: double
+		lineageTag: 3f4c27e9-143d-4b85-b228-0c02ac2c4a60
+		summarizeBy: sum
+		sourceColumn: valor_pendente
+
+		annotation SummarizationSetBy = Automatic
+
+		annotation PBI_FormatHint = {"isGeneralNumber":true}
+
+	column data_necessidade
+		dataType: dateTime
+		formatString: dd/MM/yyyy
+		lineageTag: bcec1613-f34b-4e77-a4b1-26d0e6c41066
+		summarizeBy: none
+		sourceColumn: data_necessidade
+
+		annotation UnderlyingDateTimeDataType = Date
+
+		annotation SummarizationSetBy = Automatic
+
+	column dias_para_remessa
+		dataType: int64
+		lineageTag: b03b4488-ea75-437a-8da7-e5fb28c3171a
+		sourceColumn: dias_para_remessa
+
+	column situacao_transito
+		dataType: string
+		lineageTag: 535db24a-52be-47d6-a666-0291229424f3
+		sourceColumn: situacao_transito
+
+	column destino
+		dataType: string
+		lineageTag: 7756c036-1cf1-44ef-9c33-6b604225eb6e
+		sourceColumn: destino
+
+	column work_order_id
+		dataType: string
+		lineageTag: 98f88a9a-be12-4a04-9f09-0cbaf7d84b8e
+		summarizeBy: none
+		sourceColumn: work_order_id
+
+	column numero_os
+		dataType: string
+		lineageTag: 69c40d7e-c043-45b3-b3d9-29903de88b05
+		summarizeBy: none
+		sourceColumn: numero_os
+
+	column item
+		dataType: int64
+		lineageTag: 327f041e-ad91-4586-a503-f15cd60b4b4b
+		summarizeBy: none
+		sourceColumn: item
+
+	column em_transito
+		dataType: boolean
+		lineageTag: 048f879e-343b-46ac-bf65-07ec864cd377
+		sourceColumn: em_transito
+
+	partition fato_compras_transito = m
+		mode: import
+		source =
+				let
+				    Fonte = PostgreSQL.Database("db.rodtxswtqbsbtukmvobn.supabase.co:5432", "postgres", [CreateNavigationProperties = false]),
+				    Dados = Fonte{[Schema = "bi", Item = "fato_compras_transito"]}[Data]
+				in
+				    Dados
+
