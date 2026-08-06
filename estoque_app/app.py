@@ -157,6 +157,7 @@ from services.production_order_service import (
     list_production_orders,
     production_order_detail,
 )
+from services.work_order_needs_service import calculate_work_order_needs
 
 
 app = Flask(
@@ -2596,6 +2597,23 @@ def erp_internal_work_order_materials(work_order_id):
         return jsonify({"ok": True, **work_order_materials(db(), work_order_id)})
     except ValueError as exc:
         return jsonify({"ok": False, "error": str(exc)}), 404
+
+
+@app.route("/api/erp/internal/work-orders/needs")
+@erp_feature_required
+def erp_internal_work_order_needs():
+    """Read-only consolidated needs used by the PCP report in Suprimentos.
+
+    The Stock module remains the single source for O.S. coverage because it
+    owns commitments and consumption.  No balance or movement is changed by
+    this endpoint.
+    """
+    if not _erp_internal_allowed():
+        return jsonify({"ok": False, "error": "Servico nao autorizado."}), 401
+    try:
+        return jsonify({"ok": True, **calculate_work_order_needs(db(), pending_only=True)})
+    except ValueError as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 400
 
 
 @app.route(
