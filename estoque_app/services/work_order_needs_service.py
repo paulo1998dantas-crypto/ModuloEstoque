@@ -62,6 +62,7 @@ def _work_order_documents(db, work_order_id=None):
         text(
             """
             select w.id as work_order_id,w.numero_os,w.status,w.technical_status,
+                   w.data_comercial_prevista,
                    w.cliente_nome,e.item_number,v.chassi,
                    d.id as document_id,d.numero as document_number,d.status as document_status,
                    d.composicao,d.updated_at as document_updated_at,
@@ -287,6 +288,7 @@ def calculate_work_order_needs(db, work_order_id=None, pending_only=False):
                 "item_number": document.get("item_number"),
                 "chassi": document.get("chassi") or "",
                 "cliente_nome": document.get("cliente_nome") or "",
+                "data_entrega_os": document.get("data_comercial_prevista"),
                 "document_id": document.get("document_id"),
                 "codigo": code,
                 "descricao": meta["descricao"] or (sku.descricao if sku else ""),
