@@ -25,7 +25,7 @@ from services.work_order_needs_service import calculate_work_order_needs  # noqa
 ERP_SCHEMA = (
     "create table erp_vehicles (id text primary key,chassi text not null,marca text,modelo text,versao text)",
     "create table erp_vehicle_entries (id text primary key,vehicle_id text not null,item_number integer not null)",
-    "create table erp_work_orders (id text primary key,vehicle_entry_id text not null,numero_os text not null,cliente_nome text,status text not null,technical_status text default 'ABERTA')",
+    "create table erp_work_orders (id text primary key,vehicle_entry_id text not null,numero_os text not null,cliente_nome text,status text not null,technical_status text default 'ABERTA',data_comercial_prevista text)",
     "create table suprimentos_documentos (id integer primary key,tipo text,erp_work_order_id text,numero text,status text,composicao text,updated_at text)",
 )
 
@@ -63,7 +63,14 @@ class WorkOrderNeedsTest(unittest.TestCase):
         with self.engine.begin() as connection:
             connection.execute(text("insert into erp_vehicles values (:id,:chassi,'JI','Van','V1')"), {"id": vehicle_id, "chassi": "9BRTESTE000001234"})
             connection.execute(text("insert into erp_vehicle_entries values (:id,:vehicle_id,3100)"), {"id": entry_id, "vehicle_id": vehicle_id})
-            connection.execute(text("insert into erp_work_orders values (:id,:entry_id,'3100','CLIENTE','ATIVA','ABERTA')"), {"id": self.work_order_id, "entry_id": entry_id})
+            connection.execute(
+                text(
+                    "insert into erp_work_orders("
+                    "id,vehicle_entry_id,numero_os,cliente_nome,status,technical_status,data_comercial_prevista"
+                    ") values (:id,:entry_id,'3100','CLIENTE','ATIVA','ABERTA','2026-08-15')"
+                ),
+                {"id": self.work_order_id, "entry_id": entry_id},
+            )
             connection.execute(text("insert into suprimentos_documentos values (1,'os',:work_id,'3100','emitido',:composition,'2026-08-03')"), {"work_id": self.work_order_id, "composition": composition})
         self.db.commit()
         register_movement(self.db, self.parent, "ENTRADA", 10, self.user.id)
@@ -92,6 +99,7 @@ class WorkOrderNeedsTest(unittest.TestCase):
         self.assertEqual(Decimal("0"), rows["PP-001"]["quantidade_pendente"])
         self.assertEqual(Decimal("0"), rows["MP-001"]["quantidade_pendente"])
         self.assertEqual(3, result["summary"]["covered_items"])
+        self.assertEqual("2026-08-15", rows["CJ-001"]["data_entrega_os"])
 
     def test_related_consumption_is_not_counted_twice_and_direct_baixa_covers_need(self):
         commitment = register_movement(
