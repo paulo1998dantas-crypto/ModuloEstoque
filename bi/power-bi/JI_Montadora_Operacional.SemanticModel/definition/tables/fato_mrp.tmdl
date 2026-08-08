@@ -286,6 +286,22 @@ table fato_mrp
 		formatString: dd/MM/yyyy HH:mm
 		displayFolder: 5. Histórico de Produção\Qualidade
 
+	measure 'Etapas Concluídas' = CALCULATE(DISTINCTCOUNT(fato_progresso_producao[evento_id]), fato_progresso_producao[tipo_evento] = "ETAPA CONCLUÍDA")
+		formatString: 0
+		displayFolder: 6. Fechamento de Produção
+
+	measure 'Veículos Finalizados (Produção)' = CALCULATE(DISTINCTCOUNT(fato_progresso_producao[work_order_id]), fato_progresso_producao[tipo_evento] = "VEÍCULO FINALIZADO")
+		formatString: 0
+		displayFolder: 6. Fechamento de Produção
+
+	measure 'Veículos Entregues (Produção)' = CALCULATE(DISTINCTCOUNT(fato_progresso_producao[work_order_id]), fato_progresso_producao[tipo_evento] = "VEÍCULO ENTREGUE")
+		formatString: 0
+		displayFolder: 6. Fechamento de Produção
+
+	measure 'Setores com Produção' = COUNTROWS(FILTER(VALUES(fato_progresso_producao[setor]), CALCULATE([Etapas Concluídas]) > 0))
+		formatString: 0
+		displayFolder: 6. Fechamento de Produção
+
 	measure 'Última Atualização' = MAX(fato_mrp[atualizado_em])
 		formatString: dd/MM/yyyy HH:mm
 		displayFolder: 5. Auditoria

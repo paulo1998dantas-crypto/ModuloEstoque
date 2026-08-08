@@ -5,16 +5,16 @@ O relatório usa canvas 16:9 (1280 × 720), navegação por abas, fundo claro e 
 ## 0. Cockpit Industrial
 
 - KPIs executivos: O.S. no WIP, O.S. atrasadas pelo SLA técnico, O.S. com material pendente, SKUs críticos, SKUs a comprar e linhas atrasadas.
-- Barras: O.S. atrasadas por cliente e SKUs críticos por grupo.
+- Barras: O.S. atrasadas por cliente e SKUs críticos por categoria de material.
 - Tabela de ação: materiais sem estoque disponível, prioridade, O.S. impactadas e próxima necessidade.
-- Segmentadores: tipo de serviço, cliente e grupo de material.
+- Segmentadores: tipo de serviço, cliente e categoria de material.
 
 ## 1. Visão Estoque
 
 - KPIs: SKUs ativos, com saldo, zerados, em risco, empenhados, movimentações ativas e baixas registradas.
 - Barras: situação dos SKUs e movimentações por tipo.
-- Tabela de exceção: SKU, descrição, grupo, unidade, saldos físicos protegidos por unidade e ação recomendada.
-- Segmentadores: tipo de serviço, unidade de medida e grupo. Os saldos físicos permanecem globais; o tipo de serviço afeta os indicadores ligados à demanda.
+- Tabela de exceção: SKU, descrição, categoria, unidade, saldos físicos protegidos por unidade e ação recomendada.
+- Segmentadores: tipo de serviço, unidade de medida e categoria de material. Os saldos físicos permanecem globais; o tipo de serviço afeta os indicadores ligados à demanda.
 - Drill-through por SKU para saldos, empenhos e histórico de movimentos.
 
 ## 2. Visão PCP
@@ -36,9 +36,9 @@ O relatório usa canvas 16:9 (1280 × 720), navegação por abas, fundo claro e 
 ## 4. Visão MRP
 
 - KPIs: SKUs com demanda, em risco, críticos, a comprar, O.S. com material pendente e O.S. impactadas por compras em trânsito.
-- Barras: SKUs críticos por grupo e O.S. impactadas por compras por linha de produto.
+- Barras: SKUs críticos por categoria de material e O.S. impactadas por compras por linha de produto.
 - Tabela de ação: SKU, descrição, unidade, prioridade, necessidade, estoque, trânsito, compra, próxima necessidade e O.S. impactadas.
-- Segmentadores: tipo de serviço, unidade de medida e grupo.
+- Segmentadores: tipo de serviço, unidade de medida e categoria de material.
 - A comparação física só aparece com uma única unidade de medida selecionada.
 
 ## 5. Histórico de Produção
@@ -50,6 +50,16 @@ O relatório usa canvas 16:9 (1280 × 720), navegação por abas, fundo claro e 
 - Segmentadores: mês, tipo de serviço, mercado (`LICITAÇÃO`/`VAREJO`), cliente e linha de produto (`LE`, `LAB`, `LB`, `LAE` etc.).
 - A data inicial de produção é a maior entre aprovação da proposta e chegada do veículo; durações negativas são sinalizadas e excluídas das médias.
 - RETIRADA é exibida em indicador próprio e não compõe finalizados nem entregues.
+
+## 6. Fechamento de Produção
+
+- Página exclusivamente gráfica para reunião e fechamento produtivo.
+- Colunas empilhadas: etapas concluídas por setor e semana, com a data real de término de cada etapa.
+- Rosca: participação dos setores no período filtrado.
+- Linhas: veículos finalizados e entregues por semana, como eventos distintos.
+- Barras adicionais: consolidação mensal e anual das etapas concluídas.
+- Segmentadores: tipo de serviço, linha de produto, setor produtivo e ano.
+- `A/C`/`AC`, `ELÉTRICA`/`ELETRICA`, `LIBERAÇÃO`/`LIBERACAO` e demais códigos foram normalizados para não dividir o mesmo setor nos gráficos.
 
 ## Páginas ocultas de drill-through
 
@@ -63,4 +73,4 @@ O relatório usa canvas 16:9 (1280 × 720), navegação por abas, fundo claro e 
 - Relacionamentos sempre fluem das dimensões para os fatos; não há relacionamento fato a fato.
 - Quantidades físicas não são somadas entre `pc`, `kg`, `m`, `m²`, `cj` ou outras unidades. Medidas físicas retornam vazio sem um único contexto de unidade.
 - Datas de remessa anteriores ao ano 2000 são classificadas como inválidas e nunca como atraso operacional.
-- O logo da JI Montadora é um recurso local versionado e aparece no cabeçalho de todas as páginas, inclusive drill-throughs.
+- O logo da JI Montadora é um recurso local versionado em gradiente azul e aparece ampliado no cabeçalho de todas as páginas, inclusive drill-throughs.

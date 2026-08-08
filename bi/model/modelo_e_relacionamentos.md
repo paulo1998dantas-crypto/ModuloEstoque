@@ -22,6 +22,7 @@ O modelo usa **Importar**, com conexão PostgreSQL direta por SSL. A atualizaç�
 | `fato_forecast_necessidades` | uma linha por Forecast/SKU | explosão de materiais futura |
 | `fato_mrp` | uma linha por SKU | consolidação do MRP I |
 | `fato_historico_conclusao` | uma linha por veículo/O.S. | conclusão, entrega, duração e atraso históricos |
+| `fato_progresso_producao` | uma linha por evento concluído | cadência por setor, finalização e entrega |
 | `dim_mes_historico` | um registro por mês com evento | filtro histórico sem meses vazios |
 | `dCalendario` | uma linha por dia | filtro temporal compartilhado |
 
@@ -29,6 +30,7 @@ O modelo usa **Importar**, com conexão PostgreSQL direta por SSL. A atualizaç�
 
 - `dim_sku[sku_id]` tem cardinalidade 1:* para todos os fatos que contêm `sku_id`.
 - `dim_ordem_servico[work_order_id]` tem cardinalidade 1:* para necessidades, empenhos, movimentos, etapas, compras e histórico de conclusão. Assim, `categoria_servico` filtra também a visão histórica.
+- `dim_ordem_servico[work_order_id]` também filtra `fato_progresso_producao`; `dCalendario[Data]` filtra seus eventos por `data_evento`.
 - `dCalendario[Data]` tem cardinalidade 1:* para a data principal de cada fato. No histórico, `data_finalizacao` é ativa; `data_entrega` e `data_retirada` são inativas.
 - `dim_mes_historico[ano_mes]` filtra `dCalendario[AnoMes]`, preservando as relações de data específicas das medidas de finalização, entrega e retirada.
 - A filtragem é unidirecional, da dimensão para o fato.

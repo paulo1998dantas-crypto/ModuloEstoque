@@ -2,11 +2,11 @@
   "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/visualContainer/2.11.0/schema.json",
   "name": "6a89cb432802b9426c1f",
   "position": {
-    "x": 1198,
+    "x": 1128,
     "y": 3,
     "z": 99,
     "height": 54,
-    "width": 62,
+    "width": 132,
     "tabOrder": 99
   },
   "visual": {
@@ -20,7 +20,7 @@
                 "ResourcePackageItem": {
                   "PackageName": "RegisteredResources",
                   "PackageType": 1,
-                  "ItemName": "JIMontadoraLogo-202608081600.png"
+                  "ItemName": "JIMontadoraLogoGradient-202608081845.png"
                 }
               }
             }

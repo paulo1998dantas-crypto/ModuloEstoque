@@ -31,7 +31,7 @@ const COLORS = {
   canvas: '#F4F6F9',
   white: '#FFFFFF',
 };
-const LOGO_RESOURCE = 'JIMontadoraLogo-202608081600.png';
+const LOGO_RESOURCE = 'JIMontadoraLogoGradient-202608081845.png';
 
 const literal = (value) => ({ expr: { Literal: { Value: value } } });
 const stringLiteral = (value) => literal(`'${value.replaceAll("'", "''")}'`);
@@ -329,6 +329,65 @@ function lineChart(pageKey, key, title, category, measures, x, y, width, height,
   };
 }
 
+function stackedColumnChart(pageKey, key, title, category, legend, measureName, x, y, width, height, tabOrder) {
+  const name = id(`${pageKey}:stacked:${key}`);
+  return {
+    name,
+    json: {
+      $schema: `${schemaBase}/visualContainer/2.11.0/schema.json`,
+      name,
+      position: position(x, y, width, height, tabOrder),
+      visual: {
+        visualType: 'clusteredColumnChart',
+        query: {
+          queryState: {
+            Category: { projections: [{ ...projection(category), active: true }] },
+            Series: { projections: [{ ...projection(legend), active: true }] },
+            Y: { projections: [projection({ entity: 'fato_mrp', property: measureName, kind: 'Measure' })] },
+          },
+          sortDefinition: { sort: [{ field: field(category.entity, category.property, category.kind || 'Column'), direction: 'Ascending' }], isDefaultSort: true },
+        },
+        objects: {
+          labels: [{ properties: { show: literal('true'), optimizeLabelDisplay: literal('true') } }],
+          legend: [{ properties: { show: literal('true'), position: stringLiteral('Top') } }],
+          categoryAxis: [{ properties: { labelColor: colorLiteral(COLORS.muted), titleText: stringLiteral('') } }],
+          valueAxis: [{ properties: { start: literal('0D'), labelColor: colorLiteral(COLORS.muted), gridlineColor: colorLiteral('#E7EBF1'), gridlineStyle: stringLiteral('solid'), gridlineThickness: literal('1D') } }],
+        },
+        visualContainerObjects: containerObjects(title, { padding: 8 }),
+        drillFilterOtherVisuals: true,
+      },
+    },
+  };
+}
+
+function donutChart(pageKey, key, title, category, measureName, x, y, width, height, tabOrder) {
+  const name = id(`${pageKey}:donut:${key}`);
+  return {
+    name,
+    json: {
+      $schema: `${schemaBase}/visualContainer/2.11.0/schema.json`,
+      name,
+      position: position(x, y, width, height, tabOrder),
+      visual: {
+        visualType: 'donutChart',
+        query: {
+          queryState: {
+            Category: { projections: [{ ...projection(category), active: true }] },
+            Y: { projections: [projection({ entity: 'fato_mrp', property: measureName, kind: 'Measure' })] },
+          },
+          sortDefinition: { sort: [{ field: field('fato_mrp', measureName, 'Measure'), direction: 'Descending' }], isDefaultSort: true },
+        },
+        objects: {
+          legend: [{ properties: { show: literal('true'), position: stringLiteral('RightCenter') } }],
+          labels: [{ properties: { show: literal('true'), labelStyle: stringLiteral('Category, percent of total') } }],
+        },
+        visualContainerObjects: containerObjects(title, { padding: 8 }),
+        drillFilterOtherVisuals: true,
+      },
+    },
+  };
+}
+
 function table(pageKey, key, title, columns, x, y, width, height, tabOrder, sort, filters = []) {
   const name = id(`${pageKey}:table:${key}`);
   const query = {
@@ -484,6 +543,18 @@ const pageSpecs = [
       filters: [{ entity: 'fato_historico_conclusao', property: 'status', values: ['FINALIZADA', 'ENTREGUE', 'RETIRADA'] }],
     },
   },
+  {
+    key: 'fechamento_producao', displayName: '6. Fechamento de Produção', accent: COLORS.blue,
+    title: 'Fechamento de Produção', subtitle: 'Etapas concluídas por setor, finalizações e entregas | semanas, meses e anos',
+    layout: 'production',
+    slicers: [
+      { ...col('dim_ordem_servico', 'categoria_servico'), label: 'Tipo de serviço' },
+      { ...col('dim_ordem_servico', 'linha_produto'), label: 'Linha de produto' },
+      { ...col('fato_progresso_producao', 'setor'), label: 'Setor produtivo' },
+      { ...col('fato_progresso_producao', 'ano'), label: 'Ano' },
+    ],
+    measures: ['Etapas Concluídas', 'Veículos Finalizados (Produção)', 'Veículos Entregues (Produção)', 'Setores com Produção'],
+  },
 ];
 
 const drillPages = [
@@ -558,7 +629,7 @@ function writePage(pageSpec, isDrill = false) {
   const visuals = [
     textbox(pageSpec.key, 'header', pageSpec.title, pageSpec.subtitle, 20, 8, 1120, 50, 0),
     divider(pageSpec.key, 20, 58, 1240, pageSpec.accent, 1),
-    imageVisual(pageSpec.key, 'logo', LOGO_RESOURCE, 1198, 3, 62, 54, 99),
+    imageVisual(pageSpec.key, 'logo', LOGO_RESOURCE, 1128, 3, 132, 54, 99),
   ];
 
   if (!isDrill) {
@@ -569,6 +640,14 @@ function writePage(pageSpec, isDrill = false) {
       visuals.push(barChart(pageSpec.key, 'mercado', 'Carros finalizados por mercado', col('fato_historico_conclusao', 'mercado'), 'Carros Finalizados', 632, 300, 300, 188, COLORS.green, 9));
       visuals.push(barChart(pageSpec.key, 'linha_tempo', 'Tempo médio por linha (dias)', col('fato_historico_conclusao', 'linha_produto'), 'Tempo Médio Produção (dias)', 944, 300, 316, 188, COLORS.blue, 10));
       visuals.push(table(pageSpec.key, 'history', pageSpec.table.title, pageSpec.table.columns, 20, 500, 1240, 204, 11, pageSpec.table.sort, pageSpec.table.filters || []));
+    } else if (pageSpec.layout === 'production') {
+      pageSpec.slicers.forEach((spec, index) => visuals.push(slicer(pageSpec.key, spec, 420 + index * 176, 2 + index, 164)));
+      visuals.push(kpiStrip(pageSpec.key, pageSpec.measures, 92, 7));
+      visuals.push(stackedColumnChart(pageSpec.key, 'semanal_setor', 'Etapas concluídas por setor — semanal', col('fato_progresso_producao', 'semana_inicio'), col('fato_progresso_producao', 'setor'), 'Etapas Concluídas', 20, 248, 820, 218, 8));
+      visuals.push(donutChart(pageSpec.key, 'mix_setor', 'Participação da produção por setor', col('fato_progresso_producao', 'setor'), 'Etapas Concluídas', 860, 248, 400, 218, 9));
+      visuals.push(lineChart(pageSpec.key, 'finalizacao_entrega', 'Finalizações e entregas — semanal', col('fato_progresso_producao', 'semana_inicio'), ['Veículos Finalizados (Produção)', 'Veículos Entregues (Produção)'], 20, 486, 610, 218, 10));
+      visuals.push(barChart(pageSpec.key, 'mensal_setor', 'Etapas concluídas por mês', col('fato_progresso_producao', 'ano_mes'), 'Etapas Concluídas', 648, 486, 300, 218, COLORS.teal, 11));
+      visuals.push(barChart(pageSpec.key, 'anual_setor', 'Etapas concluídas por ano', col('fato_progresso_producao', 'ano'), 'Etapas Concluídas', 960, 486, 300, 218, COLORS.blue, 12));
     } else {
       pageSpec.slicers.forEach((spec, index) => visuals.push(slicer(pageSpec.key, spec, 636 + index * 212, 2 + index)));
       visuals.push(kpiStrip(pageSpec.key, pageSpec.measures, 156, 6));

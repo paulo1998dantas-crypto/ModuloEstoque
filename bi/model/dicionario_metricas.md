@@ -42,6 +42,10 @@
 | Tempo de produção | dias entre início histórico e finalização | veículo | duração negativa fica nula e é sinalizada |
 | Finalizado em atraso | finalização posterior ao limite técnico de produção | veículo | mesma regra de 30/45 dias usada no WIP; RETIRADA não entra |
 | Percentual finalizado em atraso | finalizados em atraso / carros finalizados | período/segmento | RETIRADA não entra no denominador |
+| Etapas concluídas | etapas aplicáveis com data real de término | setor/período | setor normalizado; cada conclusão é um evento |
+| Veículos finalizados (produção) | O.S. distintas com finalização real | período | evento final separado das etapas; RETIRADA não entra |
+| Veículos entregues (produção) | O.S. distintas com entrega real | período | evento de entrega separado da finalização |
+| Setores com produção | setores que concluíram ao menos uma etapa | período/filtros | considera apenas etapas concluídas |
 
 ## Regras de interpretação
 
@@ -58,3 +62,4 @@
 - A data final segue a precedência `termino_producao`, `finalizado_at` e evento explícito do histórico MES. Status final sem data permanece como alerta, sem data fabricada.
 - O filtro `Mês com dados` da visão histórica usa `dim_mes_historico`: mostra somente meses que tiveram finalização, entrega ou retirada.
 - Nos visuais gerenciais de materiais, `Categoria de material` usa `public.skus.categoria`. O campo bruto `public.skus.grupo` é uma família/subgrupo técnico e permanece disponível apenas para detalhamento.
+- O fechamento de produção usa `termino` de cada etapa aplicável; a visão consolida também `data_finalizacao` e `data_entrega` como eventos próprios, sem misturar as três contagens.

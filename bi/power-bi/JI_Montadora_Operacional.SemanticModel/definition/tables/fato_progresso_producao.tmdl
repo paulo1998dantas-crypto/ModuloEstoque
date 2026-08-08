@@ -1,0 +1,84 @@
+/// Eventos concluídos da produção, finalização e entrega para acompanhamento semanal.
+table fato_progresso_producao
+	lineageTag: fcf999e1-22ae-43a0-a5a5-d8caaf5e0d43
+
+	column evento_id
+		dataType: string
+		lineageTag: 6221d575-e11b-4a4d-a4bd-4d8c5b74805b
+		summarizeBy: none
+		sourceColumn: evento_id
+
+	column work_order_id
+		dataType: string
+		lineageTag: 91f1b83b-cf02-4a34-838b-0bc18d6b148e
+		summarizeBy: none
+		sourceColumn: work_order_id
+
+	column data_evento
+		dataType: dateTime
+		formatString: dd/MM/yyyy
+		lineageTag: c9e15e8c-7ae2-49f0-b3a2-62a88c0c6d3e
+		summarizeBy: none
+		sourceColumn: data_evento
+
+	column data_hora
+		dataType: dateTime
+		formatString: dd/MM/yyyy HH:mm
+		lineageTag: a1d82f69-e234-43c9-a83c-1e8b26f5a9d6
+		summarizeBy: none
+		sourceColumn: data_hora
+
+	column tipo_evento
+		dataType: string
+		lineageTag: 94cfda65-dc05-4e70-a751-f87ee0b27c1f
+		summarizeBy: none
+		sourceColumn: tipo_evento
+
+	column setor
+		dataType: string
+		lineageTag: 8cefeddd-1891-4f54-9668-afebf75defd1
+		summarizeBy: none
+		sourceColumn: setor
+
+	column etapa
+		dataType: string
+		lineageTag: 457ec9b3-2550-4374-90dc-3206ca3548ba
+		summarizeBy: none
+		sourceColumn: etapa
+
+	column ano
+		dataType: int64
+		formatString: 0
+		lineageTag: 2f420aac-2b40-4640-a22e-27ca4cbd12de
+		summarizeBy: none
+		sourceColumn: ano
+
+	column ano_mes
+		dataType: string
+		lineageTag: 047c9652-4e8e-48db-a94e-5cda7145a5d9
+		summarizeBy: none
+		sourceColumn: ano_mes
+
+	column semana_inicio
+		dataType: dateTime
+		formatString: dd/MM/yyyy
+		lineageTag: 7574656c-48a2-4aac-ac3f-3fc0c01bc1cc
+		summarizeBy: none
+		sourceColumn: semana_inicio
+
+	column semana_ano
+		dataType: string
+		lineageTag: 0a2d67bd-a2ee-4e37-a05d-63cf4a8a77e3
+		summarizeBy: none
+		sourceColumn: semana_ano
+
+	partition fato_progresso_producao = m
+		mode: import
+		source =
+				let
+				    Fonte = PostgreSQL.Database("db.rodtxswtqbsbtukmvobn.supabase.co:5432", "postgres", [CreateNavigationProperties = false]),
+				    Dados = Fonte{[Schema = "bi", Item = "fato_progresso_producao"]}[Data]
+				in
+				    Dados
+
+	annotation PBI_ResultType = Table

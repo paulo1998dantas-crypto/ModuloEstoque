@@ -5,7 +5,7 @@ Este diretório contém a fonte versionada do BI consultivo conectado ao Supabas
 ## Arquitetura
 
 - Fonte: PostgreSQL do projeto Supabase `rodtxswtqbsbtukmvobn`.
-- Camada semântica SQL: 15 views no schema privado `bi`.
+- Camada semântica SQL: 16 views no schema privado `bi`.
 - Segurança: grupo `powerbi_reader` com `USAGE` no schema e `SELECT` nas views, sem `INSERT`, `UPDATE` ou `DELETE`.
 - Conexão: PostgreSQL direto com SSL, porta 5432, em modo **Importar**.
 - Modelo: estrela, filtros unidirecionais e nenhuma relação fato a fato.
@@ -19,6 +19,7 @@ Este diretório contém a fonte versionada do BI consultivo conectado ao Supabas
 3. **Compras e Trânsito** — O.C. abertas, valor, prazo, recebimento e inspeção.
 4. **Visão MRP** — demanda, cobertura, prioridade, trânsito e necessidade de compra.
 5. **Histórico de Produção** — finalização, entrega e retirada separadas, SLA técnico e duração por veículo, tipo de serviço, mercado, cliente e linha de produto.
+6. **Fechamento de Produção** — etapas concluídas por setor e semana, participação por setor, finalizações, entregas e consolidação mensal/anual.
 
 O relatório inclui páginas ocultas de drill-through para SKU, O.S. e fornecedor. O detalhamento e as interações estão documentados em `model/layout_paginas.md`.
 
@@ -34,11 +35,11 @@ Quantidades físicas de unidades diferentes não são somadas. Cartões e compar
 - `power-query/conexao_power_bi.md`: conexão e consultas M.
 - `model/modelo_e_relacionamentos.md`: grão, cardinalidade e relacionamentos.
 - `model/dicionario_metricas.md`: regras de negócio dos indicadores.
-- `model/powerbi_measures.json`: fonte única das 89 medidas DAX.
+- `model/powerbi_measures.json`: fonte única das 93 medidas DAX.
 - `model/layout_paginas.md`: composição dos visuais e interações.
 - `power-bi/JI_Montadora_Operacional.pbip`: projeto textual versionável.
 - `power-bi/JI_Montadora_Operacional.pbix`: cópia binária para revisão no Desktop.
-- `model/build_powerbi_report.js`: geração determinística das seis páginas e dos drill-throughs.
+- `model/build_powerbi_report.js`: geração determinística das sete páginas e dos drill-throughs.
 
 ## Regeneração e validação
 
@@ -69,6 +70,7 @@ O estoque disponível já desconta empenhos. A necessidade pendente por O.S. tam
 - Todas as visões possuem filtro de tipo de serviço para separar transformação, pós-venda, instalação de acessório, outros e não informado.
 - Os filtros e gráficos gerenciais de material usam a `categoria` do cadastro de SKUs. `grupo` é preservado como detalhamento técnico, pois possui granularidade heterogênea.
 - A visão histórica usa `Mês com dados`, listando apenas meses com finalização, entrega ou retirada.
+- O fechamento de produção usa a data efetiva de término das etapas aplicáveis, com setores normalizados e eventos independentes de finalização e entrega; os gráficos exibem os recortes semanal, mensal e anual.
 
 ## Estado validado em 08/08/2026
 

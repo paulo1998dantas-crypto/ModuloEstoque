@@ -64,6 +64,23 @@ $historyMonthColumns = @(
 if (-not @($metadata | Where-Object table_name -eq 'dim_mes_historico').Count) {
     $metadata = @($metadata) + $historyMonthColumns
 }
+
+$productionProgressColumns = @(
+    [pscustomobject]@{ table_name = 'fato_progresso_producao'; column_name = 'evento_id'; ordinal_position = 1; data_type = 'text'; is_nullable = 'NO' },
+    [pscustomobject]@{ table_name = 'fato_progresso_producao'; column_name = 'work_order_id'; ordinal_position = 2; data_type = 'uuid'; is_nullable = 'NO' },
+    [pscustomobject]@{ table_name = 'fato_progresso_producao'; column_name = 'data_evento'; ordinal_position = 3; data_type = 'date'; is_nullable = 'NO' },
+    [pscustomobject]@{ table_name = 'fato_progresso_producao'; column_name = 'data_hora'; ordinal_position = 4; data_type = 'timestamp with time zone'; is_nullable = 'YES' },
+    [pscustomobject]@{ table_name = 'fato_progresso_producao'; column_name = 'tipo_evento'; ordinal_position = 5; data_type = 'text'; is_nullable = 'NO' },
+    [pscustomobject]@{ table_name = 'fato_progresso_producao'; column_name = 'setor'; ordinal_position = 6; data_type = 'text'; is_nullable = 'NO' },
+    [pscustomobject]@{ table_name = 'fato_progresso_producao'; column_name = 'etapa'; ordinal_position = 7; data_type = 'text'; is_nullable = 'NO' },
+    [pscustomobject]@{ table_name = 'fato_progresso_producao'; column_name = 'ano'; ordinal_position = 8; data_type = 'integer'; is_nullable = 'NO' },
+    [pscustomobject]@{ table_name = 'fato_progresso_producao'; column_name = 'ano_mes'; ordinal_position = 9; data_type = 'text'; is_nullable = 'NO' },
+    [pscustomobject]@{ table_name = 'fato_progresso_producao'; column_name = 'semana_inicio'; ordinal_position = 10; data_type = 'date'; is_nullable = 'NO' },
+    [pscustomobject]@{ table_name = 'fato_progresso_producao'; column_name = 'semana_ano'; ordinal_position = 11; data_type = 'text'; is_nullable = 'NO' }
+)
+if (-not @($metadata | Where-Object table_name -eq 'fato_progresso_producao').Count) {
+    $metadata = @($metadata) + $productionProgressColumns
+}
 $viewNames = @($metadata | Select-Object -ExpandProperty table_name -Unique)
 
 $server = New-Object Microsoft.AnalysisServices.Tabular.Server
@@ -196,6 +213,7 @@ in
         @('dim_ordem_servico', 'work_order_id', 'fato_empenhos_abertos', 'work_order_id'),
         @('dim_ordem_servico', 'work_order_id', 'fato_movimentacoes_estoque', 'work_order_id'),
         @('dim_ordem_servico', 'work_order_id', 'fato_compras_transito', 'work_order_id'),
+        @('dim_ordem_servico', 'work_order_id', 'fato_progresso_producao', 'work_order_id'),
         @('dCalendario', 'Data', 'fato_movimentacoes_estoque', 'data'),
         @('dCalendario', 'Data', 'fato_inventarios', 'data_contagem'),
         @('dCalendario', 'Data', 'fato_compras_transito', 'data_necessidade'),
@@ -205,6 +223,7 @@ in
         @('dCalendario', 'Data', 'fato_historico_conclusao', 'data_finalizacao'),
         @('dCalendario', 'Data', 'fato_historico_conclusao', 'data_entrega', $false),
         @('dCalendario', 'Data', 'fato_historico_conclusao', 'data_retirada', $false),
+        @('dCalendario', 'Data', 'fato_progresso_producao', 'data_evento'),
         @('dim_mes_historico', 'ano_mes', 'dCalendario', 'AnoMes'),
         @('dim_ordem_servico', 'work_order_id', 'fato_historico_conclusao', 'work_order_id')
     )

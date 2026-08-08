@@ -157,6 +157,14 @@ relationship rel_dim_ordem_servico_fato_historico_conclusao_work_order_id
 	fromColumn: fato_historico_conclusao.work_order_id
 	toColumn: dim_ordem_servico.work_order_id
 
+relationship rel_dim_ordem_servico_fato_progresso_producao_work_order_id
+	fromColumn: fato_progresso_producao.work_order_id
+	toColumn: dim_ordem_servico.work_order_id
+
+relationship rel_dCalendario_fato_progresso_producao_data_evento
+	fromColumn: fato_progresso_producao.data_evento
+	toColumn: dCalendario.Data
+
 relationship rel_dim_mes_historico_dCalendario_AnoMes
 	fromColumn: dCalendario.AnoMes
 	toColumn: dim_mes_historico.ano_mes

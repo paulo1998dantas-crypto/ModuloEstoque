@@ -10,12 +10,13 @@ model Model
 
 annotation __PBI_TimeIntelligenceEnabled = 1
 
-annotation PBI_QueryOrder = ["dim_ordem_servico","dim_sku","fato_compras_transito","fato_empenhos_abertos","fato_estoque_atual","fato_etapas_producao","fato_forecast","fato_forecast_necessidades","fato_historico_conclusao","fato_inventarios","fato_movimentacoes_estoque","fato_mrp","fato_necessidades_os","fato_recebimentos_inspecao","dCalendario"]
+annotation PBI_QueryOrder = ["dim_ordem_servico","dim_sku","dim_mes_historico","fato_compras_transito","fato_empenhos_abertos","fato_estoque_atual","fato_etapas_producao","fato_forecast","fato_forecast_necessidades","fato_historico_conclusao","fato_inventarios","fato_movimentacoes_estoque","fato_mrp","fato_necessidades_os","fato_progresso_producao","fato_recebimentos_inspecao","dCalendario"]
 
 annotation PBI_ProTooling = ["DevMode"]
 
 ref table dim_ordem_servico
 ref table dim_sku
+ref table dim_mes_historico
 ref table fato_compras_transito
 ref table fato_empenhos_abertos
 ref table fato_estoque_atual
@@ -26,6 +27,7 @@ ref table fato_inventarios
 ref table fato_movimentacoes_estoque
 ref table fato_mrp
 ref table fato_necessidades_os
+ref table fato_progresso_producao
 ref table fato_recebimentos_inspecao
 ref table dCalendario
 ref table DateTableTemplate_4cfa02b6-03d2-4b63-bfc4-da65bf86ec3c
