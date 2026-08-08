@@ -1,0 +1,41 @@
+/// Meses que possuem evento historico (finalizacao, entrega ou retirada).
+table dim_mes_historico
+	lineageTag: 5fe02d2d-6ff3-491c-9ddd-81c69a0f151e
+
+	column data_mes
+		dataType: dateTime
+		formatString: dd/MM/yyyy
+		lineageTag: 2c57b2b7-e048-466d-a1f5-c6e81743c105
+		summarizeBy: none
+		sourceColumn: data_mes
+
+	column ano_mes
+		dataType: string
+		lineageTag: 0b0a4bce-a3b7-4547-8f2b-712571363cdc
+		summarizeBy: none
+		sourceColumn: ano_mes
+
+	column ano
+		dataType: int64
+		formatString: 0
+		lineageTag: 3ddba644-59cd-4dc1-b768-aeb5627503c7
+		summarizeBy: none
+		sourceColumn: ano
+
+	column mes_numero
+		dataType: int64
+		formatString: 0
+		lineageTag: 469d3ed9-e6ca-4b2d-a6e4-73700819d4b1
+		summarizeBy: none
+		sourceColumn: mes_numero
+
+	partition dim_mes_historico = m
+		mode: import
+		source =
+				let
+				    Fonte = PostgreSQL.Database("db.rodtxswtqbsbtukmvobn.supabase.co:5432", "postgres", [CreateNavigationProperties = false]),
+				    Dados = Fonte{[Schema = "bi", Item = "dim_mes_historico"]}[Data]
+				in
+				    Dados
+
+	annotation PBI_ResultType = Table

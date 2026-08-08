@@ -1,6 +1,6 @@
 {
   "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/visualContainer/2.11.0/schema.json",
-  "name": "ae1b375aa103189857fd",
+  "name": "bcaef409a60d2c9dac7e",
   "position": {
     "x": 648,
     "y": 300,
@@ -23,11 +23,11 @@
                       "Entity": "dim_sku"
                     }
                   },
-                  "Property": "grupo"
+                  "Property": "categoria"
                 }
               },
-              "queryRef": "dim_sku.grupo",
-              "nativeQueryRef": "grupo",
+              "queryRef": "dim_sku.categoria",
+              "nativeQueryRef": "categoria",
               "active": true
             }
           ]
@@ -210,7 +210,7 @@
             "text": {
               "expr": {
                 "Literal": {
-                  "Value": "'SKUs críticos por grupo'"
+                  "Value": "'SKUs críticos por categoria'"
                 }
               }
             },

@@ -5,7 +5,7 @@ Este diretório contém a fonte versionada do BI consultivo conectado ao Supabas
 ## Arquitetura
 
 - Fonte: PostgreSQL do projeto Supabase `rodtxswtqbsbtukmvobn`.
-- Camada semântica SQL: 14 views no schema privado `bi`.
+- Camada semântica SQL: 15 views no schema privado `bi`.
 - Segurança: grupo `powerbi_reader` com `USAGE` no schema e `SELECT` nas views, sem `INSERT`, `UPDATE` ou `DELETE`.
 - Conexão: PostgreSQL direto com SSL, porta 5432, em modo **Importar**.
 - Modelo: estrela, filtros unidirecionais e nenhuma relação fato a fato.
@@ -67,6 +67,8 @@ O estoque disponível já desconta empenhos. A necessidade pendente por O.S. tam
 - O.S. impactadas por compras aguardam SKU com quantidade efetivamente em trânsito.
 - `RETIRADA` é um evento independente e não entra nos indicadores de carros finalizados ou entregues.
 - Todas as visões possuem filtro de tipo de serviço para separar transformação, pós-venda, instalação de acessório, outros e não informado.
+- Os filtros e gráficos gerenciais de material usam a `categoria` do cadastro de SKUs. `grupo` é preservado como detalhamento técnico, pois possui granularidade heterogênea.
+- A visão histórica usa `Mês com dados`, listando apenas meses com finalização, entrega ou retirada.
 
 ## Estado validado em 08/08/2026
 

@@ -1,6 +1,6 @@
 {
   "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/visualContainer/2.11.0/schema.json",
-  "name": "879300ca73a53e6b211c",
+  "name": "b65ec920201a2257c2a4",
   "position": {
     "x": 1060,
     "y": 68,
@@ -23,11 +23,11 @@
                       "Entity": "dim_sku"
                     }
                   },
-                  "Property": "grupo"
+                  "Property": "categoria"
                 }
               },
-              "queryRef": "dim_sku.grupo",
-              "nativeQueryRef": "grupo"
+              "queryRef": "dim_sku.categoria",
+              "nativeQueryRef": "categoria"
             }
           ]
         }
@@ -60,7 +60,7 @@
             "text": {
               "expr": {
                 "Literal": {
-                  "Value": "'Grupo'"
+                  "Value": "'Categoria de material'"
                 }
               }
             }
@@ -204,7 +204,7 @@
   "filterConfig": {
     "filters": [
       {
-        "name": "Filter879300ca73a53e6b211c949c",
+        "name": "Filterb65ec920201a2257c2a45c6c",
         "field": {
           "Column": {
             "Expression": {
@@ -212,7 +212,7 @@
                 "Entity": "dim_sku"
               }
             },
-            "Property": "grupo"
+            "Property": "categoria"
           }
         },
         "type": "Categorical"

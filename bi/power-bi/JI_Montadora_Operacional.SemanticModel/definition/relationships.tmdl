@@ -157,3 +157,7 @@ relationship rel_dim_ordem_servico_fato_historico_conclusao_work_order_id
 	fromColumn: fato_historico_conclusao.work_order_id
 	toColumn: dim_ordem_servico.work_order_id
 
+relationship rel_dim_mes_historico_dCalendario_AnoMes
+	fromColumn: dCalendario.AnoMes
+	toColumn: dim_mes_historico.ano_mes
+

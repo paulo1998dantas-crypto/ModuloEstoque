@@ -1,13 +1,13 @@
 {
   "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/visualContainer/2.11.0/schema.json",
-  "name": "dd1bc98df677f3d3d0ab",
+  "name": "7672ea7548fa0287975d",
   "position": {
-    "x": 1060,
+    "x": 300,
     "y": 68,
-    "z": 4,
+    "z": 2,
     "height": 80,
-    "width": 200,
-    "tabOrder": 4
+    "width": 188,
+    "tabOrder": 2
   },
   "visual": {
     "visualType": "slicer",
@@ -20,14 +20,14 @@
                 "Column": {
                   "Expression": {
                     "SourceRef": {
-                      "Entity": "dim_sku"
+                      "Entity": "dim_mes_historico"
                     }
                   },
-                  "Property": "grupo"
+                  "Property": "ano_mes"
                 }
               },
-              "queryRef": "dim_sku.grupo",
-              "nativeQueryRef": "grupo"
+              "queryRef": "dim_mes_historico.ano_mes",
+              "nativeQueryRef": "ano_mes"
             }
           ]
         }
@@ -60,7 +60,7 @@
             "text": {
               "expr": {
                 "Literal": {
-                  "Value": "'Grupo de material'"
+                  "Value": "'Mês com dados'"
                 }
               }
             }
@@ -204,15 +204,15 @@
   "filterConfig": {
     "filters": [
       {
-        "name": "Filterdd1bc98df677f3d3d0ab3aed",
+        "name": "Filter7672ea7548fa0287975d87e6",
         "field": {
           "Column": {
             "Expression": {
               "SourceRef": {
-                "Entity": "dim_sku"
+                "Entity": "dim_mes_historico"
               }
             },
-            "Property": "grupo"
+            "Property": "ano_mes"
           }
         },
         "type": "Categorical"

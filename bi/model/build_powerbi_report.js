@@ -382,11 +382,11 @@ const pageSpecs = [
   {
     key: 'cockpit', displayName: '0. Cockpit Industrial', accent: COLORS.red,
     title: 'Cockpit Industrial', subtitle: 'Riscos e decisões imediatas | atualização no refresh do modelo | modo somente leitura',
-    slicers: [{ ...col('dim_ordem_servico', 'categoria_servico'), label: 'Tipo de serviço' }, { ...col('dim_ordem_servico', 'cliente'), label: 'Cliente' }, { ...col('dim_sku', 'grupo'), label: 'Grupo de material' }],
+    slicers: [{ ...col('dim_ordem_servico', 'categoria_servico'), label: 'Tipo de serviço' }, { ...col('dim_ordem_servico', 'cliente'), label: 'Cliente' }, { ...col('dim_sku', 'categoria'), label: 'Categoria de material' }],
     measures: ['O.S. no WIP', 'O.S. Atrasadas', 'O.S. com Material Pendente', 'SKUs Críticos', 'SKUs a Comprar', 'Linhas Atrasadas'],
     charts: [
       { key: 'os_atrasadas_cliente', title: 'O.S. atrasadas por cliente', category: col('dim_ordem_servico', 'cliente'), measure: 'O.S. Atrasadas', color: COLORS.red },
-      { key: 'skus_criticos_grupo', title: 'SKUs críticos por grupo', category: col('dim_sku', 'grupo'), measure: 'SKUs Críticos', color: COLORS.blue },
+      { key: 'skus_criticos_categoria', title: 'SKUs críticos por categoria', category: col('dim_sku', 'categoria'), measure: 'SKUs Críticos', color: COLORS.blue },
     ],
     table: {
       title: 'Ações prioritárias — materiais',
@@ -398,7 +398,7 @@ const pageSpecs = [
   {
     key: 'estoque', displayName: '1. Visão Estoque', accent: COLORS.teal,
     title: 'Visão Estoque', subtitle: 'Saúde do portfólio, disponibilidade e exceções | quantidades físicas somente por U.M. única',
-    slicers: [{ ...col('dim_ordem_servico', 'categoria_servico'), label: 'Tipo de serviço' }, { ...col('dim_sku', 'unidade'), label: 'Unidade de medida' }, { ...col('dim_sku', 'grupo'), label: 'Grupo' }],
+    slicers: [{ ...col('dim_ordem_servico', 'categoria_servico'), label: 'Tipo de serviço' }, { ...col('dim_sku', 'unidade'), label: 'Unidade de medida' }, { ...col('dim_sku', 'categoria'), label: 'Categoria de material' }],
     measures: ['SKUs Ativos', 'SKUs com Saldo', 'SKUs Zerados', 'SKUs em Risco Estoque', 'SKUs Empenhados', 'Movimentações Ativas', 'Baixas Registradas'],
     charts: [
       { key: 'status_estoque', title: 'Distribuição por status de estoque', category: col('fato_estoque_atual', 'status_estoque'), measure: 'SKUs Ativos', color: COLORS.teal },
@@ -406,7 +406,7 @@ const pageSpecs = [
     ],
     table: {
       title: 'Ações de estoque — somente exceções ativas',
-      columns: [col('dim_sku', 'codigo'), col('dim_sku', 'descricao'), col('dim_sku', 'unidade'), col('dim_sku', 'grupo'), measure('Status Estoque Ação'), measure('Estoque Atual (U.M.)'), measure('Empenhado Total (U.M.)'), measure('Estoque Disponível (U.M.)')],
+      columns: [col('dim_sku', 'codigo'), col('dim_sku', 'descricao'), col('dim_sku', 'unidade'), col('dim_sku', 'categoria'), measure('Status Estoque Ação'), measure('Estoque Atual (U.M.)'), measure('Empenhado Total (U.M.)'), measure('Estoque Disponível (U.M.)')],
       sort: { entity: 'fato_mrp', property: 'Estoque Disponível (U.M.)', kind: 'Measure', direction: 'Ascending' },
       filters: [
         { entity: 'fato_estoque_atual', property: 'sku_ativo', values: [true] },
@@ -452,10 +452,10 @@ const pageSpecs = [
   {
     key: 'mrp', displayName: '4. Visão MRP', accent: COLORS.blue,
     title: 'Visão MRP I', subtitle: 'Necessidade real versus estoque e trânsito | decisão por SKU e U.M.',
-    slicers: [{ ...col('dim_ordem_servico', 'categoria_servico'), label: 'Tipo de serviço' }, { ...col('dim_sku', 'unidade'), label: 'Unidade de medida' }, { ...col('dim_sku', 'grupo'), label: 'Grupo' }],
+    slicers: [{ ...col('dim_ordem_servico', 'categoria_servico'), label: 'Tipo de serviço' }, { ...col('dim_sku', 'unidade'), label: 'Unidade de medida' }, { ...col('dim_sku', 'categoria'), label: 'Categoria de material' }],
     measures: ['SKUs com Demanda', 'SKUs em Risco Estoque', 'SKUs Críticos', 'SKUs a Comprar', 'O.S. com Material Pendente', 'O.S. Impactadas por Compra'],
     charts: [
-      { key: 'criticos_grupo', title: 'SKUs críticos por grupo', category: col('dim_sku', 'grupo'), measure: 'SKUs Críticos', color: COLORS.red },
+      { key: 'criticos_categoria', title: 'SKUs críticos por categoria', category: col('dim_sku', 'categoria'), measure: 'SKUs Críticos', color: COLORS.red },
       { key: 'os_compras_linha', title: 'O.S. impactadas por compras por linha', category: col('dim_ordem_servico', 'linha_produto'), measure: 'O.S. Impactadas por Compra', color: COLORS.amber },
     ],
     table: {
@@ -470,7 +470,7 @@ const pageSpecs = [
     title: 'Histórico de Conclusão e Entrega', subtitle: 'Produção concluída, entrega real, prazo e duração | fonte MES',
     layout: 'history',
     slicers: [
-      { ...col('dCalendario', 'AnoMes'), label: 'Mês' },
+      { ...col('dim_mes_historico', 'ano_mes'), label: 'Mês com dados' },
       { ...col('dim_ordem_servico', 'categoria_servico'), label: 'Tipo de serviço' },
       { ...col('fato_historico_conclusao', 'mercado'), label: 'Mercado' },
       { ...col('fato_historico_conclusao', 'cliente'), label: 'Cliente' },
@@ -492,7 +492,7 @@ const drillPages = [
     drill: col('dim_sku', 'codigo'),
     measures: ['Estoque Atual (U.M.)', 'Empenhado Total (U.M.)', 'Estoque Disponível (U.M.)', 'Necessidade Total (U.M.)', 'Em Trânsito (U.M.)', 'Necessidade Compra (U.M.)'],
     tables: [
-      { key: 'sku_resumo', title: 'Resumo do material', y: 220, height: 190, columns: [col('dim_sku', 'codigo'), col('dim_sku', 'descricao'), col('dim_sku', 'unidade'), col('dim_sku', 'grupo'), col('fato_estoque_atual', 'status_estoque'), measure('Prioridade MRP'), measure('Próxima Necessidade')] },
+      { key: 'sku_resumo', title: 'Resumo do material', y: 220, height: 190, columns: [col('dim_sku', 'codigo'), col('dim_sku', 'descricao'), col('dim_sku', 'unidade'), col('dim_sku', 'categoria'), col('fato_estoque_atual', 'status_estoque'), measure('Prioridade MRP'), measure('Próxima Necessidade')] },
       { key: 'sku_necessidades', title: 'O.S. que demandam o material', y: 422, height: 282, columns: [col('fato_necessidades_os', 'numero_os'), col('fato_necessidades_os', 'cliente'), col('fato_necessidades_os', 'setor'), col('fato_necessidades_os', 'data_entrega_vigente'), col('fato_necessidades_os', 'quantidade_necessaria'), col('fato_necessidades_os', 'quantidade_coberta'), col('fato_necessidades_os', 'quantidade_pendente'), col('fato_necessidades_os', 'status_necessidade')] },
     ],
   },

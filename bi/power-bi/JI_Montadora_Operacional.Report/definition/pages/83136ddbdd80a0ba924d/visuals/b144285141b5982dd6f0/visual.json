@@ -1,13 +1,13 @@
 {
   "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/visualContainer/2.11.0/schema.json",
-  "name": "4b5371baa0fabb004cce",
+  "name": "b144285141b5982dd6f0",
   "position": {
-    "x": 300,
+    "x": 1060,
     "y": 68,
-    "z": 2,
+    "z": 4,
     "height": 80,
-    "width": 188,
-    "tabOrder": 2
+    "width": 200,
+    "tabOrder": 4
   },
   "visual": {
     "visualType": "slicer",
@@ -20,14 +20,14 @@
                 "Column": {
                   "Expression": {
                     "SourceRef": {
-                      "Entity": "dCalendario"
+                      "Entity": "dim_sku"
                     }
                   },
-                  "Property": "AnoMes"
+                  "Property": "categoria"
                 }
               },
-              "queryRef": "dCalendario.AnoMes",
-              "nativeQueryRef": "AnoMes"
+              "queryRef": "dim_sku.categoria",
+              "nativeQueryRef": "categoria"
             }
           ]
         }
@@ -60,7 +60,7 @@
             "text": {
               "expr": {
                 "Literal": {
-                  "Value": "'Mês'"
+                  "Value": "'Categoria de material'"
                 }
               }
             }
@@ -204,15 +204,15 @@
   "filterConfig": {
     "filters": [
       {
-        "name": "Filter4b5371baa0fabb004cce1084",
+        "name": "Filterb144285141b5982dd6f000fd",
         "field": {
           "Column": {
             "Expression": {
               "SourceRef": {
-                "Entity": "dCalendario"
+                "Entity": "dim_sku"
               }
             },
-            "Property": "AnoMes"
+            "Property": "categoria"
           }
         },
         "type": "Categorical"

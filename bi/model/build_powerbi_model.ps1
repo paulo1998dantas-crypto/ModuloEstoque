@@ -52,6 +52,18 @@ $pbiBin = Split-Path -Parent $pbi.ExecutablePath
 [Reflection.Assembly]::LoadFrom((Join-Path $pbiBin 'Microsoft.AnalysisServices.Server.Tabular.dll')) | Out-Null
 
 $metadata = Get-Content -LiteralPath $MetadataPath -Raw -Encoding utf8 | ConvertFrom-Json
+
+# Mantém o modelo reprodutível quando o arquivo de metadados foi extraído antes
+# da dimensão de meses históricos ser adicionada à camada BI.
+$historyMonthColumns = @(
+    [pscustomobject]@{ table_name = 'dim_mes_historico'; column_name = 'data_mes'; ordinal_position = 1; data_type = 'date'; is_nullable = 'YES' },
+    [pscustomobject]@{ table_name = 'dim_mes_historico'; column_name = 'ano_mes'; ordinal_position = 2; data_type = 'text'; is_nullable = 'YES' },
+    [pscustomobject]@{ table_name = 'dim_mes_historico'; column_name = 'ano'; ordinal_position = 3; data_type = 'integer'; is_nullable = 'YES' },
+    [pscustomobject]@{ table_name = 'dim_mes_historico'; column_name = 'mes_numero'; ordinal_position = 4; data_type = 'integer'; is_nullable = 'YES' }
+)
+if (-not @($metadata | Where-Object table_name -eq 'dim_mes_historico').Count) {
+    $metadata = @($metadata) + $historyMonthColumns
+}
 $viewNames = @($metadata | Select-Object -ExpandProperty table_name -Unique)
 
 $server = New-Object Microsoft.AnalysisServices.Tabular.Server
@@ -193,6 +205,7 @@ in
         @('dCalendario', 'Data', 'fato_historico_conclusao', 'data_finalizacao'),
         @('dCalendario', 'Data', 'fato_historico_conclusao', 'data_entrega', $false),
         @('dCalendario', 'Data', 'fato_historico_conclusao', 'data_retirada', $false),
+        @('dim_mes_historico', 'ano_mes', 'dCalendario', 'AnoMes'),
         @('dim_ordem_servico', 'work_order_id', 'fato_historico_conclusao', 'work_order_id')
     )
     foreach ($definition in $relationships) {
