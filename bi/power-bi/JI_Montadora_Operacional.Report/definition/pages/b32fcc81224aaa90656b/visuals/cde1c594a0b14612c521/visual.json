@@ -1,0 +1,439 @@
+{
+  "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/visualContainer/2.11.0/schema.json",
+  "name": "cde1c594a0b14612c521",
+  "position": {
+    "x": 20,
+    "y": 156,
+    "z": 4,
+    "height": 132,
+    "width": 1240,
+    "tabOrder": 4
+  },
+  "visual": {
+    "visualType": "cardVisual",
+    "query": {
+      "queryState": {
+        "Data": {
+          "projections": [
+            {
+              "field": {
+                "Measure": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "fato_mrp"
+                    }
+                  },
+                  "Property": "Linhas em Trânsito"
+                }
+              },
+              "queryRef": "fato_mrp.Linhas em Trânsito",
+              "nativeQueryRef": "Linhas em Trânsito"
+            },
+            {
+              "field": {
+                "Measure": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "fato_mrp"
+                    }
+                  },
+                  "Property": "Valor em Trânsito"
+                }
+              },
+              "queryRef": "fato_mrp.Valor em Trânsito",
+              "nativeQueryRef": "Valor em Trânsito"
+            },
+            {
+              "field": {
+                "Measure": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "fato_mrp"
+                    }
+                  },
+                  "Property": "Linhas Atrasadas"
+                }
+              },
+              "queryRef": "fato_mrp.Linhas Atrasadas",
+              "nativeQueryRef": "Linhas Atrasadas"
+            },
+            {
+              "field": {
+                "Measure": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "fato_mrp"
+                    }
+                  },
+                  "Property": "Linhas sem Data"
+                }
+              },
+              "queryRef": "fato_mrp.Linhas sem Data",
+              "nativeQueryRef": "Linhas sem Data"
+            },
+            {
+              "field": {
+                "Measure": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "fato_mrp"
+                    }
+                  },
+                  "Property": "Linhas Data Inválida"
+                }
+              },
+              "queryRef": "fato_mrp.Linhas Data Inválida",
+              "nativeQueryRef": "Linhas Data Inválida"
+            },
+            {
+              "field": {
+                "Measure": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "fato_mrp"
+                    }
+                  },
+                  "Property": "Taxa Aprovação Média %"
+                }
+              },
+              "queryRef": "fato_mrp.Taxa Aprovação Média %",
+              "nativeQueryRef": "Taxa Aprovação Média %"
+            }
+          ]
+        }
+      }
+    },
+    "objects": {
+      "outline": [
+        {
+          "properties": {
+            "show": {
+              "expr": {
+                "Literal": {
+                  "Value": "false"
+                }
+              }
+            }
+          },
+          "selector": {
+            "id": "default"
+          }
+        }
+      ],
+      "value": [
+        {
+          "properties": {
+            "fontSize": {
+              "expr": {
+                "Literal": {
+                  "Value": "20D"
+                }
+              }
+            },
+            "bold": {
+              "expr": {
+                "Literal": {
+                  "Value": "true"
+                }
+              }
+            },
+            "fontColor": {
+              "solid": {
+                "color": {
+                  "expr": {
+                    "Literal": {
+                      "Value": "'#17212B'"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "selector": {
+            "id": "default"
+          }
+        }
+      ],
+      "label": [
+        {
+          "properties": {
+            "show": {
+              "expr": {
+                "Literal": {
+                  "Value": "true"
+                }
+              }
+            },
+            "fontSize": {
+              "expr": {
+                "Literal": {
+                  "Value": "10D"
+                }
+              }
+            },
+            "fontColor": {
+              "solid": {
+                "color": {
+                  "expr": {
+                    "Literal": {
+                      "Value": "'#667085'"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "selector": {
+            "id": "default"
+          }
+        }
+      ],
+      "cardCalloutArea": [
+        {
+          "properties": {
+            "show": {
+              "expr": {
+                "Literal": {
+                  "Value": "true"
+                }
+              }
+            },
+            "paddingUniform": {
+              "expr": {
+                "Literal": {
+                  "Value": "6L"
+                }
+              }
+            },
+            "rectangleRoundedCurve": {
+              "expr": {
+                "Literal": {
+                  "Value": "6L"
+                }
+              }
+            },
+            "backgroundTransparency": {
+              "expr": {
+                "Literal": {
+                  "Value": "100D"
+                }
+              }
+            }
+          }
+        }
+      ],
+      "layout": [
+        {
+          "properties": {
+            "style": {
+              "expr": {
+                "Literal": {
+                  "Value": "'Table'"
+                }
+              }
+            },
+            "customizeLines": {
+              "expr": {
+                "Literal": {
+                  "Value": "true"
+                }
+              }
+            },
+            "gridlineWidth": {
+              "expr": {
+                "Literal": {
+                  "Value": "1D"
+                }
+              }
+            },
+            "gridlineColor": {
+              "solid": {
+                "color": {
+                  "expr": {
+                    "Literal": {
+                      "Value": "'#D8DEE8'"
+                    }
+                  }
+                }
+              }
+            },
+            "gridlineTransparency": {
+              "expr": {
+                "Literal": {
+                  "Value": "0D"
+                }
+              }
+            }
+          },
+          "selector": {
+            "id": "default"
+          }
+        }
+      ],
+      "padding": [
+        {
+          "properties": {
+            "paddingUniform": {
+              "expr": {
+                "Literal": {
+                  "Value": "4L"
+                }
+              }
+            }
+          },
+          "selector": {
+            "id": "default"
+          }
+        }
+      ],
+      "spacing": [
+        {
+          "properties": {
+            "verticalSpacing": {
+              "expr": {
+                "Literal": {
+                  "Value": "0D"
+                }
+              }
+            }
+          },
+          "selector": {
+            "id": "default"
+          }
+        }
+      ]
+    },
+    "visualContainerObjects": {
+      "title": [
+        {
+          "properties": {
+            "show": {
+              "expr": {
+                "Literal": {
+                  "Value": "false"
+                }
+              }
+            }
+          }
+        }
+      ],
+      "background": [
+        {
+          "properties": {
+            "show": {
+              "expr": {
+                "Literal": {
+                  "Value": "true"
+                }
+              }
+            },
+            "color": {
+              "solid": {
+                "color": {
+                  "expr": {
+                    "Literal": {
+                      "Value": "'#FFFFFF'"
+                    }
+                  }
+                }
+              }
+            },
+            "transparency": {
+              "expr": {
+                "Literal": {
+                  "Value": "0D"
+                }
+              }
+            }
+          }
+        }
+      ],
+      "border": [
+        {
+          "properties": {
+            "show": {
+              "expr": {
+                "Literal": {
+                  "Value": "true"
+                }
+              }
+            },
+            "color": {
+              "solid": {
+                "color": {
+                  "expr": {
+                    "Literal": {
+                      "Value": "'#D8DEE8'"
+                    }
+                  }
+                }
+              }
+            },
+            "radius": {
+              "expr": {
+                "Literal": {
+                  "Value": "8D"
+                }
+              }
+            },
+            "width": {
+              "expr": {
+                "Literal": {
+                  "Value": "1D"
+                }
+              }
+            }
+          }
+        }
+      ],
+      "visualHeader": [
+        {
+          "properties": {
+            "show": {
+              "expr": {
+                "Literal": {
+                  "Value": "false"
+                }
+              }
+            }
+          }
+        }
+      ],
+      "padding": [
+        {
+          "properties": {
+            "top": {
+              "expr": {
+                "Literal": {
+                  "Value": "4D"
+                }
+              }
+            },
+            "bottom": {
+              "expr": {
+                "Literal": {
+                  "Value": "4D"
+                }
+              }
+            },
+            "left": {
+              "expr": {
+                "Literal": {
+                  "Value": "4D"
+                }
+              }
+            },
+            "right": {
+              "expr": {
+                "Literal": {
+                  "Value": "4D"
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
+    "drillFilterOtherVisuals": true
+  }
+}

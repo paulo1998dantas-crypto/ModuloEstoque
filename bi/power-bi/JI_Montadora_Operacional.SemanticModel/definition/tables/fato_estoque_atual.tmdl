@@ -42,7 +42,7 @@ table fato_estoque_atual
 	column estoque_minimo
 		dataType: double
 		lineageTag: da43b542-5b9b-4b05-8133-f0bb8533b62d
-		summarizeBy: sum
+		summarizeBy: none
 		sourceColumn: estoque_minimo
 
 		annotation SummarizationSetBy = Automatic
@@ -52,7 +52,7 @@ table fato_estoque_atual
 	column estoque_atual
 		dataType: double
 		lineageTag: 0c9e45db-7b88-4a6b-a7a3-d42f1c7c9e9f
-		summarizeBy: sum
+		summarizeBy: none
 		sourceColumn: estoque_atual
 
 		annotation SummarizationSetBy = Automatic
@@ -62,7 +62,7 @@ table fato_estoque_atual
 	column empenhado_total
 		dataType: double
 		lineageTag: eeb8cdf5-03e7-47f8-99d8-1a4021c358d3
-		summarizeBy: sum
+		summarizeBy: none
 		sourceColumn: empenhado_total
 
 		annotation SummarizationSetBy = Automatic
@@ -72,7 +72,7 @@ table fato_estoque_atual
 	column empenhado_os
 		dataType: double
 		lineageTag: 99b5d06e-d7ee-45d2-a1bf-b5a7598a80cf
-		summarizeBy: sum
+		summarizeBy: none
 		sourceColumn: empenhado_os
 
 		annotation SummarizationSetBy = Automatic
@@ -82,7 +82,7 @@ table fato_estoque_atual
 	column empenhado_fluxo
 		dataType: double
 		lineageTag: be0cb918-f8ce-4bed-8ce0-2db9781031b6
-		summarizeBy: sum
+		summarizeBy: none
 		sourceColumn: empenhado_fluxo
 
 		annotation SummarizationSetBy = Automatic
@@ -92,7 +92,7 @@ table fato_estoque_atual
 	column estoque_disponivel
 		dataType: double
 		lineageTag: 5c15f5e4-c0f0-4aab-83a5-999791b5e604
-		summarizeBy: sum
+		summarizeBy: none
 		sourceColumn: estoque_disponivel
 
 		annotation SummarizationSetBy = Automatic
@@ -102,7 +102,7 @@ table fato_estoque_atual
 	column estoque_disponivel_contabil
 		dataType: double
 		lineageTag: e99e134b-d1cf-4988-91ac-aa15cedb5213
-		summarizeBy: sum
+		summarizeBy: none
 		sourceColumn: estoque_disponivel_contabil
 
 		annotation SummarizationSetBy = Automatic

@@ -1,0 +1,98 @@
+{
+  "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/page/2.1.0/schema.json",
+  "name": "c4aec6c98eeb37af1ebe",
+  "displayName": "D. Detalhe SKU",
+  "displayOption": "FitToPage",
+  "height": 720,
+  "width": 1280,
+  "objects": {
+    "background": [
+      {
+        "properties": {
+          "color": {
+            "solid": {
+              "color": {
+                "expr": {
+                  "Literal": {
+                    "Value": "'#F4F6F9'"
+                  }
+                }
+              }
+            }
+          },
+          "transparency": {
+            "expr": {
+              "Literal": {
+                "Value": "0D"
+              }
+            }
+          }
+        }
+      }
+    ],
+    "outspace": [
+      {
+        "properties": {
+          "color": {
+            "solid": {
+              "color": {
+                "expr": {
+                  "Literal": {
+                    "Value": "'#E8ECF2'"
+                  }
+                }
+              }
+            }
+          },
+          "transparency": {
+            "expr": {
+              "Literal": {
+                "Value": "0D"
+              }
+            }
+          }
+        }
+      }
+    ]
+  },
+  "visibility": "HiddenInViewMode",
+  "filterConfig": {
+    "filters": [
+      {
+        "name": "Filterd87bff6be5231a3684bb1fd2",
+        "field": {
+          "Column": {
+            "Expression": {
+              "SourceRef": {
+                "Entity": "dim_sku"
+              }
+            },
+            "Property": "codigo"
+          }
+        },
+        "type": "Categorical",
+        "howCreated": "Drillthrough"
+      }
+    ]
+  },
+  "pageBinding": {
+    "name": "Pod",
+    "type": "Drillthrough",
+    "parameters": [
+      {
+        "name": "Param_Filterd87bff6be5231a3684bb1fd2",
+        "boundFilter": "Filterd87bff6be5231a3684bb1fd2",
+        "fieldExpr": {
+          "Column": {
+            "Expression": {
+              "SourceRef": {
+                "Entity": "dim_sku"
+              }
+            },
+            "Property": "codigo"
+          }
+        }
+      }
+    ]
+  }
+}

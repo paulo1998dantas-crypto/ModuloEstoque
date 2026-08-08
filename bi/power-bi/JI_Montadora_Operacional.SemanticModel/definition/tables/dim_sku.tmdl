@@ -42,7 +42,7 @@ table dim_sku
 	column estoque_minimo
 		dataType: double
 		lineageTag: dc9c3a94-fa6c-44f0-bd92-a6f680bfb6e4
-		summarizeBy: sum
+		summarizeBy: none
 		sourceColumn: estoque_minimo
 
 		annotation SummarizationSetBy = Automatic

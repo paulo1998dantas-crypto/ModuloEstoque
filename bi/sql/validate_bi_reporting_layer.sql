@@ -50,6 +50,46 @@ with checks as (
         'necessidades_sem_sku_cadastrado',
         (select count(*)::numeric from bi.fato_necessidades_os where sku_id is null),
         0::numeric
+    union all
+    select
+        'dim_sku_sem_chave_duplicada',
+        (
+            select count(*)::numeric
+            from (
+                select sku_id
+                from bi.dim_sku
+                group by sku_id
+                having count(*) > 1
+            ) d
+        ),
+        0::numeric
+    union all
+    select
+        'dim_os_sem_chave_duplicada',
+        (
+            select count(*)::numeric
+            from (
+                select work_order_id
+                from bi.dim_ordem_servico
+                group by work_order_id
+                having count(*) > 1
+            ) d
+        ),
+        0::numeric
+    union all
+    select
+        'papel_powerbi_com_select',
+        has_table_privilege('powerbi_reader', 'bi.fato_mrp', 'SELECT')::int::numeric,
+        1::numeric
+    union all
+    select
+        'papel_powerbi_sem_escrita',
+        (
+            not has_table_privilege('powerbi_reader', 'bi.fato_mrp', 'INSERT')
+            and not has_table_privilege('powerbi_reader', 'bi.fato_mrp', 'UPDATE')
+            and not has_table_privilege('powerbi_reader', 'bi.fato_mrp', 'DELETE')
+        )::int::numeric,
+        1::numeric
 )
 select
     verificacao,
@@ -58,3 +98,16 @@ select
     esperado
 from checks
 order by verificacao;
+
+-- Alertas de qualidade: não interrompem a reconciliação, mas devem aparecer no BI.
+select
+    (select count(*) from bi.dim_sku where ativo and nullif(btrim(unidade), '') is null)
+        as skus_ativos_sem_unidade,
+    (select count(*) from bi.fato_compras_transito where em_transito and data_necessidade is null)
+        as linhas_transito_sem_data,
+    (
+        select count(*)
+        from bi.fato_compras_transito
+        where em_transito
+          and data_necessidade < date '2000-01-01'
+    ) as linhas_transito_data_invalida;

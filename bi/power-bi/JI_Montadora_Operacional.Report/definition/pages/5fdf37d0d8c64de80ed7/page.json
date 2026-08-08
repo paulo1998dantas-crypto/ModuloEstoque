@@ -1,0 +1,98 @@
+{
+  "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/page/2.1.0/schema.json",
+  "name": "5fdf37d0d8c64de80ed7",
+  "displayName": "D. Detalhe Fornecedor",
+  "displayOption": "FitToPage",
+  "height": 720,
+  "width": 1280,
+  "objects": {
+    "background": [
+      {
+        "properties": {
+          "color": {
+            "solid": {
+              "color": {
+                "expr": {
+                  "Literal": {
+                    "Value": "'#F4F6F9'"
+                  }
+                }
+              }
+            }
+          },
+          "transparency": {
+            "expr": {
+              "Literal": {
+                "Value": "0D"
+              }
+            }
+          }
+        }
+      }
+    ],
+    "outspace": [
+      {
+        "properties": {
+          "color": {
+            "solid": {
+              "color": {
+                "expr": {
+                  "Literal": {
+                    "Value": "'#E8ECF2'"
+                  }
+                }
+              }
+            }
+          },
+          "transparency": {
+            "expr": {
+              "Literal": {
+                "Value": "0D"
+              }
+            }
+          }
+        }
+      }
+    ]
+  },
+  "visibility": "HiddenInViewMode",
+  "filterConfig": {
+    "filters": [
+      {
+        "name": "Filter1f0e9350609cdbbfe178c99d",
+        "field": {
+          "Column": {
+            "Expression": {
+              "SourceRef": {
+                "Entity": "fato_compras_transito"
+              }
+            },
+            "Property": "fornecedor"
+          }
+        },
+        "type": "Categorical",
+        "howCreated": "Drillthrough"
+      }
+    ]
+  },
+  "pageBinding": {
+    "name": "Pod",
+    "type": "Drillthrough",
+    "parameters": [
+      {
+        "name": "Param_Filter1f0e9350609cdbbfe178c99d",
+        "boundFilter": "Filter1f0e9350609cdbbfe178c99d",
+        "fieldExpr": {
+          "Column": {
+            "Expression": {
+              "SourceRef": {
+                "Entity": "fato_compras_transito"
+              }
+            },
+            "Property": "fornecedor"
+          }
+        }
+      }
+    ]
+  }
+}

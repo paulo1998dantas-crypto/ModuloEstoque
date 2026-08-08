@@ -1,0 +1,570 @@
+{
+  "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/visualContainer/2.11.0/schema.json",
+  "name": "d46fe53b3624347ae1a2",
+  "position": {
+    "x": 20,
+    "y": 500,
+    "z": 7,
+    "height": 204,
+    "width": 1240,
+    "tabOrder": 7
+  },
+  "visual": {
+    "visualType": "tableEx",
+    "query": {
+      "queryState": {
+        "Values": {
+          "projections": [
+            {
+              "field": {
+                "Column": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "fato_compras_transito"
+                    }
+                  },
+                  "Property": "numero_oc"
+                }
+              },
+              "queryRef": "fato_compras_transito.numero_oc",
+              "nativeQueryRef": "numero_oc"
+            },
+            {
+              "field": {
+                "Column": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "fato_compras_transito"
+                    }
+                  },
+                  "Property": "numero_linha"
+                }
+              },
+              "queryRef": "fato_compras_transito.numero_linha",
+              "nativeQueryRef": "numero_linha"
+            },
+            {
+              "field": {
+                "Column": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "fato_compras_transito"
+                    }
+                  },
+                  "Property": "fornecedor"
+                }
+              },
+              "queryRef": "fato_compras_transito.fornecedor",
+              "nativeQueryRef": "fornecedor"
+            },
+            {
+              "field": {
+                "Column": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "fato_compras_transito"
+                    }
+                  },
+                  "Property": "codigo"
+                }
+              },
+              "queryRef": "fato_compras_transito.codigo",
+              "nativeQueryRef": "codigo"
+            },
+            {
+              "field": {
+                "Column": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "fato_compras_transito"
+                    }
+                  },
+                  "Property": "unidade"
+                }
+              },
+              "queryRef": "fato_compras_transito.unidade",
+              "nativeQueryRef": "unidade"
+            },
+            {
+              "field": {
+                "Column": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "fato_compras_transito"
+                    }
+                  },
+                  "Property": "data_necessidade"
+                }
+              },
+              "queryRef": "fato_compras_transito.data_necessidade",
+              "nativeQueryRef": "data_necessidade"
+            },
+            {
+              "field": {
+                "Measure": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "fato_mrp"
+                    }
+                  },
+                  "Property": "Dias para Remessa Válido"
+                }
+              },
+              "queryRef": "fato_mrp.Dias para Remessa Válido",
+              "nativeQueryRef": "Dias para Remessa Válido"
+            },
+            {
+              "field": {
+                "Measure": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "fato_mrp"
+                    }
+                  },
+                  "Property": "Ação Compra"
+                }
+              },
+              "queryRef": "fato_mrp.Ação Compra",
+              "nativeQueryRef": "Ação Compra"
+            },
+            {
+              "field": {
+                "Measure": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "fato_mrp"
+                    }
+                  },
+                  "Property": "Valor Linha em Trânsito"
+                }
+              },
+              "queryRef": "fato_mrp.Valor Linha em Trânsito",
+              "nativeQueryRef": "Valor Linha em Trânsito"
+            }
+          ]
+        }
+      },
+      "sortDefinition": {
+        "sort": [
+          {
+            "field": {
+              "Measure": {
+                "Expression": {
+                  "SourceRef": {
+                    "Entity": "fato_mrp"
+                  }
+                },
+                "Property": "Dias para Remessa Válido"
+              }
+            },
+            "direction": "Ascending"
+          }
+        ],
+        "isDefaultSort": true
+      }
+    },
+    "objects": {
+      "columnHeaders": [
+        {
+          "properties": {
+            "columnAdjustment": {
+              "expr": {
+                "Literal": {
+                  "Value": "'growToFit'"
+                }
+              }
+            },
+            "autoSizeColumnWidth": {
+              "expr": {
+                "Literal": {
+                  "Value": "true"
+                }
+              }
+            },
+            "backColor": {
+              "solid": {
+                "color": {
+                  "expr": {
+                    "Literal": {
+                      "Value": "'#EEF2F7'"
+                    }
+                  }
+                }
+              }
+            },
+            "fontColor": {
+              "solid": {
+                "color": {
+                  "expr": {
+                    "Literal": {
+                      "Value": "'#17212B'"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      ],
+      "values": [
+        {
+          "properties": {
+            "backColorPrimary": {
+              "solid": {
+                "color": {
+                  "expr": {
+                    "Literal": {
+                      "Value": "'#FFFFFF'"
+                    }
+                  }
+                }
+              }
+            },
+            "backColorSecondary": {
+              "solid": {
+                "color": {
+                  "expr": {
+                    "Literal": {
+                      "Value": "'#F8FAFC'"
+                    }
+                  }
+                }
+              }
+            },
+            "fontColorPrimary": {
+              "solid": {
+                "color": {
+                  "expr": {
+                    "Literal": {
+                      "Value": "'#17212B'"
+                    }
+                  }
+                }
+              }
+            },
+            "fontColorSecondary": {
+              "solid": {
+                "color": {
+                  "expr": {
+                    "Literal": {
+                      "Value": "'#17212B'"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      ],
+      "total": [
+        {
+          "properties": {
+            "totals": {
+              "expr": {
+                "Literal": {
+                  "Value": "false"
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
+    "visualContainerObjects": {
+      "title": [
+        {
+          "properties": {
+            "show": {
+              "expr": {
+                "Literal": {
+                  "Value": "true"
+                }
+              }
+            },
+            "text": {
+              "expr": {
+                "Literal": {
+                  "Value": "'Ações de compras — atraso ou ausência de data'"
+                }
+              }
+            },
+            "fontFamily": {
+              "expr": {
+                "Literal": {
+                  "Value": "'Segoe UI Semibold'"
+                }
+              }
+            },
+            "fontSize": {
+              "expr": {
+                "Literal": {
+                  "Value": "12D"
+                }
+              }
+            },
+            "fontColor": {
+              "solid": {
+                "color": {
+                  "expr": {
+                    "Literal": {
+                      "Value": "'#17212B'"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      ],
+      "background": [
+        {
+          "properties": {
+            "show": {
+              "expr": {
+                "Literal": {
+                  "Value": "true"
+                }
+              }
+            },
+            "color": {
+              "solid": {
+                "color": {
+                  "expr": {
+                    "Literal": {
+                      "Value": "'#FFFFFF'"
+                    }
+                  }
+                }
+              }
+            },
+            "transparency": {
+              "expr": {
+                "Literal": {
+                  "Value": "0D"
+                }
+              }
+            }
+          }
+        }
+      ],
+      "border": [
+        {
+          "properties": {
+            "show": {
+              "expr": {
+                "Literal": {
+                  "Value": "true"
+                }
+              }
+            },
+            "color": {
+              "solid": {
+                "color": {
+                  "expr": {
+                    "Literal": {
+                      "Value": "'#D8DEE8'"
+                    }
+                  }
+                }
+              }
+            },
+            "radius": {
+              "expr": {
+                "Literal": {
+                  "Value": "8D"
+                }
+              }
+            },
+            "width": {
+              "expr": {
+                "Literal": {
+                  "Value": "1D"
+                }
+              }
+            }
+          }
+        }
+      ],
+      "visualHeader": [
+        {
+          "properties": {
+            "show": {
+              "expr": {
+                "Literal": {
+                  "Value": "false"
+                }
+              }
+            }
+          }
+        }
+      ],
+      "padding": [
+        {
+          "properties": {
+            "top": {
+              "expr": {
+                "Literal": {
+                  "Value": "6D"
+                }
+              }
+            },
+            "bottom": {
+              "expr": {
+                "Literal": {
+                  "Value": "6D"
+                }
+              }
+            },
+            "left": {
+              "expr": {
+                "Literal": {
+                  "Value": "6D"
+                }
+              }
+            },
+            "right": {
+              "expr": {
+                "Literal": {
+                  "Value": "6D"
+                }
+              }
+            }
+          }
+        }
+      ],
+      "stylePreset": [
+        {
+          "properties": {
+            "name": {
+              "expr": {
+                "Literal": {
+                  "Value": "'None'"
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
+    "drillFilterOtherVisuals": true
+  },
+  "filterConfig": {
+    "filters": [
+      {
+        "name": "Filter7c752fd868166a4470b01221",
+        "field": {
+          "Column": {
+            "Expression": {
+              "SourceRef": {
+                "Entity": "fato_compras_transito"
+              }
+            },
+            "Property": "em_transito"
+          }
+        },
+        "type": "Categorical",
+        "filter": {
+          "Version": 2,
+          "From": [
+            {
+              "Name": "f19fa1",
+              "Entity": "fato_compras_transito",
+              "Type": 0
+            }
+          ],
+          "Where": [
+            {
+              "Condition": {
+                "In": {
+                  "Expressions": [
+                    {
+                      "Column": {
+                        "Expression": {
+                          "SourceRef": {
+                            "Source": "f19fa1"
+                          }
+                        },
+                        "Property": "em_transito"
+                      }
+                    }
+                  ],
+                  "Values": [
+                    [
+                      {
+                        "Literal": {
+                          "Value": "true"
+                        }
+                      }
+                    ]
+                  ]
+                }
+              }
+            }
+          ]
+        },
+        "howCreated": "User"
+      },
+      {
+        "name": "Filter8ea49fe4e67a8f004787d2e9",
+        "field": {
+          "Column": {
+            "Expression": {
+              "SourceRef": {
+                "Entity": "fato_compras_transito"
+              }
+            },
+            "Property": "situacao_transito"
+          }
+        },
+        "type": "Categorical",
+        "filter": {
+          "Version": 2,
+          "From": [
+            {
+              "Name": "f38ede",
+              "Entity": "fato_compras_transito",
+              "Type": 0
+            }
+          ],
+          "Where": [
+            {
+              "Condition": {
+                "In": {
+                  "Expressions": [
+                    {
+                      "Column": {
+                        "Expression": {
+                          "SourceRef": {
+                            "Source": "f38ede"
+                          }
+                        },
+                        "Property": "situacao_transito"
+                      }
+                    }
+                  ],
+                  "Values": [
+                    [
+                      {
+                        "Literal": {
+                          "Value": "'ATRASADA'"
+                        }
+                      }
+                    ],
+                    [
+                      {
+                        "Literal": {
+                          "Value": "'SEM DATA'"
+                        }
+                      }
+                    ]
+                  ]
+                }
+              }
+            }
+          ]
+        },
+        "howCreated": "User"
+      }
+    ]
+  }
+}

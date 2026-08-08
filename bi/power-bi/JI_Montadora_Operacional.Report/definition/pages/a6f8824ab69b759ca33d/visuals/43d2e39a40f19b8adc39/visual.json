@@ -1,0 +1,563 @@
+{
+  "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/visualContainer/2.11.0/schema.json",
+  "name": "43d2e39a40f19b8adc39",
+  "position": {
+    "x": 20,
+    "y": 500,
+    "z": 7,
+    "height": 204,
+    "width": 1240,
+    "tabOrder": 7
+  },
+  "visual": {
+    "visualType": "tableEx",
+    "query": {
+      "queryState": {
+        "Values": {
+          "projections": [
+            {
+              "field": {
+                "Column": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "dim_sku"
+                    }
+                  },
+                  "Property": "codigo"
+                }
+              },
+              "queryRef": "dim_sku.codigo",
+              "nativeQueryRef": "codigo"
+            },
+            {
+              "field": {
+                "Column": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "dim_sku"
+                    }
+                  },
+                  "Property": "descricao"
+                }
+              },
+              "queryRef": "dim_sku.descricao",
+              "nativeQueryRef": "descricao"
+            },
+            {
+              "field": {
+                "Column": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "dim_sku"
+                    }
+                  },
+                  "Property": "unidade"
+                }
+              },
+              "queryRef": "dim_sku.unidade",
+              "nativeQueryRef": "unidade"
+            },
+            {
+              "field": {
+                "Column": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "dim_sku"
+                    }
+                  },
+                  "Property": "grupo"
+                }
+              },
+              "queryRef": "dim_sku.grupo",
+              "nativeQueryRef": "grupo"
+            },
+            {
+              "field": {
+                "Measure": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "fato_mrp"
+                    }
+                  },
+                  "Property": "Status Estoque Ação"
+                }
+              },
+              "queryRef": "fato_mrp.Status Estoque Ação",
+              "nativeQueryRef": "Status Estoque Ação"
+            },
+            {
+              "field": {
+                "Measure": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "fato_mrp"
+                    }
+                  },
+                  "Property": "Estoque Atual (U.M.)"
+                }
+              },
+              "queryRef": "fato_mrp.Estoque Atual (U.M.)",
+              "nativeQueryRef": "Estoque Atual (U.M.)"
+            },
+            {
+              "field": {
+                "Measure": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "fato_mrp"
+                    }
+                  },
+                  "Property": "Empenhado Total (U.M.)"
+                }
+              },
+              "queryRef": "fato_mrp.Empenhado Total (U.M.)",
+              "nativeQueryRef": "Empenhado Total (U.M.)"
+            },
+            {
+              "field": {
+                "Measure": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "fato_mrp"
+                    }
+                  },
+                  "Property": "Estoque Disponível (U.M.)"
+                }
+              },
+              "queryRef": "fato_mrp.Estoque Disponível (U.M.)",
+              "nativeQueryRef": "Estoque Disponível (U.M.)"
+            }
+          ]
+        }
+      },
+      "sortDefinition": {
+        "sort": [
+          {
+            "field": {
+              "Measure": {
+                "Expression": {
+                  "SourceRef": {
+                    "Entity": "fato_mrp"
+                  }
+                },
+                "Property": "Estoque Disponível (U.M.)"
+              }
+            },
+            "direction": "Ascending"
+          }
+        ],
+        "isDefaultSort": true
+      }
+    },
+    "objects": {
+      "columnHeaders": [
+        {
+          "properties": {
+            "columnAdjustment": {
+              "expr": {
+                "Literal": {
+                  "Value": "'growToFit'"
+                }
+              }
+            },
+            "autoSizeColumnWidth": {
+              "expr": {
+                "Literal": {
+                  "Value": "true"
+                }
+              }
+            },
+            "backColor": {
+              "solid": {
+                "color": {
+                  "expr": {
+                    "Literal": {
+                      "Value": "'#EEF2F7'"
+                    }
+                  }
+                }
+              }
+            },
+            "fontColor": {
+              "solid": {
+                "color": {
+                  "expr": {
+                    "Literal": {
+                      "Value": "'#17212B'"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      ],
+      "values": [
+        {
+          "properties": {
+            "backColorPrimary": {
+              "solid": {
+                "color": {
+                  "expr": {
+                    "Literal": {
+                      "Value": "'#FFFFFF'"
+                    }
+                  }
+                }
+              }
+            },
+            "backColorSecondary": {
+              "solid": {
+                "color": {
+                  "expr": {
+                    "Literal": {
+                      "Value": "'#F8FAFC'"
+                    }
+                  }
+                }
+              }
+            },
+            "fontColorPrimary": {
+              "solid": {
+                "color": {
+                  "expr": {
+                    "Literal": {
+                      "Value": "'#17212B'"
+                    }
+                  }
+                }
+              }
+            },
+            "fontColorSecondary": {
+              "solid": {
+                "color": {
+                  "expr": {
+                    "Literal": {
+                      "Value": "'#17212B'"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      ],
+      "total": [
+        {
+          "properties": {
+            "totals": {
+              "expr": {
+                "Literal": {
+                  "Value": "false"
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
+    "visualContainerObjects": {
+      "title": [
+        {
+          "properties": {
+            "show": {
+              "expr": {
+                "Literal": {
+                  "Value": "true"
+                }
+              }
+            },
+            "text": {
+              "expr": {
+                "Literal": {
+                  "Value": "'Ações de estoque — somente exceções ativas'"
+                }
+              }
+            },
+            "fontFamily": {
+              "expr": {
+                "Literal": {
+                  "Value": "'Segoe UI Semibold'"
+                }
+              }
+            },
+            "fontSize": {
+              "expr": {
+                "Literal": {
+                  "Value": "12D"
+                }
+              }
+            },
+            "fontColor": {
+              "solid": {
+                "color": {
+                  "expr": {
+                    "Literal": {
+                      "Value": "'#17212B'"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      ],
+      "background": [
+        {
+          "properties": {
+            "show": {
+              "expr": {
+                "Literal": {
+                  "Value": "true"
+                }
+              }
+            },
+            "color": {
+              "solid": {
+                "color": {
+                  "expr": {
+                    "Literal": {
+                      "Value": "'#FFFFFF'"
+                    }
+                  }
+                }
+              }
+            },
+            "transparency": {
+              "expr": {
+                "Literal": {
+                  "Value": "0D"
+                }
+              }
+            }
+          }
+        }
+      ],
+      "border": [
+        {
+          "properties": {
+            "show": {
+              "expr": {
+                "Literal": {
+                  "Value": "true"
+                }
+              }
+            },
+            "color": {
+              "solid": {
+                "color": {
+                  "expr": {
+                    "Literal": {
+                      "Value": "'#D8DEE8'"
+                    }
+                  }
+                }
+              }
+            },
+            "radius": {
+              "expr": {
+                "Literal": {
+                  "Value": "8D"
+                }
+              }
+            },
+            "width": {
+              "expr": {
+                "Literal": {
+                  "Value": "1D"
+                }
+              }
+            }
+          }
+        }
+      ],
+      "visualHeader": [
+        {
+          "properties": {
+            "show": {
+              "expr": {
+                "Literal": {
+                  "Value": "false"
+                }
+              }
+            }
+          }
+        }
+      ],
+      "padding": [
+        {
+          "properties": {
+            "top": {
+              "expr": {
+                "Literal": {
+                  "Value": "6D"
+                }
+              }
+            },
+            "bottom": {
+              "expr": {
+                "Literal": {
+                  "Value": "6D"
+                }
+              }
+            },
+            "left": {
+              "expr": {
+                "Literal": {
+                  "Value": "6D"
+                }
+              }
+            },
+            "right": {
+              "expr": {
+                "Literal": {
+                  "Value": "6D"
+                }
+              }
+            }
+          }
+        }
+      ],
+      "stylePreset": [
+        {
+          "properties": {
+            "name": {
+              "expr": {
+                "Literal": {
+                  "Value": "'None'"
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
+    "drillFilterOtherVisuals": true
+  },
+  "filterConfig": {
+    "filters": [
+      {
+        "name": "Filter66f6b490e407b07e79c91cb5",
+        "field": {
+          "Column": {
+            "Expression": {
+              "SourceRef": {
+                "Entity": "fato_estoque_atual"
+              }
+            },
+            "Property": "sku_ativo"
+          }
+        },
+        "type": "Categorical",
+        "filter": {
+          "Version": 2,
+          "From": [
+            {
+              "Name": "f06229",
+              "Entity": "fato_estoque_atual",
+              "Type": 0
+            }
+          ],
+          "Where": [
+            {
+              "Condition": {
+                "In": {
+                  "Expressions": [
+                    {
+                      "Column": {
+                        "Expression": {
+                          "SourceRef": {
+                            "Source": "f06229"
+                          }
+                        },
+                        "Property": "sku_ativo"
+                      }
+                    }
+                  ],
+                  "Values": [
+                    [
+                      {
+                        "Literal": {
+                          "Value": "true"
+                        }
+                      }
+                    ]
+                  ]
+                }
+              }
+            }
+          ]
+        },
+        "howCreated": "User"
+      },
+      {
+        "name": "Filter067c0783210e45686c56f801",
+        "field": {
+          "Column": {
+            "Expression": {
+              "SourceRef": {
+                "Entity": "fato_estoque_atual"
+              }
+            },
+            "Property": "status_estoque"
+          }
+        },
+        "type": "Categorical",
+        "filter": {
+          "Version": 2,
+          "From": [
+            {
+              "Name": "f43110",
+              "Entity": "fato_estoque_atual",
+              "Type": 0
+            }
+          ],
+          "Where": [
+            {
+              "Condition": {
+                "In": {
+                  "Expressions": [
+                    {
+                      "Column": {
+                        "Expression": {
+                          "SourceRef": {
+                            "Source": "f43110"
+                          }
+                        },
+                        "Property": "status_estoque"
+                      }
+                    }
+                  ],
+                  "Values": [
+                    [
+                      {
+                        "Literal": {
+                          "Value": "'ZERADO'"
+                        }
+                      }
+                    ],
+                    [
+                      {
+                        "Literal": {
+                          "Value": "'BAIXO'"
+                        }
+                      }
+                    ],
+                    [
+                      {
+                        "Literal": {
+                          "Value": "'SALDO_COMPROMETIDO'"
+                        }
+                      }
+                    ]
+                  ]
+                }
+              }
+            }
+          ]
+        },
+        "howCreated": "User"
+      }
+    ]
+  }
+}

@@ -81,11 +81,9 @@ try {
             $column.Name = $source.column_name
             $column.SourceColumn = $source.column_name
             $column.DataType = Get-TomDataType $source.data_type
+            $column.SummarizeBy = [Microsoft.AnalysisServices.Tabular.AggregateFunction]::None
             if ($source.data_type -in @('date', 'timestamp without time zone', 'timestamp with time zone')) {
                 $column.FormatString = if ($source.data_type -eq 'date') { 'dd/MM/yyyy' } else { 'dd/MM/yyyy HH:mm' }
-            }
-            if ($source.column_name -match '(^|_)id$|^numero_|^codigo$|^item$|^ano$|^mes_numero$|^semana$') {
-                $column.SummarizeBy = [Microsoft.AnalysisServices.Tabular.AggregateFunction]::None
             }
             $table.Columns.Add($column)
         }
@@ -207,41 +205,10 @@ in
     }
 
     $measureTable = $model.Tables['fato_mrp']
-    Add-Measure $measureTable 'SKUs com Saldo' 'CALCULATE(DISTINCTCOUNT(fato_estoque_atual[sku_id]), fato_estoque_atual[estoque_atual] > 0)' '1. Estoque' '0'
-    Add-Measure $measureTable 'SKUs Empenhados' 'CALCULATE(DISTINCTCOUNT(fato_estoque_atual[sku_id]), fato_estoque_atual[empenhado_total] > 0)' '1. Estoque' '0'
-    Add-Measure $measureTable 'SKUs com Disponivel' 'CALCULATE(DISTINCTCOUNT(fato_estoque_atual[sku_id]), fato_estoque_atual[estoque_disponivel] > 0)' '1. Estoque' '0'
-    Add-Measure $measureTable 'SKUs Zerados' 'CALCULATE(DISTINCTCOUNT(fato_estoque_atual[sku_id]), fato_estoque_atual[status_estoque] = "ZERADO")' '1. Estoque' '0'
-    Add-Measure $measureTable 'SKUs Baixos' 'CALCULATE(DISTINCTCOUNT(fato_estoque_atual[sku_id]), fato_estoque_atual[status_estoque] IN {"BAIXO", "SALDO_COMPROMETIDO"})' '1. Estoque' '0'
-    Add-Measure $measureTable 'Estoque Atual' 'SUM(fato_estoque_atual[estoque_atual])' '1. Estoque' '#,0.###'
-    Add-Measure $measureTable 'Empenhado Total' 'SUM(fato_estoque_atual[empenhado_total])' '1. Estoque' '#,0.###'
-    Add-Measure $measureTable 'Estoque Disponivel' 'SUM(fato_estoque_atual[estoque_disponivel])' '1. Estoque' '#,0.###'
-    Add-Measure $measureTable 'Entradas' 'CALCULATE(SUM(fato_movimentacoes_estoque[quantidade]), fato_movimentacoes_estoque[tipo] = "ENTRADA", fato_movimentacoes_estoque[movement_status] = "ATIVA")' '1. Estoque' '#,0.###'
-    Add-Measure $measureTable 'Consumo' 'ABS(CALCULATE(SUM(fato_movimentacoes_estoque[quantidade]), fato_movimentacoes_estoque[tipo] = "BAIXA", fato_movimentacoes_estoque[movement_status] = "ATIVA"))' '1. Estoque' '#,0.###'
-
-    Add-Measure $measureTable 'O.S. no WIP' 'CALCULATE(DISTINCTCOUNT(dim_ordem_servico[work_order_id]), dim_ordem_servico[em_wip] = TRUE())' '2. PCP' '0'
-    Add-Measure $measureTable 'O.S. em Producao' 'CALCULATE(DISTINCTCOUNT(dim_ordem_servico[work_order_id]), dim_ordem_servico[fase_wip] = "PRODUCAO")' '2. PCP' '0'
-    Add-Measure $measureTable 'O.S. Atrasadas' 'CALCULATE(DISTINCTCOUNT(dim_ordem_servico[work_order_id]), dim_ordem_servico[entrega_atrasada] = TRUE())' '2. PCP' '0'
-    Add-Measure $measureTable 'Avanco Medio %' 'AVERAGEX(FILTER(dim_ordem_servico, dim_ordem_servico[em_wip] = TRUE()), dim_ordem_servico[percentual_avanco]) / 100' '2. PCP' '0.0%'
-    Add-Measure $measureTable 'O.S. com Material Pendente' 'CALCULATE(DISTINCTCOUNT(fato_necessidades_os[work_order_id]), fato_necessidades_os[quantidade_pendente] > 0)' '2. PCP' '0'
-
-    Add-Measure $measureTable 'Linhas em Transito' 'CALCULATE(COUNTROWS(fato_compras_transito), fato_compras_transito[em_transito] = TRUE())' '3. Compras' '0'
-    Add-Measure $measureTable 'Valor em Transito' 'CALCULATE(SUM(fato_compras_transito[valor_pendente]), fato_compras_transito[em_transito] = TRUE())' '3. Compras' 'R$ #,0.00'
-    Add-Measure $measureTable 'Linhas Atrasadas' 'CALCULATE(COUNTROWS(fato_compras_transito), fato_compras_transito[em_transito] = TRUE(), fato_compras_transito[situacao_transito] = "ATRASADA")' '3. Compras' '0'
-    Add-Measure $measureTable 'O.C. Abertas' 'CALCULATE(DISTINCTCOUNT(fato_compras_transito[purchase_order_id]), fato_compras_transito[em_transito] = TRUE())' '3. Compras' '0'
-    Add-Measure $measureTable 'Recebido Fisico' 'CALCULATE(SUM(fato_recebimentos_inspecao[quantidade_fisica]), fato_recebimentos_inspecao[status_recebimento] = "CONFIRMADO")' '3. Compras' '#,0.###'
-    Add-Measure $measureTable 'Recebido Aprovado' 'CALCULATE(SUM(fato_recebimentos_inspecao[quantidade_aprovada]), fato_recebimentos_inspecao[status_recebimento] = "CONFIRMADO")' '3. Compras' '#,0.###'
-    Add-Measure $measureTable 'Taxa Aprovacao %' 'DIVIDE([Recebido Aprovado], [Recebido Fisico])' '3. Compras' '0.0%'
-
-    Add-Measure $measureTable 'SKUs com Demanda' 'CALCULATE(DISTINCTCOUNT(fato_mrp[sku_id]), fato_mrp[necessidade_total] > 0)' '4. MRP' '0'
-    Add-Measure $measureTable 'SKUs Cobertos' 'CALCULATE(DISTINCTCOUNT(fato_mrp[sku_id]), fato_mrp[status_mrp] = "COBERTO")' '4. MRP' '0'
-    Add-Measure $measureTable 'SKUs a Comprar' 'CALCULATE(DISTINCTCOUNT(fato_mrp[sku_id]), fato_mrp[status_mrp] = "COMPRAR")' '4. MRP' '0'
-    Add-Measure $measureTable 'Forecasts sem Estrutura' 'CALCULATE(DISTINCTCOUNT(fato_forecast[forecast_id]), fato_forecast[status] = "ATIVO", fato_forecast[possui_estrutura_materiais] = FALSE())' '4. MRP' '0'
-    Add-Measure $measureTable 'Necessidade Total' 'SUM(fato_mrp[necessidade_total])' '4. MRP' '#,0.###'
-    Add-Measure $measureTable 'Em Transito' 'SUM(fato_mrp[quantidade_transito])' '4. MRP' '#,0.###'
-    Add-Measure $measureTable 'MRP Estoque Disponivel' 'SUM(fato_mrp[estoque_disponivel])' '4. MRP' '#,0.###'
-    Add-Measure $measureTable 'Necessidade de Compra' 'SUM(fato_mrp[necessidade_compra])' '4. MRP' '#,0.###'
-    Add-Measure $measureTable 'Necessidade de Compra c/ Minimo' 'SUM(fato_mrp[necessidade_compra_com_estoque_minimo])' '4. MRP' '#,0.###'
-    Add-Measure $measureTable 'Ultima Atualizacao' 'MAX(fato_mrp[atualizado_em])' '4. MRP' 'dd/MM/yyyy HH:mm'
+    $measureDefinitions = Get-Content -LiteralPath (Join-Path $PSScriptRoot 'powerbi_measures.json') -Raw -Encoding UTF8 | ConvertFrom-Json
+    foreach ($definition in $measureDefinitions) {
+        Add-Measure $measureTable $definition.name $definition.expression $definition.folder $definition.format
+    }
 
     $model.SaveChanges()
     if ($RefreshData) {

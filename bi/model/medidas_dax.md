@@ -1,161 +1,26 @@
-# Medidas DAX iniciais
+# Medidas DAX
 
-Os nomes abaixo pressupõem que as views foram importadas com o mesmo nome do schema `bi`.
+A fonte única das medidas é [`powerbi_measures.json`](powerbi_measures.json). O arquivo contém nome, expressão DAX, formato e descrição das 77 medidas publicadas. Os scripts `sync_powerbi_tmdl.js` e `sync_powerbi_measures.ps1` mantêm o projeto PBIP e o modelo aberto no Power BI Desktop sincronizados com essa definição.
 
-## Estoque
+## Indicadores executivos
 
-```DAX
-Estoque Atual =
-SUM(fato_estoque_atual[estoque_atual])
+- Estoque: `SKUs Ativos`, `SKUs com Saldo`, `SKUs Zerados`, `SKUs em Risco Estoque`, `Movimentações Ativas` e `Baixas Registradas`.
+- PCP: `O.S. no WIP`, `O.S. Atrasadas`, `% O.S. Atrasadas`, `Avanço Médio %`, `O.S. com Material Pendente` e `Forecasts Ativos`.
+- Compras: `Linhas em Trânsito`, `Valor em Trânsito`, `Linhas Atrasadas`, `Linhas sem Data`, `Linhas Data Inválida`, `O.C. Abertas` e `Taxa Aprovação Média %`.
+- MRP: `SKUs com Demanda`, `SKUs Cobertos`, `% SKUs MRP Cobertos`, `SKUs a Comprar`, `SKUs Críticos`, `SKUs Urgentes` e `O.S. Impactadas por Compra`.
 
-Empenhado Total =
-SUM(fato_estoque_atual[empenhado_total])
+## Quantidades físicas protegidas por unidade
 
-Empenhado O.S. =
-IF(HASONEVALUE(dim_sku[unidade]), SUM(fato_estoque_atual[empenhado_os]))
+As medidas `Estoque Atual (U.M.)`, `Empenhado Total (U.M.)`, `Estoque Disponível (U.M.)`, `Entradas (U.M.)`, `Consumo (U.M.)`, `Necessidade Total (U.M.)`, `Em Trânsito (U.M.)`, `Estoque Disponível MRP (U.M.)` e `Necessidade Compra (U.M.)` usam `HASONEVALUE(dim_sku[unidade])`.
 
-Empenhado em Fluxo =
-IF(HASONEVALUE(dim_sku[unidade]), SUM(fato_estoque_atual[empenhado_fluxo]))
+Sem uma única unidade selecionada, elas retornam `BLANK()`. Isso evita resultados fisicamente inválidos, como somar peças, metros e quilogramas. Os aliases legados permanecem por compatibilidade e obedecem à mesma proteção.
 
-Estoque Disponível =
-SUM(fato_estoque_atual[estoque_disponivel])
+## Regras operacionais relevantes
 
-SKUs com Saldo =
-CALCULATE(DISTINCTCOUNT(fato_estoque_atual[sku_id]), fato_estoque_atual[estoque_atual] > 0)
+- `Linhas Atrasadas` considera somente linhas em trânsito com data válida entre 01/01/2000 e ontem.
+- `Linhas Data Inválida` evidencia datas muito anteriores ao horizonte operacional.
+- `Dias para Remessa Válido` suprime durações absurdas causadas por datas inválidas.
+- `Prioridade MRP` classifica compra vencida como **CRÍTICO**, necessidade nos próximos sete dias como **URGENTE** e as demais como **ATENÇÃO**.
+- `Taxa Aprovação Média %` calcula a média da proporção aprovada por linha confirmada, sem misturar quantidades de unidades diferentes.
 
-SKUs Empenhados =
-CALCULATE(DISTINCTCOUNT(fato_estoque_atual[sku_id]), fato_estoque_atual[empenhado_total] > 0)
-
-SKUs com Disponível =
-CALCULATE(DISTINCTCOUNT(fato_estoque_atual[sku_id]), fato_estoque_atual[estoque_disponivel] > 0)
-
-SKUs Zerados =
-CALCULATE(DISTINCTCOUNT(fato_estoque_atual[sku_id]), fato_estoque_atual[status_estoque] = "ZERADO")
-
-SKUs Baixos =
-CALCULATE(DISTINCTCOUNT(fato_estoque_atual[sku_id]), fato_estoque_atual[status_estoque] IN {"BAIXO", "SALDO_COMPROMETIDO"})
-
-Entradas =
-CALCULATE(
-    SUM(fato_movimentacoes_estoque[quantidade]),
-    fato_movimentacoes_estoque[tipo] = "ENTRADA",
-    fato_movimentacoes_estoque[movement_status] = "ATIVA"
-)
-
-Consumo =
-ABS(CALCULATE(
-    SUM(fato_movimentacoes_estoque[quantidade]),
-    fato_movimentacoes_estoque[tipo] = "BAIXA",
-    fato_movimentacoes_estoque[movement_status] = "ATIVA"
-))
-
-Divergência Inventário = SUM(fato_inventarios[diferenca])
-```
-
-## PCP
-
-```DAX
-O.S. no WIP =
-CALCULATE(DISTINCTCOUNT(dim_ordem_servico[work_order_id]), dim_ordem_servico[em_wip] = TRUE())
-
-O.S. em Produção =
-CALCULATE(DISTINCTCOUNT(dim_ordem_servico[work_order_id]), dim_ordem_servico[fase_wip] = "PRODUCAO")
-
-O.S. Atrasadas =
-CALCULATE(DISTINCTCOUNT(dim_ordem_servico[work_order_id]), dim_ordem_servico[entrega_atrasada] = TRUE())
-
-Avanço Médio % =
-AVERAGEX(FILTER(dim_ordem_servico, dim_ordem_servico[em_wip] = TRUE()), dim_ordem_servico[percentual_avanco])
-
-Necessidade O.S. Bruta =
-IF(HASONEVALUE(dim_sku[unidade]), SUM(fato_necessidades_os[quantidade_necessaria]))
-
-Cobertura O.S. =
-IF(HASONEVALUE(dim_sku[unidade]), SUM(fato_necessidades_os[quantidade_coberta]))
-
-Necessidade O.S. Pendente =
-IF(HASONEVALUE(dim_sku[unidade]), SUM(fato_necessidades_os[quantidade_pendente]))
-
-O.S. com Material Pendente =
-CALCULATE(
-    DISTINCTCOUNT(fato_necessidades_os[work_order_id]),
-    fato_necessidades_os[quantidade_pendente] > 0
-)
-```
-
-## Compras e recebimentos
-
-```DAX
-Quantidade em Trânsito =
-IF(
-    HASONEVALUE(dim_sku[unidade]),
-    CALCULATE(SUM(fato_compras_transito[quantidade_pendente]), fato_compras_transito[em_transito] = TRUE())
-)
-
-Linhas em Trânsito =
-CALCULATE(COUNTROWS(fato_compras_transito), fato_compras_transito[em_transito] = TRUE())
-
-Valor em Trânsito =
-CALCULATE(SUM(fato_compras_transito[valor_pendente]), fato_compras_transito[em_transito] = TRUE())
-
-Linhas Atrasadas =
-CALCULATE(COUNTROWS(fato_compras_transito), fato_compras_transito[em_transito] = TRUE(), fato_compras_transito[situacao_transito] = "ATRASADA")
-
-O.C. Abertas =
-CALCULATE(DISTINCTCOUNT(fato_compras_transito[purchase_order_id]), fato_compras_transito[em_transito] = TRUE())
-
-Recebido Físico =
-CALCULATE(SUM(fato_recebimentos_inspecao[quantidade_fisica]), fato_recebimentos_inspecao[status_recebimento] = "CONFIRMADO")
-
-Recebido Aprovado =
-CALCULATE(SUM(fato_recebimentos_inspecao[quantidade_aprovada]), fato_recebimentos_inspecao[status_recebimento] = "CONFIRMADO")
-
-Recebido Condicional =
-CALCULATE(SUM(fato_recebimentos_inspecao[quantidade_condicional]), fato_recebimentos_inspecao[status_recebimento] = "CONFIRMADO")
-
-Recebido Rejeitado =
-CALCULATE(SUM(fato_recebimentos_inspecao[quantidade_rejeitada]), fato_recebimentos_inspecao[status_recebimento] = "CONFIRMADO")
-
-Taxa Aprovação % = DIVIDE([Recebido Aprovado], [Recebido Físico])
-```
-
-## Forecast e MRP
-
-```DAX
-Forecasts Ativos =
-CALCULATE(DISTINCTCOUNT(fato_forecast[forecast_id]), fato_forecast[status] = "ATIVO")
-
-Forecasts sem Estrutura =
-CALCULATE(DISTINCTCOUNT(fato_forecast[forecast_id]), fato_forecast[status] = "ATIVO", fato_forecast[possui_estrutura_materiais] = FALSE())
-
-Necessidade Total =
-SUM(fato_mrp[necessidade_total])
-
-Em Trânsito =
-SUM(fato_mrp[quantidade_transito])
-
-MRP Estoque Disponível =
-SUM(fato_mrp[estoque_disponivel])
-
-Saldo Projetado =
-IF(HASONEVALUE(dim_sku[unidade]), SUM(fato_mrp[saldo_projetado]))
-
-Necessidade de Compra =
-SUM(fato_mrp[necessidade_compra])
-
-Necessidade de Compra c/ Mínimo =
-SUM(fato_mrp[necessidade_compra_com_estoque_minimo])
-
-SKUs com Demanda =
-CALCULATE(DISTINCTCOUNT(fato_mrp[sku_id]), fato_mrp[necessidade_total] > 0)
-
-SKUs Cobertos =
-CALCULATE(DISTINCTCOUNT(fato_mrp[sku_id]), fato_mrp[status_mrp] = "COBERTO")
-
-SKUs a Comprar =
-CALCULATE(DISTINCTCOUNT(fato_mrp[sku_id]), fato_mrp[status_mrp] = "COMPRAR")
-
-Última Atualização = MAX(fato_mrp[atualizado_em])
-```
-
-Formatar percentuais com uma casa decimal, quantidades com até três casas e valores monetários em BRL. Os cartões executivos somam todas as unidades para atender à visão global solicitada; use o filtro de unidade quando a comparação física entre SKUs exigir homogeneidade.
+Percentuais usam uma casa decimal, quantidades até três casas e valores monetários usam BRL.

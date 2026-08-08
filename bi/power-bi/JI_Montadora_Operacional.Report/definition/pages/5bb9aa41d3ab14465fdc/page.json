@@ -1,0 +1,98 @@
+{
+  "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/page/2.1.0/schema.json",
+  "name": "5bb9aa41d3ab14465fdc",
+  "displayName": "D. Detalhe O.S.",
+  "displayOption": "FitToPage",
+  "height": 720,
+  "width": 1280,
+  "objects": {
+    "background": [
+      {
+        "properties": {
+          "color": {
+            "solid": {
+              "color": {
+                "expr": {
+                  "Literal": {
+                    "Value": "'#F4F6F9'"
+                  }
+                }
+              }
+            }
+          },
+          "transparency": {
+            "expr": {
+              "Literal": {
+                "Value": "0D"
+              }
+            }
+          }
+        }
+      }
+    ],
+    "outspace": [
+      {
+        "properties": {
+          "color": {
+            "solid": {
+              "color": {
+                "expr": {
+                  "Literal": {
+                    "Value": "'#E8ECF2'"
+                  }
+                }
+              }
+            }
+          },
+          "transparency": {
+            "expr": {
+              "Literal": {
+                "Value": "0D"
+              }
+            }
+          }
+        }
+      }
+    ]
+  },
+  "visibility": "HiddenInViewMode",
+  "filterConfig": {
+    "filters": [
+      {
+        "name": "Filterf395c272197f2aad85e5cbe9",
+        "field": {
+          "Column": {
+            "Expression": {
+              "SourceRef": {
+                "Entity": "dim_ordem_servico"
+              }
+            },
+            "Property": "numero_os"
+          }
+        },
+        "type": "Categorical",
+        "howCreated": "Drillthrough"
+      }
+    ]
+  },
+  "pageBinding": {
+    "name": "Pod",
+    "type": "Drillthrough",
+    "parameters": [
+      {
+        "name": "Param_Filterf395c272197f2aad85e5cbe9",
+        "boundFilter": "Filterf395c272197f2aad85e5cbe9",
+        "fieldExpr": {
+          "Column": {
+            "Expression": {
+              "SourceRef": {
+                "Entity": "dim_ordem_servico"
+              }
+            },
+            "Property": "numero_os"
+          }
+        }
+      }
+    ]
+  }
+}

@@ -41,17 +41,18 @@ try {
     $model = $server.Databases[0].Model
     $table = $model.Tables['fato_mrp']
 
-    Set-Measure $table 'Estoque Atual' 'SUM(fato_estoque_atual[estoque_atual])' '1. Estoque' '#,0.###'
-    Set-Measure $table 'Empenhado Total' 'SUM(fato_estoque_atual[empenhado_total])' '1. Estoque' '#,0.###'
-    Set-Measure $table 'Estoque Disponivel' 'SUM(fato_estoque_atual[estoque_disponivel])' '1. Estoque' '#,0.###'
-    Set-Measure $table 'Entradas' 'CALCULATE(SUM(fato_movimentacoes_estoque[quantidade]), fato_movimentacoes_estoque[tipo] = "ENTRADA", fato_movimentacoes_estoque[movement_status] = "ATIVA")' '1. Estoque' '#,0.###'
-    Set-Measure $table 'Consumo' 'ABS(CALCULATE(SUM(fato_movimentacoes_estoque[quantidade]), fato_movimentacoes_estoque[tipo] = "BAIXA", fato_movimentacoes_estoque[movement_status] = "ATIVA"))' '1. Estoque' '#,0.###'
+    $measureDefinitions = Get-Content -LiteralPath (Join-Path $PSScriptRoot 'powerbi_measures.json') -Raw -Encoding UTF8 | ConvertFrom-Json
+    foreach ($definition in $measureDefinitions) {
+        Set-Measure $table $definition.name $definition.expression $definition.folder $definition.format
+    }
 
-    Set-Measure $table 'Necessidade Total' 'SUM(fato_mrp[necessidade_total])' '4. MRP' '#,0.###'
-    Set-Measure $table 'Em Transito' 'SUM(fato_mrp[quantidade_transito])' '4. MRP' '#,0.###'
-    Set-Measure $table 'MRP Estoque Disponivel' 'SUM(fato_mrp[estoque_disponivel])' '4. MRP' '#,0.###'
-    Set-Measure $table 'Necessidade de Compra' 'SUM(fato_mrp[necessidade_compra])' '4. MRP' '#,0.###'
-    Set-Measure $table 'Necessidade de Compra c/ Minimo' 'SUM(fato_mrp[necessidade_compra_com_estoque_minimo])' '4. MRP' '#,0.###'
+    foreach ($modelTable in $model.Tables) {
+        foreach ($column in $modelTable.Columns) {
+            if ($column -is [Microsoft.AnalysisServices.Tabular.DataColumn]) {
+                $column.SummarizeBy = [Microsoft.AnalysisServices.Tabular.AggregateFunction]::None
+            }
+        }
+    }
 
     $model.SaveChanges()
     Write-Output "MEASURES_OK count=$($table.Measures.Count) port=$port"

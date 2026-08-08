@@ -139,7 +139,7 @@ table fato_recebimentos_inspecao
 	column quantidade_esperada
 		dataType: double
 		lineageTag: 516377d0-bed8-4435-b6bd-ce1ee923ea30
-		summarizeBy: sum
+		summarizeBy: none
 		sourceColumn: quantidade_esperada
 
 		annotation SummarizationSetBy = Automatic
@@ -149,7 +149,7 @@ table fato_recebimentos_inspecao
 	column quantidade_recebida_anterior
 		dataType: double
 		lineageTag: c51f832c-0505-43a2-980b-bd1eaa6b2450
-		summarizeBy: sum
+		summarizeBy: none
 		sourceColumn: quantidade_recebida_anterior
 
 		annotation SummarizationSetBy = Automatic
@@ -159,7 +159,7 @@ table fato_recebimentos_inspecao
 	column saldo_pendente
 		dataType: double
 		lineageTag: b3d6e207-c3dc-4a36-82de-d5c7df41eee8
-		summarizeBy: sum
+		summarizeBy: none
 		sourceColumn: saldo_pendente
 
 		annotation SummarizationSetBy = Automatic
@@ -169,7 +169,7 @@ table fato_recebimentos_inspecao
 	column quantidade_fisica
 		dataType: double
 		lineageTag: c2e4aeb7-2369-4f56-b3bb-90d4991a5ab6
-		summarizeBy: sum
+		summarizeBy: none
 		sourceColumn: quantidade_fisica
 
 		annotation SummarizationSetBy = Automatic
@@ -179,7 +179,7 @@ table fato_recebimentos_inspecao
 	column quantidade_aprovada
 		dataType: double
 		lineageTag: b1804cd7-e596-43e6-bc4e-cce411558430
-		summarizeBy: sum
+		summarizeBy: none
 		sourceColumn: quantidade_aprovada
 
 		annotation SummarizationSetBy = Automatic
@@ -189,7 +189,7 @@ table fato_recebimentos_inspecao
 	column quantidade_condicional
 		dataType: double
 		lineageTag: 51a5ba16-98d1-4083-99a5-7ca99b4fd60d
-		summarizeBy: sum
+		summarizeBy: none
 		sourceColumn: quantidade_condicional
 
 		annotation SummarizationSetBy = Automatic
@@ -199,7 +199,7 @@ table fato_recebimentos_inspecao
 	column quantidade_rejeitada
 		dataType: double
 		lineageTag: 6f0567a9-eb5c-4944-a105-faac4315518f
-		summarizeBy: sum
+		summarizeBy: none
 		sourceColumn: quantidade_rejeitada
 
 		annotation SummarizationSetBy = Automatic
@@ -297,7 +297,7 @@ table fato_recebimentos_inspecao
 	column valor_unitario_pedido
 		dataType: double
 		lineageTag: 699024d9-a3fe-4edf-b665-eaeb641de43e
-		summarizeBy: sum
+		summarizeBy: none
 		sourceColumn: valor_unitario_pedido
 
 		annotation SummarizationSetBy = Automatic
@@ -307,7 +307,7 @@ table fato_recebimentos_inspecao
 	column valor_unitario_real
 		dataType: double
 		lineageTag: ac422b89-9769-44d0-b649-24085c00272a
-		summarizeBy: sum
+		summarizeBy: none
 		sourceColumn: valor_unitario_real
 
 		annotation SummarizationSetBy = Automatic

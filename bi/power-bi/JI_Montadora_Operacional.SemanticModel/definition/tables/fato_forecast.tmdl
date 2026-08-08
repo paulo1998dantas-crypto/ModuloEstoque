@@ -11,7 +11,7 @@ table fato_forecast
 	column numero_forecast
 		dataType: int64
 		lineageTag: 16686e3a-74d3-4743-a390-e025093da3f2
-		summarizeBy: sum
+		summarizeBy: none
 		sourceColumn: numero_forecast
 
 		annotation SummarizationSetBy = Automatic
@@ -118,7 +118,7 @@ table fato_forecast
 	column quantidade_planejada
 		dataType: double
 		lineageTag: f8e94329-be4b-4a3f-886f-3f1bf66f46da
-		summarizeBy: sum
+		summarizeBy: none
 		sourceColumn: quantidade_planejada
 
 		annotation SummarizationSetBy = Automatic
@@ -128,7 +128,7 @@ table fato_forecast
 	column probabilidade
 		dataType: int64
 		lineageTag: 5193feef-739b-406e-a43d-e6f9be5146d9
-		summarizeBy: sum
+		summarizeBy: none
 		sourceColumn: probabilidade
 
 		annotation SummarizationSetBy = Automatic
@@ -136,7 +136,7 @@ table fato_forecast
 	column quantidade_ponderada
 		dataType: double
 		lineageTag: 4025152c-b38c-4db1-bf12-8119cfe120dd
-		summarizeBy: sum
+		summarizeBy: none
 		sourceColumn: quantidade_ponderada
 
 		annotation SummarizationSetBy = Automatic
@@ -214,7 +214,7 @@ table fato_forecast
 	column itens
 		dataType: int64
 		lineageTag: 035fcb91-4621-4c80-a71e-dfbd6d3b6938
-		summarizeBy: sum
+		summarizeBy: none
 		sourceColumn: itens
 
 		annotation SummarizationSetBy = Automatic
@@ -222,7 +222,7 @@ table fato_forecast
 	column necessidades
 		dataType: int64
 		lineageTag: 30859e68-f779-44a5-96ea-f3614c5c917f
-		summarizeBy: sum
+		summarizeBy: none
 		sourceColumn: necessidades
 
 		annotation SummarizationSetBy = Automatic

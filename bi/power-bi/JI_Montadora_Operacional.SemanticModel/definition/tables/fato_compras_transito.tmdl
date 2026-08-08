@@ -93,7 +93,7 @@ table fato_compras_transito
 	column quantidade_pedida
 		dataType: double
 		lineageTag: b8d4ccd2-2af8-4ad5-99f0-c42ad7398504
-		summarizeBy: sum
+		summarizeBy: none
 		sourceColumn: quantidade_pedida
 
 		annotation SummarizationSetBy = Automatic
@@ -103,7 +103,7 @@ table fato_compras_transito
 	column quantidade_recebida
 		dataType: double
 		lineageTag: eddeb023-b30d-4e28-b75f-140b35960f99
-		summarizeBy: sum
+		summarizeBy: none
 		sourceColumn: quantidade_recebida
 
 		annotation SummarizationSetBy = Automatic
@@ -113,7 +113,7 @@ table fato_compras_transito
 	column quantidade_pendente
 		dataType: double
 		lineageTag: 458dc4d5-b46e-448c-9567-c1d15215b558
-		summarizeBy: sum
+		summarizeBy: none
 		sourceColumn: quantidade_pendente
 
 		annotation SummarizationSetBy = Automatic
@@ -123,7 +123,7 @@ table fato_compras_transito
 	column valor_unitario_pedido
 		dataType: double
 		lineageTag: db461df2-afd6-47e4-920e-b78d5093e2d1
-		summarizeBy: sum
+		summarizeBy: none
 		sourceColumn: valor_unitario_pedido
 
 		annotation SummarizationSetBy = Automatic
@@ -133,7 +133,7 @@ table fato_compras_transito
 	column valor_pedido
 		dataType: double
 		lineageTag: 9fb4343a-e45e-4abb-9a09-cb9180a4f059
-		summarizeBy: sum
+		summarizeBy: none
 		sourceColumn: valor_pedido
 
 		annotation SummarizationSetBy = Automatic
@@ -143,7 +143,7 @@ table fato_compras_transito
 	column valor_pendente
 		dataType: double
 		lineageTag: 3f4c27e9-143d-4b85-b228-0c02ac2c4a60
-		summarizeBy: sum
+		summarizeBy: none
 		sourceColumn: valor_pendente
 
 		annotation SummarizationSetBy = Automatic

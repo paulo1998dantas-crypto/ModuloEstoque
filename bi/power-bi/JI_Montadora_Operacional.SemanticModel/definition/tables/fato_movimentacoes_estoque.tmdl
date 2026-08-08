@@ -71,7 +71,7 @@ table fato_movimentacoes_estoque
 	column quantidade
 		dataType: double
 		lineageTag: ffb75304-d0b6-4afe-be70-a35db6a6bde8
-		summarizeBy: sum
+		summarizeBy: none
 		sourceColumn: quantidade
 
 		annotation SummarizationSetBy = Automatic
@@ -81,7 +81,7 @@ table fato_movimentacoes_estoque
 	column saldo_anterior
 		dataType: double
 		lineageTag: 2496e838-b63b-448c-8d4d-79cc286fc61a
-		summarizeBy: sum
+		summarizeBy: none
 		sourceColumn: saldo_anterior
 
 		annotation SummarizationSetBy = Automatic
@@ -91,7 +91,7 @@ table fato_movimentacoes_estoque
 	column saldo_posterior
 		dataType: double
 		lineageTag: ab7d0e58-3fd7-442e-85e7-fb6453c0de0c
-		summarizeBy: sum
+		summarizeBy: none
 		sourceColumn: saldo_posterior
 
 		annotation SummarizationSetBy = Automatic
@@ -101,7 +101,7 @@ table fato_movimentacoes_estoque
 	column variacao_saldo
 		dataType: double
 		lineageTag: 9bb87376-7590-411f-a500-7a3a72ae30df
-		summarizeBy: sum
+		summarizeBy: none
 		sourceColumn: variacao_saldo
 
 		annotation SummarizationSetBy = Automatic

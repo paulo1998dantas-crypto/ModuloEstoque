@@ -17,7 +17,7 @@ table fato_necessidades_os
 	column item
 		dataType: int64
 		lineageTag: d769bc7d-e158-46da-83ef-e53d7906b6dd
-		summarizeBy: sum
+		summarizeBy: none
 		sourceColumn: item
 
 		annotation SummarizationSetBy = Automatic
@@ -113,7 +113,7 @@ table fato_necessidades_os
 	column document_id
 		dataType: int64
 		lineageTag: 1ec30a06-167f-4d95-b0b3-3893b76eae6c
-		summarizeBy: sum
+		summarizeBy: none
 		sourceColumn: document_id
 
 		annotation SummarizationSetBy = Automatic
@@ -157,7 +157,7 @@ table fato_necessidades_os
 	column nivel_bom
 		dataType: int64
 		lineageTag: 32bafb6d-e586-42d3-b718-d2e9024a8c7d
-		summarizeBy: sum
+		summarizeBy: none
 		sourceColumn: nivel_bom
 
 		annotation SummarizationSetBy = Automatic
@@ -173,7 +173,7 @@ table fato_necessidades_os
 	column quantidade_necessaria
 		dataType: double
 		lineageTag: a344b798-bc54-4204-850d-b9855718ec81
-		summarizeBy: sum
+		summarizeBy: none
 		sourceColumn: quantidade_necessaria
 
 		annotation SummarizationSetBy = Automatic
@@ -183,7 +183,7 @@ table fato_necessidades_os
 	column quantidade_coberta
 		dataType: double
 		lineageTag: 6339383f-1825-4fdd-8f51-892850b0b647
-		summarizeBy: sum
+		summarizeBy: none
 		sourceColumn: quantidade_coberta
 
 		annotation SummarizationSetBy = Automatic
@@ -193,7 +193,7 @@ table fato_necessidades_os
 	column quantidade_pendente
 		dataType: double
 		lineageTag: 39f0014e-2a9b-4315-81e6-f4b0f24ab890
-		summarizeBy: sum
+		summarizeBy: none
 		sourceColumn: quantidade_pendente
 
 		annotation SummarizationSetBy = Automatic

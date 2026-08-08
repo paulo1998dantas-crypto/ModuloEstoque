@@ -60,7 +60,7 @@ table fato_empenhos_abertos
 	column quantidade_original
 		dataType: double
 		lineageTag: a538890c-1691-414b-811a-ed689f28db0d
-		summarizeBy: sum
+		summarizeBy: none
 		sourceColumn: quantidade_original
 
 		annotation SummarizationSetBy = Automatic
@@ -70,7 +70,7 @@ table fato_empenhos_abertos
 	column quantidade_baixada
 		dataType: double
 		lineageTag: b8f902f2-506b-4674-8bc3-23ce658374fb
-		summarizeBy: sum
+		summarizeBy: none
 		sourceColumn: quantidade_baixada
 
 		annotation SummarizationSetBy = Automatic
@@ -80,7 +80,7 @@ table fato_empenhos_abertos
 	column quantidade_pendente
 		dataType: double
 		lineageTag: 0c3e2bcd-cce3-465a-a317-ce13f1f82bd9
-		summarizeBy: sum
+		summarizeBy: none
 		sourceColumn: quantidade_pendente
 
 		annotation SummarizationSetBy = Automatic

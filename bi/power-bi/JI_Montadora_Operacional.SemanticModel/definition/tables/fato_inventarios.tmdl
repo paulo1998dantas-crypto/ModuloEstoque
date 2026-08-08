@@ -83,7 +83,7 @@ table fato_inventarios
 	column saldo_sistema
 		dataType: double
 		lineageTag: f75ad628-e71e-4d0b-8295-d6a148e60777
-		summarizeBy: sum
+		summarizeBy: none
 		sourceColumn: saldo_sistema
 
 		annotation SummarizationSetBy = Automatic
@@ -93,7 +93,7 @@ table fato_inventarios
 	column quantidade_contada
 		dataType: double
 		lineageTag: 10123163-e851-470e-b337-067bd591aef8
-		summarizeBy: sum
+		summarizeBy: none
 		sourceColumn: quantidade_contada
 
 		annotation SummarizationSetBy = Automatic
@@ -103,7 +103,7 @@ table fato_inventarios
 	column diferenca
 		dataType: double
 		lineageTag: 0c343790-f4e9-4f43-b788-c7f46e044a1a
-		summarizeBy: sum
+		summarizeBy: none
 		sourceColumn: diferenca
 
 		annotation SummarizationSetBy = Automatic

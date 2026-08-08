@@ -1,55 +1,38 @@
 # Modelo e relacionamentos
 
-## Modo de armazenamento
+## Armazenamento e segurança
 
-Usar **Importar** para reduzir carga na base operacional e manter navegação rápida. Agendar atualização conforme a operação; recomendação inicial: a cada 60 minutos em horário produtivo. DirectQuery fica reservado a uma fase posterior, se a latência operacional exigir.
+O modelo usa **Importar**, com conexão PostgreSQL direta por SSL. A atualização lê somente as views do schema privado `bi` por meio do papel `powerbi_reader`; esse papel não possui `INSERT`, `UPDATE` ou `DELETE` na camada consultiva. Credenciais não são versionadas.
 
-## Tabelas
+## Grãos do modelo
 
 | Tabela | Grão | Uso principal |
 |---|---|---|
-| `dim_sku` | 1 linha por SKU | Filtro comum de material |
-| `dim_ordem_servico` | 1 linha por O.S. | Cliente, veículo, WIP e prazo |
-| `fato_estoque_atual` | 1 linha por SKU | Snapshot físico, empenhado e disponível |
-| `fato_empenhos_abertos` | 1 linha por empenho aberto | Detalhe de reservas, O.S. e fluxo |
-| `fato_movimentacoes_estoque` | 1 linha por movimento | Entradas, consumo e histórico |
-| `fato_inventarios` | 1 linha por contagem | Acuracidade e divergências |
-| `fato_necessidades_os` | 1 linha por O.S./SKU | Necessidade bruta, coberta e pendente |
-| `fato_etapas_producao` | 1 linha por etapa de O.S. | WIP, fila, avanço e duração |
-| `fato_compras_transito` | 1 linha por linha de O.C. | Compra aberta e trânsito |
-| `fato_recebimentos_inspecao` | 1 linha por linha recebida | Recebimento e qualidade |
-| `fato_forecast` | 1 linha por Forecast | Demanda futura e qualidade estrutural |
-| `fato_forecast_necessidades` | 1 linha por Forecast/SKU | Explosão de material futura |
-| `fato_mrp` | 1 linha por SKU | Resultado consolidado do MRP I |
+| `dim_sku` | uma linha por SKU | filtro comum de material, grupo e unidade |
+| `dim_ordem_servico` | uma linha por O.S. | cliente, setor, veículo, WIP e prazo |
+| `fato_estoque_atual` | uma linha por SKU | snapshot físico, empenhado e disponível |
+| `fato_empenhos_abertos` | uma linha por empenho aberto | reserva por O.S. ou fluxo compartilhado |
+| `fato_movimentacoes_estoque` | uma linha por movimento | entradas, baixas e histórico |
+| `fato_inventarios` | uma linha por contagem | acuracidade e divergência |
+| `fato_necessidades_os` | uma linha por O.S./SKU | necessidade bruta, coberta e pendente |
+| `fato_etapas_producao` | uma linha por etapa de O.S. | WIP, fila, avanço e duração |
+| `fato_compras_transito` | uma linha por linha de O.C. | compra aberta e trânsito |
+| `fato_recebimentos_inspecao` | uma linha por linha recebida | recebimento e qualidade |
+| `fato_forecast` | uma linha por Forecast | demanda futura e qualidade estrutural |
+| `fato_forecast_necessidades` | uma linha por Forecast/SKU | explosão de materiais futura |
+| `fato_mrp` | uma linha por SKU | consolidação do MRP I |
+| `dCalendario` | uma linha por dia | filtro temporal compartilhado |
 
-## Relacionamentos
+## Cardinalidade e direção
 
-Criar relacionamentos de direção única, da dimensão para o fato:
+- `dim_sku[sku_id]` tem cardinalidade 1:* para todos os fatos que contêm `sku_id`.
+- `dim_ordem_servico[work_order_id]` tem cardinalidade 1:* para necessidades, empenhos, movimentos, etapas e compras.
+- `dCalendario[Data]` tem cardinalidade 1:* para a data principal de cada fato.
+- A filtragem é unidirecional, da dimensão para o fato.
+- Não existe relacionamento fato a fato. `fato_mrp` é uma consolidação governada por SKU.
 
-- `dim_sku[sku_id]` 1:* para todos os fatos que possuam `sku_id`.
-- `dim_ordem_servico[work_order_id]` 1:* para necessidades, empenhos, movimentos, etapas e compras.
-- `dCalendario[Data]` 1:* para a data principal de cada fato.
+Datas principais: movimento=`data`; inventário=`data_contagem`; compras=`data_necessidade`; recebimento=`data`; Forecast=`data_entrega_prevista`; O.S.=`data_entrega_vigente`. Datas alternativas devem ficar inativas e ser acionadas por `USERELATIONSHIP` em medidas específicas.
 
-Datas principais: movimento=`data`; inventário=`data_contagem`; compras=`data_necessidade`; recebimento=`data`; Forecast=`data_entrega_prevista`; O.S.=`data_entrega_vigente`. Datas alternativas devem usar relacionamentos inativos e `USERELATIONSHIP` nas medidas específicas.
+## Segurança semântica de quantidades
 
-Não relacionar fato com fato. `fato_mrp` já é a consolidação governada por SKU e deve permanecer ligada apenas à `dim_sku`.
-
-## Calendário
-
-```DAX
-dCalendario =
-VAR DataInicial = DATE(2024, 1, 1)
-VAR DataFinal = DATE(YEAR(TODAY()) + 2, 12, 31)
-RETURN
-ADDCOLUMNS(
-    CALENDAR(DataInicial, DataFinal),
-    "Ano", YEAR([Date]),
-    "MesNumero", MONTH([Date]),
-    "Mes", FORMAT([Date], "mmm"),
-    "AnoMes", FORMAT([Date], "yyyy-MM"),
-    "Trimestre", "T" & FORMAT([Date], "Q"),
-    "Semana", WEEKNUM([Date], 2)
-)
-```
-
-Renomear `Date` para `Data`, marcar como tabela de datas e ordenar `Mes` por `MesNumero`.
+Todas as colunas numéricas importadas estão configuradas com `summarizeBy: none`, eliminando soma implícita. Quantidades físicas são expostas somente por medidas explícitas e retornam vazio quando mais de uma unidade está no contexto. Contagens, percentuais e valores monetários permanecem consolidados no nível executivo.

@@ -20,7 +20,7 @@ table dCalendario
 		dataType: int64
 		formatString: 0
 		lineageTag: 847bbd54-fd71-45bb-a3fc-e024035bc9d2
-		summarizeBy: sum
+		summarizeBy: none
 		sourceColumn: Ano
 
 		annotation SummarizationSetBy = Automatic
@@ -29,7 +29,7 @@ table dCalendario
 		dataType: int64
 		formatString: 0
 		lineageTag: ea5d0a25-78da-4a17-88a5-4d36bb4f8779
-		summarizeBy: sum
+		summarizeBy: none
 		sourceColumn: MesNumero
 
 		annotation SummarizationSetBy = Automatic
@@ -56,7 +56,7 @@ table dCalendario
 		dataType: int64
 		formatString: 0
 		lineageTag: ce9214fa-0393-4c28-a7c3-5c6e779be4d4
-		summarizeBy: sum
+		summarizeBy: none
 		sourceColumn: Semana
 
 		annotation SummarizationSetBy = Automatic

@@ -82,7 +82,7 @@ table fato_forecast_necessidades
 	column quantidade_planejada
 		dataType: double
 		lineageTag: cc7e1570-9c7b-4e42-9b3b-7d9beb6b8bfa
-		summarizeBy: sum
+		summarizeBy: none
 		sourceColumn: quantidade_planejada
 
 		annotation SummarizationSetBy = Automatic
@@ -92,7 +92,7 @@ table fato_forecast_necessidades
 	column quantidade_ponderada
 		dataType: double
 		lineageTag: 00d69d02-6151-44a4-8ba1-aa42f10c4a01
-		summarizeBy: sum
+		summarizeBy: none
 		sourceColumn: quantidade_ponderada
 
 		annotation SummarizationSetBy = Automatic

@@ -23,7 +23,7 @@ table fato_etapas_producao
 	column item
 		dataType: int64
 		lineageTag: f9002e6a-3bb2-4398-bfa9-6630ffe7a23a
-		summarizeBy: sum
+		summarizeBy: none
 		sourceColumn: item
 
 		annotation SummarizationSetBy = Automatic
@@ -55,7 +55,7 @@ table fato_etapas_producao
 	column ordem
 		dataType: int64
 		lineageTag: a598cf12-ae05-489d-83b1-5e25bb627677
-		summarizeBy: sum
+		summarizeBy: none
 		sourceColumn: ordem
 
 		annotation SummarizationSetBy = Automatic
@@ -111,7 +111,7 @@ table fato_etapas_producao
 	column sequencia_planejada
 		dataType: int64
 		lineageTag: 725a740b-f36d-4e88-81b2-7546d9f184b2
-		summarizeBy: sum
+		summarizeBy: none
 		sourceColumn: sequencia_planejada
 
 		annotation SummarizationSetBy = Automatic
@@ -153,7 +153,7 @@ table fato_etapas_producao
 	column duracao_horas
 		dataType: double
 		lineageTag: 75755a39-0683-4ab5-9d9c-eff734143314
-		summarizeBy: sum
+		summarizeBy: none
 		sourceColumn: duracao_horas
 
 		annotation SummarizationSetBy = Automatic

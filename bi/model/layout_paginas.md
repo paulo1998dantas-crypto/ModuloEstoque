@@ -1,46 +1,55 @@
-# Layout das páginas
+# Layout do cockpit industrial
 
-Formato recomendado: 16:9, fundo claro, faixa superior com título, horário da última atualização e filtros recolhíveis. Cores semânticas: azul=informação, verde=coberto/aprovado, âmbar=atenção, vermelho=ruptura/atraso.
+O relatório usa canvas 16:9 (1280 × 720), navegação por abas, fundo claro e cores semânticas: azul para informação, verde para condição coberta, âmbar para atenção e vermelho para ruptura ou atraso. A composição é regenerada de forma determinística por `build_powerbi_report.js`.
+
+## 0. Cockpit Industrial
+
+- KPIs executivos: SKUs ativos, SKUs zerados, O.S. no WIP, O.S. atrasadas, SKUs a comprar, linhas de compra atrasadas e valor em trânsito.
+- Barras: maiores fornecedores por valor em trânsito e grupos com mais SKUs a comprar.
+- Tabela de ação: materiais com necessidade de compra, prioridade, O.S. impactadas e próxima necessidade.
+- Segmentadores: unidade de medida e cliente.
 
 ## 1. Visão Estoque
 
-- Cartões: estoque atual, empenhado total, estoque disponível, SKUs zerados e consumo.
-- Tabela comparativa de atual × empenhado × disponível por SKU.
-- Linha temporal: entradas e consumo por mês.
-- Matriz principal: SKU, descrição, grupo, localização, atual, empenhado O.S., empenhado fluxo, disponível, mínimo e status.
-- Painel inferior: divergência de inventário e últimos movimentos.
-- Drill-through SKU: histórico de movimentos e empenhos abertos daquele material.
+- KPIs: SKUs ativos, com saldo, zerados, em risco, empenhados, movimentações ativas e baixas registradas.
+- Barras: situação dos SKUs e movimentações por tipo.
+- Tabela de exceção: SKU, descrição, grupo, unidade, saldos físicos protegidos por unidade e ação recomendada.
+- Segmentadores: unidade de medida e grupo.
+- Drill-through por SKU para saldos, empenhos e histórico de movimentos.
 
 ## 2. Visão PCP
 
-- Cartões: O.S. no WIP, O.S. em produção, avanço médio, O.S. atrasadas e O.S. com material pendente.
-- Funil/faixa: Pátio → Produção → Concluída.
-- Barras: O.S. por etapa atual/etapa pendente.
-- Matriz de necessidade: O.S., cliente, item/chassi, SKU, setor, necessária, coberta e pendente.
-- Linha: demanda por data de entrega vigente, separando O.S., Forecast firme e preditivo.
-- Tabela de exceções: O.S. atrasadas, baixo avanço e materiais pendentes.
+- KPIs: O.S. no WIP, atrasadas, percentual de atraso, avanço médio, O.S. com material pendente, linhas pendentes e Forecasts ativos.
+- Barras: O.S. por fase do WIP e avanço por cliente.
+- Tabela de exceção: O.S., cliente, fase, entrega, dias, avanço, material pendente e risco.
+- Segmentadores: cliente e setor.
+- Drill-through por O.S. para necessidades e etapas produtivas.
 
 ## 3. Compras e Trânsito
 
-- Cartões: valor em trânsito, linhas em trânsito, linhas atrasadas, O.C. abertas e taxa de aprovação.
-- Colunas: trânsito por semana de necessidade.
-- Barras: valor/quantidade pendente por fornecedor.
-- Matriz: O.C., fornecedor, SKU, pedida, recebida, pendente, data, situação e O.S.
-- Qualidade: aprovado × condicional × rejeitado e divergências por fornecedor.
-- Drill-through fornecedor: histórico de entregas, atraso e inspeção.
+- KPIs: linhas em trânsito, valor em trânsito, atrasadas válidas, sem data, datas inválidas, O.C. abertas e taxa média de aprovação.
+- Barras: valor em trânsito por fornecedor e linhas por fornecedor.
+- Tabela de ação: O.C., fornecedor, SKU, situação, data, dias válidos, valor e ação recomendada.
+- Segmentadores: fornecedor e unidade de medida.
+- Drill-through por fornecedor para compras e recebimentos.
 
 ## 4. Visão MRP
 
-- Cartões: necessidade total, em trânsito, estoque disponível, necessidade de compra e SKUs a comprar.
-- Gráfico principal: colunas agrupadas por SKU com Necessidade × Disponível × Trânsito; filtro inicial `status_mrp = COMPRAR`.
-- Waterfall: necessidade → estoque disponível → trânsito → saldo projetado.
-- Matriz de ação: SKU, descrição, grupo, necessidade O.S., Forecast, disponível, trânsito, saldo projetado, compra e próxima remessa.
-- Segmentador de cenário: Base (ponderado) e Conservador (com estoque mínimo). A primeira versão publica os dois valores lado a lado; parâmetro What-if pode ser adicionado depois.
+- KPIs: SKUs com demanda, cobertos, cobertura percentual, a comprar, críticos, urgentes e O.S. impactadas.
+- Barras: prioridades do MRP e maiores grupos com necessidade de compra.
+- Tabela de ação: SKU, descrição, unidade, prioridade, necessidade, estoque, trânsito, compra, próxima necessidade e O.S. impactadas.
+- Segmentadores: unidade de medida e grupo.
+- A comparação física só aparece com uma única unidade de medida selecionada.
 
-## Filtros e interação
+## Páginas ocultas de drill-through
 
-- Globais: período, SKU/código, grupo/categoria.
-- PCP/MRP: cliente, O.S., setor.
-- Compras: fornecedor, situação do trânsito, O.C.
-- Selecionar um SKU deve cruzar todos os visuais da página.
-- Tooltips sempre exibem fórmula curta e data/hora da atualização.
+- **D. Detalhe SKU**: estoque, empenhos, movimentos e necessidade do material.
+- **D. Detalhe O.S.**: necessidade, cobertura, etapa e prazo da ordem.
+- **D. Detalhe Fornecedor**: compras em trânsito, datas e inspeções.
+
+## Interações e salvaguardas
+
+- Segmentadores compactos em modo dropdown e filtros visuais de exceção nas tabelas de ação.
+- Relacionamentos sempre fluem das dimensões para os fatos; não há relacionamento fato a fato.
+- Quantidades físicas não são somadas entre `pc`, `kg`, `m`, `m²`, `cj` ou outras unidades. Medidas físicas retornam vazio sem um único contexto de unidade.
+- Datas de remessa anteriores ao ano 2000 são classificadas como inválidas e nunca como atraso operacional.
