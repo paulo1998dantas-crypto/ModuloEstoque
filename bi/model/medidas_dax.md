@@ -1,6 +1,6 @@
 # Medidas DAX
 
-A fonte única das medidas é [`powerbi_measures.json`](powerbi_measures.json). O arquivo contém nome, expressão DAX, formato e descrição das 77 medidas publicadas. Os scripts `sync_powerbi_tmdl.js` e `sync_powerbi_measures.ps1` mantêm o projeto PBIP e o modelo aberto no Power BI Desktop sincronizados com essa definição.
+A fonte única das medidas é [`powerbi_measures.json`](powerbi_measures.json). O arquivo contém nome, expressão DAX, formato e descrição das 88 medidas publicadas. Os scripts `sync_powerbi_tmdl.js` e `sync_powerbi_measures.ps1` mantêm o projeto PBIP e o modelo aberto no Power BI Desktop sincronizados com essa definição.
 
 ## Indicadores executivos
 
@@ -8,6 +8,7 @@ A fonte única das medidas é [`powerbi_measures.json`](powerbi_measures.json). 
 - PCP: `O.S. no WIP`, `O.S. Atrasadas`, `% O.S. Atrasadas`, `Avanço Médio %`, `O.S. com Material Pendente` e `Forecasts Ativos`.
 - Compras: `Linhas em Trânsito`, `Valor em Trânsito`, `Linhas Atrasadas`, `Linhas sem Data`, `Linhas Data Inválida`, `O.C. Abertas` e `Taxa Aprovação Média %`.
 - MRP: `SKUs com Demanda`, `SKUs Cobertos`, `% SKUs MRP Cobertos`, `SKUs a Comprar`, `SKUs Críticos`, `SKUs Urgentes` e `O.S. Impactadas por Compra`.
+- Histórico: `Carros Finalizados`, `Carros Entregues`, `Tempo Médio Produção (dias)`, `Mediana Produção (dias)`, `Finalizados em Atraso`, `% Finalizados em Atraso`, `Finalizados sem Prazo`, `Concluídos sem Data Final` e `Durações Inválidas`.
 
 ## Quantidades físicas protegidas por unidade
 
@@ -22,5 +23,7 @@ Sem uma única unidade selecionada, elas retornam `BLANK()`. Isso evita resultad
 - `Dias para Remessa Válido` suprime durações absurdas causadas por datas inválidas.
 - `Prioridade MRP` classifica compra vencida como **CRÍTICO**, necessidade nos próximos sete dias como **URGENTE** e as demais como **ATENÇÃO**.
 - `Taxa Aprovação Média %` calcula a média da proporção aprovada por linha confirmada, sem misturar quantidades de unidades diferentes.
+- `Carros Entregues` desativa a relação de finalização e ativa a relação de entrega com `USERELATIONSHIP`, para que o mês represente a entrega real.
+- `Tempo Médio Produção (dias)` e a mediana ignoram automaticamente as oito durações negativas sinalizadas como inválidas na camada consultiva.
 
 Percentuais usam uma casa decimal, quantidades até três casas e valores monetários usam BRL.

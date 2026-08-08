@@ -5,7 +5,7 @@ Este diretório contém a fonte versionada do BI consultivo conectado ao Supabas
 ## Arquitetura
 
 - Fonte: PostgreSQL do projeto Supabase `rodtxswtqbsbtukmvobn`.
-- Camada semântica SQL: 13 views no schema privado `bi`.
+- Camada semântica SQL: 14 views no schema privado `bi`.
 - Segurança: grupo `powerbi_reader` com `USAGE` no schema e `SELECT` nas views, sem `INSERT`, `UPDATE` ou `DELETE`.
 - Conexão: PostgreSQL direto com SSL, porta 5432, em modo **Importar**.
 - Modelo: estrela, filtros unidirecionais e nenhuma relação fato a fato.
@@ -18,6 +18,7 @@ Este diretório contém a fonte versionada do BI consultivo conectado ao Supabas
 2. **Visão PCP** — WIP, avanço, atrasos, material pendente e Forecast.
 3. **Compras e Trânsito** — O.C. abertas, valor, prazo, recebimento e inspeção.
 4. **Visão MRP** — demanda, cobertura, prioridade, trânsito e necessidade de compra.
+5. **Histórico de Produção** — conclusão, entrega, prazo e duração por veículo, mercado, cliente e linha de produto.
 
 O relatório inclui páginas ocultas de drill-through para SKU, O.S. e fornecedor. O detalhamento e as interações estão documentados em `model/layout_paginas.md`.
 
@@ -33,11 +34,11 @@ Quantidades físicas de unidades diferentes não são somadas. Cartões e compar
 - `power-query/conexao_power_bi.md`: conexão e consultas M.
 - `model/modelo_e_relacionamentos.md`: grão, cardinalidade e relacionamentos.
 - `model/dicionario_metricas.md`: regras de negócio dos indicadores.
-- `model/powerbi_measures.json`: fonte única das 77 medidas DAX.
+- `model/powerbi_measures.json`: fonte única das 88 medidas DAX.
 - `model/layout_paginas.md`: composição dos visuais e interações.
 - `power-bi/JI_Montadora_Operacional.pbip`: projeto textual versionável.
 - `power-bi/JI_Montadora_Operacional.pbix`: cópia binária para revisão no Desktop.
-- `model/build_powerbi_report.js`: geração determinística das cinco páginas e dos drill-throughs.
+- `model/build_powerbi_report.js`: geração determinística das seis páginas e dos drill-throughs.
 
 ## Regeneração e validação
 
@@ -59,6 +60,6 @@ O estoque disponível já desconta empenhos. A necessidade pendente por O.S. tam
 
 ## Estado validado em 08/08/2026
 
-O modelo aberto no Power BI foi atualizado diretamente das 13 views e reconciliado com o Supabase: 2.044 SKUs ativos, 16 O.S. em WIP, 207 SKUs a comprar, 79 críticos, 54 linhas em trânsito e R$ 509.413,30 em trânsito. A validação do projeto PBIR terminou sem erros estruturais.
+O modelo aberto no Power BI foi atualizado diretamente das 14 views e reconciliado com o Supabase. Na visão histórica foram validados 612 veículos finalizados, 622 entregues, 93 finalizações em atraso e tempo médio de produção de 31,5 dias. A validação do projeto PBIR terminou sem erros estruturais.
 
-Alertas atuais da fonte: quatro SKUs ativos sem unidade de medida, 16 linhas em trânsito sem data, quatro linhas com datas inválidas anteriores a 2000, nenhum Forecast ativo e histórico de movimentos disponível apenas para o período recente. Esses pontos ficam visíveis no relatório e não foram corrigidos artificialmente na base.
+Alertas atuais da fonte: quatro SKUs ativos sem unidade de medida, 16 linhas em trânsito sem data, quatro linhas com datas inválidas anteriores a 2000, nenhum Forecast ativo, 39 O.S. concluídas sem data final e oito durações de produção inválidas. Esses pontos ficam visíveis no relatório e não foram corrigidos artificialmente na base.

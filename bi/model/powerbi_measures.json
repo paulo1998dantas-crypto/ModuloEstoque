@@ -62,6 +62,19 @@
   { "name": "Em Trânsito (U.M.)", "expression": "IF(HASONEVALUE(dim_sku[unidade]), SUM(fato_mrp[quantidade_transito]))", "folder": "4. MRP\\Quantidades por U.M.", "format": "#,0.###" },
   { "name": "Estoque Disponível MRP (U.M.)", "expression": "IF(HASONEVALUE(dim_sku[unidade]), SUM(fato_mrp[estoque_disponivel]))", "folder": "4. MRP\\Quantidades por U.M.", "format": "#,0.###" },
   { "name": "Necessidade Compra (U.M.)", "expression": "IF(HASONEVALUE(dim_sku[unidade]), SUM(fato_mrp[necessidade_compra]))", "folder": "4. MRP\\Quantidades por U.M.", "format": "#,0.###" },
+
+  { "name": "Carros Finalizados", "expression": "CALCULATE(DISTINCTCOUNT(fato_historico_conclusao[work_order_id]), fato_historico_conclusao[foi_finalizado] = TRUE())", "folder": "5. Histórico de Produção", "format": "0" },
+  { "name": "Carros Entregues", "expression": "CALCULATE(DISTINCTCOUNT(fato_historico_conclusao[work_order_id]), CROSSFILTER(fato_historico_conclusao[data_finalizacao], dCalendario[Data], NONE), USERELATIONSHIP(fato_historico_conclusao[data_entrega], dCalendario[Data]), fato_historico_conclusao[foi_entregue] = TRUE())", "folder": "5. Histórico de Produção", "format": "0" },
+  { "name": "Tempo Médio Produção (dias)", "expression": "AVERAGE(fato_historico_conclusao[dias_producao])", "folder": "5. Histórico de Produção", "format": "0.0" },
+  { "name": "Mediana Produção (dias)", "expression": "MEDIAN(fato_historico_conclusao[dias_producao])", "folder": "5. Histórico de Produção", "format": "0" },
+  { "name": "Finalizados em Atraso", "expression": "CALCULATE(DISTINCTCOUNT(fato_historico_conclusao[work_order_id]), fato_historico_conclusao[foi_finalizado] = TRUE(), fato_historico_conclusao[finalizado_atraso] = TRUE())", "folder": "5. Histórico de Produção", "format": "0" },
+  { "name": "Finalizados com Prazo", "expression": "CALCULATE(DISTINCTCOUNT(fato_historico_conclusao[work_order_id]), fato_historico_conclusao[foi_finalizado] = TRUE(), NOT ISBLANK(fato_historico_conclusao[prazo_finalizacao]))", "folder": "5. Histórico de Produção", "format": "0" },
+  { "name": "% Finalizados em Atraso", "expression": "DIVIDE([Finalizados em Atraso], [Finalizados com Prazo])", "folder": "5. Histórico de Produção", "format": "0.0%" },
+  { "name": "Finalizados sem Prazo", "expression": "CALCULATE(DISTINCTCOUNT(fato_historico_conclusao[work_order_id]), fato_historico_conclusao[foi_finalizado] = TRUE(), ISBLANK(fato_historico_conclusao[prazo_finalizacao]))", "folder": "5. Histórico de Produção\\Qualidade", "format": "0" },
+  { "name": "Concluídos sem Data Final", "expression": "CALCULATE(DISTINCTCOUNT(fato_historico_conclusao[work_order_id]), fato_historico_conclusao[situacao_finalizacao] = \"CONCLUÍDO SEM DATA FINAL\")", "folder": "5. Histórico de Produção\\Qualidade", "format": "0" },
+  { "name": "Durações Inválidas", "expression": "CALCULATE(DISTINCTCOUNT(fato_historico_conclusao[work_order_id]), fato_historico_conclusao[duracao_invalida] = TRUE())", "folder": "5. Histórico de Produção\\Qualidade", "format": "0" },
+  { "name": "Última Atualização Histórico", "expression": "MAX(fato_historico_conclusao[updated_at])", "folder": "5. Histórico de Produção\\Qualidade", "format": "dd/MM/yyyy HH:mm" },
+
   { "name": "Última Atualização", "expression": "MAX(fato_mrp[atualizado_em])", "folder": "5. Auditoria", "format": "dd/MM/yyyy HH:mm" },
 
   { "name": "Estoque Atual", "expression": "[Estoque Atual (U.M.)]", "folder": "9. Compatibilidade\\Somente U.M. única", "format": "#,0.###" },

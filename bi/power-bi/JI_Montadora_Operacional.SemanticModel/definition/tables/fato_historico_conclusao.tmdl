@@ -1,0 +1,213 @@
+/// View consultiva bi.fato_historico_conclusao no Supabase.
+table fato_historico_conclusao
+	lineageTag: 98436acf-fb07-4b41-9552-4c5657007798
+
+	column work_order_id
+		dataType: string
+		lineageTag: ca186027-9b60-4110-97b1-451d474cacdf
+		summarizeBy: none
+		sourceColumn: work_order_id
+
+	column vehicle_entry_id
+		dataType: string
+		lineageTag: 91765f05-bcd5-43a4-86e9-a7edf7853e94
+		summarizeBy: none
+		sourceColumn: vehicle_entry_id
+
+	column vehicle_id
+		dataType: string
+		lineageTag: d80d65c0-d9d5-4266-8093-79bd0703536b
+		summarizeBy: none
+		sourceColumn: vehicle_id
+
+	column numero_os
+		dataType: string
+		lineageTag: 862f0a41-fec5-45a2-898d-8ec07735822d
+		summarizeBy: none
+		sourceColumn: numero_os
+
+	column item
+		dataType: int64
+		lineageTag: 4f739d60-226b-4a42-8fca-4e7266ca7da0
+		summarizeBy: none
+		sourceColumn: item
+
+	column chassi
+		dataType: string
+		lineageTag: 7bf271bc-533d-446f-8e50-c2782113a3fd
+		summarizeBy: none
+		sourceColumn: chassi
+
+	column chassi_exibicao
+		dataType: string
+		lineageTag: b2ba492e-4197-4815-8457-128e80963b43
+		summarizeBy: none
+		sourceColumn: chassi_exibicao
+
+	column modelo
+		dataType: string
+		lineageTag: 3640f588-5afd-4676-b0f8-49c86ac3a883
+		summarizeBy: none
+		sourceColumn: modelo
+
+	column cliente
+		dataType: string
+		lineageTag: 96129b18-9280-4c4c-a91f-fa77faad4eb9
+		summarizeBy: none
+		sourceColumn: cliente
+
+	column mercado
+		dataType: string
+		lineageTag: 17347e8a-ec42-40b8-bb9f-6dd6f38c1e1a
+		summarizeBy: none
+		sourceColumn: mercado
+
+	column linha_produto
+		dataType: string
+		lineageTag: 0eeddb96-7f8f-4ba2-ba39-fc19faf9f113
+		summarizeBy: none
+		sourceColumn: linha_produto
+
+	column tipo_veiculo
+		dataType: string
+		lineageTag: 6b3a11e9-2355-4614-8637-0a073cdb2a87
+		summarizeBy: none
+		sourceColumn: tipo_veiculo
+
+	column transformacao
+		dataType: string
+		lineageTag: 1c10a85e-46c6-4a8e-848b-f6ec3994a981
+		summarizeBy: none
+		sourceColumn: transformacao
+
+	column status
+		dataType: string
+		lineageTag: c16334fe-9dd5-48bc-ae2d-95a2bd2102f2
+		summarizeBy: none
+		sourceColumn: status
+
+	column data_aprovacao
+		dataType: dateTime
+		formatString: dd/MM/yyyy
+		lineageTag: 83229c84-84af-4dbf-9767-6165689b3ab2
+		summarizeBy: none
+		sourceColumn: data_aprovacao
+
+	column data_chegada
+		dataType: dateTime
+		formatString: dd/MM/yyyy HH:mm
+		lineageTag: b86bf6b7-ceff-421a-9f78-24e3d0033edd
+		summarizeBy: none
+		sourceColumn: data_chegada
+
+	column data_inicio_producao
+		dataType: dateTime
+		formatString: dd/MM/yyyy
+		lineageTag: 134153bc-8eb0-4b29-9a90-6ce58e94963f
+		summarizeBy: none
+		sourceColumn: data_inicio_producao
+
+	column origem_inicio_producao
+		dataType: string
+		lineageTag: b1c7c885-d55f-4afa-9d5f-c72c9e727fb2
+		summarizeBy: none
+		sourceColumn: origem_inicio_producao
+
+	column data_finalizacao
+		dataType: dateTime
+		formatString: dd/MM/yyyy
+		lineageTag: c94d0f2b-9380-4f31-8ce2-0ac68e56c30a
+		summarizeBy: none
+		sourceColumn: data_finalizacao
+
+	column data_finalizacao_em
+		dataType: dateTime
+		formatString: dd/MM/yyyy HH:mm
+		lineageTag: 8d6c6beb-bc16-48c7-8422-72335fc895e8
+		summarizeBy: none
+		sourceColumn: data_finalizacao_em
+
+	column origem_data_finalizacao
+		dataType: string
+		lineageTag: 1b09bfd3-9f6b-4abc-a34b-f8f75dafd27c
+		summarizeBy: none
+		sourceColumn: origem_data_finalizacao
+
+	column data_entrega
+		dataType: dateTime
+		formatString: dd/MM/yyyy
+		lineageTag: d69b4be3-1085-4161-b074-a4aa7ad2fe3a
+		summarizeBy: none
+		sourceColumn: data_entrega
+
+	column data_entrega_em
+		dataType: dateTime
+		formatString: dd/MM/yyyy HH:mm
+		lineageTag: 441dadbe-8738-45b6-b233-808ea5168509
+		summarizeBy: none
+		sourceColumn: data_entrega_em
+
+	column prazo_finalizacao
+		dataType: dateTime
+		formatString: dd/MM/yyyy
+		lineageTag: 9dfe9c06-9b19-4430-ab46-72689ff2f570
+		summarizeBy: none
+		sourceColumn: prazo_finalizacao
+
+	column dias_producao
+		dataType: int64
+		lineageTag: e2e55bf4-e75e-418a-aedc-3eabf3e682f1
+		summarizeBy: none
+		sourceColumn: dias_producao
+
+	column duracao_invalida
+		dataType: boolean
+		lineageTag: 5f7b2988-4440-45ba-8268-539c685da524
+		summarizeBy: none
+		sourceColumn: duracao_invalida
+
+	column foi_finalizado
+		dataType: boolean
+		lineageTag: 53daad70-6907-4c51-8acb-571f8706284d
+		summarizeBy: none
+		sourceColumn: foi_finalizado
+
+	column foi_entregue
+		dataType: boolean
+		lineageTag: be12be67-dd2a-4e06-a637-84a0a481637e
+		summarizeBy: none
+		sourceColumn: foi_entregue
+
+	column finalizado_atraso
+		dataType: boolean
+		lineageTag: 950a4801-6512-4d38-bb52-c7ae21413d67
+		summarizeBy: none
+		sourceColumn: finalizado_atraso
+
+	column situacao_finalizacao
+		dataType: string
+		lineageTag: c240f22f-d122-4ce4-96ef-90db2144bad6
+		summarizeBy: none
+		sourceColumn: situacao_finalizacao
+
+	column dias_atraso_finalizacao
+		dataType: int64
+		lineageTag: 1a1096ec-96dc-49ba-a24b-5b1c99d91b15
+		summarizeBy: none
+		sourceColumn: dias_atraso_finalizacao
+
+	column updated_at
+		dataType: dateTime
+		formatString: dd/MM/yyyy HH:mm
+		lineageTag: 6c8eaad6-2319-40ff-8eff-7946e025503f
+		summarizeBy: none
+		sourceColumn: updated_at
+
+	partition fato_historico_conclusao = m
+		mode: import
+		source =
+				let
+				    Fonte = PostgreSQL.Database("db.rodtxswtqbsbtukmvobn.supabase.co:5432", "postgres", [CreateNavigationProperties = false]),
+				    Dados = Fonte{[Schema = "bi", Item = "fato_historico_conclusao"]}[Data]
+				in
+				    Dados

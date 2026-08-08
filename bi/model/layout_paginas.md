@@ -41,6 +41,15 @@ O relatório usa canvas 16:9 (1280 × 720), navegação por abas, fundo claro e 
 - Segmentadores: unidade de medida e grupo.
 - A comparação física só aparece com uma única unidade de medida selecionada.
 
+## 5. Histórico de Produção
+
+- KPIs: carros finalizados, carros entregues, tempo médio e mediano de produção, finalizados em atraso, percentual de atraso e durações inválidas.
+- Linhas: finalizados e entregues por mês, cada medida usando sua própria data de evento.
+- Barras: finalizados por mercado e tempo médio por linha de produto.
+- Tabela histórica: O.S., chassi, cliente, mercado, linha, início de produção, finalização, entrega, duração, prazo e situação.
+- Segmentadores: mês, mercado (`LICITAÇÃO`/`VAREJO`), cliente e linha de produto (`LE`, `LAB`, `LB`, `LAE` etc.).
+- A data inicial de produção é a maior entre aprovação da proposta e chegada do veículo; durações negativas são sinalizadas e excluídas das médias.
+
 ## Páginas ocultas de drill-through
 
 - **D. Detalhe SKU**: estoque, empenhos, movimentos e necessidade do material.

@@ -238,6 +238,50 @@ table fato_mrp
 		formatString: #,0.###
 		displayFolder: 4. MRP\Quantidades por U.M.
 
+	measure 'Carros Finalizados' = CALCULATE(DISTINCTCOUNT(fato_historico_conclusao[work_order_id]), fato_historico_conclusao[foi_finalizado] = TRUE())
+		formatString: 0
+		displayFolder: 5. Histórico de Produção
+
+	measure 'Carros Entregues' = CALCULATE(DISTINCTCOUNT(fato_historico_conclusao[work_order_id]), CROSSFILTER(fato_historico_conclusao[data_finalizacao], dCalendario[Data], NONE), USERELATIONSHIP(fato_historico_conclusao[data_entrega], dCalendario[Data]), fato_historico_conclusao[foi_entregue] = TRUE())
+		formatString: 0
+		displayFolder: 5. Histórico de Produção
+
+	measure 'Tempo Médio Produção (dias)' = AVERAGE(fato_historico_conclusao[dias_producao])
+		formatString: 0.0
+		displayFolder: 5. Histórico de Produção
+
+	measure 'Mediana Produção (dias)' = MEDIAN(fato_historico_conclusao[dias_producao])
+		formatString: 0
+		displayFolder: 5. Histórico de Produção
+
+	measure 'Finalizados em Atraso' = CALCULATE(DISTINCTCOUNT(fato_historico_conclusao[work_order_id]), fato_historico_conclusao[foi_finalizado] = TRUE(), fato_historico_conclusao[finalizado_atraso] = TRUE())
+		formatString: 0
+		displayFolder: 5. Histórico de Produção
+
+	measure 'Finalizados com Prazo' = CALCULATE(DISTINCTCOUNT(fato_historico_conclusao[work_order_id]), fato_historico_conclusao[foi_finalizado] = TRUE(), NOT ISBLANK(fato_historico_conclusao[prazo_finalizacao]))
+		formatString: 0
+		displayFolder: 5. Histórico de Produção
+
+	measure '% Finalizados em Atraso' = DIVIDE([Finalizados em Atraso], [Finalizados com Prazo])
+		formatString: 0.0%
+		displayFolder: 5. Histórico de Produção
+
+	measure 'Finalizados sem Prazo' = CALCULATE(DISTINCTCOUNT(fato_historico_conclusao[work_order_id]), fato_historico_conclusao[foi_finalizado] = TRUE(), ISBLANK(fato_historico_conclusao[prazo_finalizacao]))
+		formatString: 0
+		displayFolder: 5. Histórico de Produção\Qualidade
+
+	measure 'Concluídos sem Data Final' = CALCULATE(DISTINCTCOUNT(fato_historico_conclusao[work_order_id]), fato_historico_conclusao[situacao_finalizacao] = "CONCLUÍDO SEM DATA FINAL")
+		formatString: 0
+		displayFolder: 5. Histórico de Produção\Qualidade
+
+	measure 'Durações Inválidas' = CALCULATE(DISTINCTCOUNT(fato_historico_conclusao[work_order_id]), fato_historico_conclusao[duracao_invalida] = TRUE())
+		formatString: 0
+		displayFolder: 5. Histórico de Produção\Qualidade
+
+	measure 'Última Atualização Histórico' = MAX(fato_historico_conclusao[updated_at])
+		formatString: dd/MM/yyyy HH:mm
+		displayFolder: 5. Histórico de Produção\Qualidade
+
 	measure 'Última Atualização' = MAX(fato_mrp[atualizado_em])
 		formatString: dd/MM/yyyy HH:mm
 		displayFolder: 5. Auditoria

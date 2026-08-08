@@ -260,6 +260,39 @@ function barChart(pageKey, key, title, category, measure, x, y, width, height, c
   };
 }
 
+function lineChart(pageKey, key, title, category, measures, x, y, width, height, tabOrder) {
+  const name = id(`${pageKey}:chart:${key}`);
+  return {
+    name,
+    json: {
+      $schema: `${schemaBase}/visualContainer/2.11.0/schema.json`,
+      name,
+      position: position(x, y, width, height, tabOrder),
+      visual: {
+        visualType: 'lineChart',
+        query: {
+          queryState: {
+            Category: { projections: [{ ...projection(category), active: true }] },
+            Y: { projections: measures.map((property) => projection({ entity: 'fato_mrp', property, kind: 'Measure' })) },
+          },
+          sortDefinition: {
+            sort: [{ field: field(category.entity, category.property, category.kind || 'Column'), direction: 'Ascending' }],
+            isDefaultSort: true,
+          },
+        },
+        objects: {
+          labels: [{ properties: { show: literal('true'), optimizeLabelDisplay: literal('true') } }],
+          legend: [{ properties: { show: literal('true'), position: stringLiteral('Top') } }],
+          categoryAxis: [{ properties: { labelColor: colorLiteral(COLORS.muted), titleText: stringLiteral('') } }],
+          valueAxis: [{ properties: { start: literal('0D'), labelColor: colorLiteral(COLORS.muted), gridlineColor: colorLiteral('#E7EBF1'), gridlineStyle: stringLiteral('solid'), gridlineThickness: literal('1D') } }],
+        },
+        visualContainerObjects: containerObjects(title, { padding: 8 }),
+        drillFilterOtherVisuals: true,
+      },
+    },
+  };
+}
+
 function table(pageKey, key, title, columns, x, y, width, height, tabOrder, sort, filters = []) {
   const name = id(`${pageKey}:table:${key}`);
   const query = {
@@ -396,6 +429,24 @@ const pageSpecs = [
       filters: [{ entity: 'fato_mrp', property: 'status_mrp', values: ['COMPRAR'] }],
     },
   },
+  {
+    key: 'historico_producao', displayName: '5. Histórico de Produção', accent: COLORS.green,
+    title: 'Histórico de Conclusão e Entrega', subtitle: 'Produção concluída, entrega real, prazo e duração | fonte MES',
+    layout: 'history',
+    slicers: [
+      { ...col('dCalendario', 'AnoMes'), label: 'Mês' },
+      { ...col('fato_historico_conclusao', 'mercado'), label: 'Mercado' },
+      { ...col('fato_historico_conclusao', 'cliente'), label: 'Cliente' },
+      { ...col('fato_historico_conclusao', 'linha_produto'), label: 'Linha de produto' },
+    ],
+    measures: ['Carros Finalizados', 'Carros Entregues', 'Tempo Médio Produção (dias)', 'Mediana Produção (dias)', 'Finalizados em Atraso', '% Finalizados em Atraso', 'Durações Inválidas'],
+    table: {
+      title: 'Histórico por veículo — conclusão, entrega e prazo',
+      columns: [col('fato_historico_conclusao', 'numero_os'), col('fato_historico_conclusao', 'chassi_exibicao'), col('fato_historico_conclusao', 'cliente'), col('fato_historico_conclusao', 'mercado'), col('fato_historico_conclusao', 'linha_produto'), col('fato_historico_conclusao', 'data_inicio_producao'), col('fato_historico_conclusao', 'data_finalizacao'), col('fato_historico_conclusao', 'data_entrega'), col('fato_historico_conclusao', 'dias_producao'), col('fato_historico_conclusao', 'prazo_finalizacao'), col('fato_historico_conclusao', 'situacao_finalizacao')],
+      sort: { entity: 'fato_historico_conclusao', property: 'data_finalizacao', kind: 'Column', direction: 'Descending' },
+      filters: [{ entity: 'fato_historico_conclusao', property: 'status', values: ['FINALIZADA', 'ENTREGUE', 'RETIRADA'] }],
+    },
+  },
 ];
 
 const drillPages = [
@@ -473,22 +524,31 @@ function writePage(pageSpec, isDrill = false) {
   ];
 
   if (!isDrill) {
-    pageSpec.slicers.forEach((spec, index) => visuals.push(slicer(pageSpec.key, spec, 848 + index * 212, 2 + index)));
-    visuals.push(kpiStrip(pageSpec.key, pageSpec.measures, 156, 4));
-    pageSpec.charts.forEach((chart, index) => visuals.push(barChart(
-      pageSpec.key,
-      chart.key,
-      chart.title,
-      chart.category,
-      chart.measure,
-      index === 0 ? 20 : 648,
-      300,
-      612,
-      188,
-      chart.color,
-      5 + index
-    )));
-    visuals.push(table(pageSpec.key, 'actions', pageSpec.table.title, pageSpec.table.columns, 20, 500, 1240, 204, 7, pageSpec.table.sort, pageSpec.table.filters || []));
+    if (pageSpec.layout === 'history') {
+      pageSpec.slicers.forEach((spec, index) => visuals.push(slicer(pageSpec.key, spec, 420 + index * 210, 2 + index)));
+      visuals.push(kpiStrip(pageSpec.key, pageSpec.measures, 156, 6));
+      visuals.push(lineChart(pageSpec.key, 'mensal', 'Finalizados x entregues por mês', col('dCalendario', 'AnoMes'), ['Carros Finalizados', 'Carros Entregues'], 20, 300, 600, 188, 7));
+      visuals.push(barChart(pageSpec.key, 'mercado', 'Carros finalizados por mercado', col('fato_historico_conclusao', 'mercado'), 'Carros Finalizados', 632, 300, 300, 188, COLORS.green, 8));
+      visuals.push(barChart(pageSpec.key, 'linha_tempo', 'Tempo médio por linha (dias)', col('fato_historico_conclusao', 'linha_produto'), 'Tempo Médio Produção (dias)', 944, 300, 316, 188, COLORS.blue, 9));
+      visuals.push(table(pageSpec.key, 'history', pageSpec.table.title, pageSpec.table.columns, 20, 500, 1240, 204, 10, pageSpec.table.sort, pageSpec.table.filters || []));
+    } else {
+      pageSpec.slicers.forEach((spec, index) => visuals.push(slicer(pageSpec.key, spec, 848 + index * 212, 2 + index)));
+      visuals.push(kpiStrip(pageSpec.key, pageSpec.measures, 156, 4));
+      pageSpec.charts.forEach((chart, index) => visuals.push(barChart(
+        pageSpec.key,
+        chart.key,
+        chart.title,
+        chart.category,
+        chart.measure,
+        index === 0 ? 20 : 648,
+        300,
+        612,
+        188,
+        chart.color,
+        5 + index
+      )));
+      visuals.push(table(pageSpec.key, 'actions', pageSpec.table.title, pageSpec.table.columns, 20, 500, 1240, 204, 7, pageSpec.table.sort, pageSpec.table.filters || []));
+    }
   } else {
     visuals.push(kpiStrip(pageSpec.key, pageSpec.measures, 76, 2));
     pageSpec.tables.forEach((spec, index) => visuals.push(table(pageSpec.key, spec.key, spec.title, spec.columns, 20, spec.y, 1240, spec.height, 3 + index, spec.sort)));

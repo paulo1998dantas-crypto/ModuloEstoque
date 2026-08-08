@@ -189,7 +189,9 @@ in
         @('dCalendario', 'Data', 'fato_compras_transito', 'data_necessidade'),
         @('dCalendario', 'Data', 'fato_recebimentos_inspecao', 'data'),
         @('dCalendario', 'Data', 'fato_forecast', 'data_entrega_prevista'),
-        @('dCalendario', 'Data', 'dim_ordem_servico', 'data_entrega_vigente', $false)
+        @('dCalendario', 'Data', 'dim_ordem_servico', 'data_entrega_vigente', $false),
+        @('dCalendario', 'Data', 'fato_historico_conclusao', 'data_finalizacao'),
+        @('dCalendario', 'Data', 'fato_historico_conclusao', 'data_entrega', $false)
     )
     foreach ($definition in $relationships) {
         $dimension = $model.Tables[$definition[0]]

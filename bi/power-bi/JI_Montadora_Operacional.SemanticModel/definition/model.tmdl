@@ -10,7 +10,7 @@ model Model
 
 annotation __PBI_TimeIntelligenceEnabled = 1
 
-annotation PBI_QueryOrder = ["dim_ordem_servico","dim_sku","fato_compras_transito","fato_empenhos_abertos","fato_estoque_atual","fato_etapas_producao","fato_forecast","fato_forecast_necessidades","fato_inventarios","fato_movimentacoes_estoque","fato_mrp","fato_necessidades_os","fato_recebimentos_inspecao","dCalendario"]
+annotation PBI_QueryOrder = ["dim_ordem_servico","dim_sku","fato_compras_transito","fato_empenhos_abertos","fato_estoque_atual","fato_etapas_producao","fato_forecast","fato_forecast_necessidades","fato_historico_conclusao","fato_inventarios","fato_movimentacoes_estoque","fato_mrp","fato_necessidades_os","fato_recebimentos_inspecao","dCalendario"]
 
 annotation PBI_ProTooling = ["DevMode"]
 
@@ -41,6 +41,7 @@ ref table LocalDateTable_98ae6ff0-f2ca-4dea-ac8f-7fb3ad795df6
 ref table LocalDateTable_befe74f6-9ba9-43ae-9638-bfdb102cfa99
 ref table LocalDateTable_c4848510-9683-47a3-8337-aaec4d93938e
 ref table LocalDateTable_44ee9f06-a25e-4745-863a-78870fe9fa41
+ref table fato_historico_conclusao
 
 ref cultureInfo pt-BR
 

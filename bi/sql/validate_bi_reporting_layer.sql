@@ -90,6 +90,38 @@ with checks as (
             and not has_table_privilege('powerbi_reader', 'bi.fato_mrp', 'DELETE')
         )::int::numeric,
         1::numeric
+    union all
+    select
+        'historico_uma_linha_por_os',
+        (
+            select count(*)::numeric
+            from (
+                select work_order_id
+                from bi.fato_historico_conclusao
+                group by work_order_id
+                having count(*) > 1
+            ) d
+        ),
+        0::numeric
+    union all
+    select
+        'historico_sem_duracao_negativa_publicada',
+        (select count(*)::numeric from bi.fato_historico_conclusao where dias_producao < 0),
+        0::numeric
+    union all
+    select
+        'papel_powerbi_historico_com_select',
+        has_table_privilege('powerbi_reader', 'bi.fato_historico_conclusao', 'SELECT')::int::numeric,
+        1::numeric
+    union all
+    select
+        'papel_powerbi_historico_sem_escrita',
+        (
+            not has_table_privilege('powerbi_reader', 'bi.fato_historico_conclusao', 'INSERT')
+            and not has_table_privilege('powerbi_reader', 'bi.fato_historico_conclusao', 'UPDATE')
+            and not has_table_privilege('powerbi_reader', 'bi.fato_historico_conclusao', 'DELETE')
+        )::int::numeric,
+        1::numeric
 )
 select
     verificacao,
@@ -111,3 +143,12 @@ select
         where em_transito
           and data_necessidade < date '2000-01-01'
     ) as linhas_transito_data_invalida;
+
+select
+    count(*) filter (where situacao_finalizacao = 'CONCLUÍDO SEM DATA FINAL')
+        as concluidos_sem_data_final,
+    count(*) filter (where duracao_invalida)
+        as duracoes_producao_invalidas,
+    count(*) filter (where foi_finalizado and prazo_finalizacao is null)
+        as finalizados_sem_prazo
+from bi.fato_historico_conclusao;

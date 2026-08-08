@@ -21,17 +21,18 @@ O modelo usa **Importar**, com conexão PostgreSQL direta por SSL. A atualizaç�
 | `fato_forecast` | uma linha por Forecast | demanda futura e qualidade estrutural |
 | `fato_forecast_necessidades` | uma linha por Forecast/SKU | explosão de materiais futura |
 | `fato_mrp` | uma linha por SKU | consolidação do MRP I |
+| `fato_historico_conclusao` | uma linha por veículo/O.S. | conclusão, entrega, duração e atraso históricos |
 | `dCalendario` | uma linha por dia | filtro temporal compartilhado |
 
 ## Cardinalidade e direção
 
 - `dim_sku[sku_id]` tem cardinalidade 1:* para todos os fatos que contêm `sku_id`.
 - `dim_ordem_servico[work_order_id]` tem cardinalidade 1:* para necessidades, empenhos, movimentos, etapas e compras.
-- `dCalendario[Data]` tem cardinalidade 1:* para a data principal de cada fato.
+- `dCalendario[Data]` tem cardinalidade 1:* para a data principal de cada fato. No histórico, `data_finalizacao` é ativa e `data_entrega` é inativa.
 - A filtragem é unidirecional, da dimensão para o fato.
 - Não existe relacionamento fato a fato. `fato_mrp` é uma consolidação governada por SKU.
 
-Datas principais: movimento=`data`; inventário=`data_contagem`; compras=`data_necessidade`; recebimento=`data`; Forecast=`data_entrega_prevista`; O.S.=`data_entrega_vigente`. Datas alternativas devem ficar inativas e ser acionadas por `USERELATIONSHIP` em medidas específicas.
+Datas principais: movimento=`data`; inventário=`data_contagem`; compras=`data_necessidade`; recebimento=`data`; Forecast=`data_entrega_prevista`; O.S.=`data_entrega_vigente`; histórico=`data_finalizacao`. A data alternativa `fato_historico_conclusao[data_entrega]` fica inativa e é acionada por `USERELATIONSHIP` na medida `Carros Entregues`.
 
 ## Segurança semântica de quantidades
 

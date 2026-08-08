@@ -32,6 +32,12 @@
 | Prioridade urgente | comprar e próxima necessidade nos próximos sete dias | SKU | horizonte operacional de uma semana |
 | Prioridade atenção | comprar com necessidade posterior ou sem data | SKU | monitorar e programar |
 | O.S. impactadas por compra | O.S. distintas com material pendente em SKU a comprar | O.S./SKU | consolidável por contagem distinta |
+| Carros finalizados | O.S. distintas com data real de finalização | veículo/mês de finalização | não infere data ausente |
+| Carros entregues | O.S. distintas com data real de entrega | veículo/mês de entrega | usa relação temporal específica de entrega |
+| Início de produção histórico | maior data entre aprovação da proposta e chegada do veículo | veículo | registra também a origem escolhida |
+| Tempo de produção | dias entre início histórico e finalização | veículo | duração negativa fica nula e é sinalizada |
+| Finalizado em atraso | finalização posterior ao prazo vigente da O.S. | veículo | exige prazo e data final válidos |
+| Percentual finalizado em atraso | finalizados em atraso / finalizados com prazo | período/segmento | O.S. sem prazo ficam fora do denominador |
 
 ## Regras de interpretação
 
@@ -41,3 +47,5 @@
 - O saldo de empenho em fluxo pertence ao SKU, não a cada O.S. O detalhamento deve usar `fato_empenhos_abertos` para evitar repetição.
 - Forecast sem estrutura de materiais fica como alerta e não gera demanda fictícia no MRP.
 - Datas de compra anteriores ao ano 2000 são tratadas como erro de qualidade, não como milhares de dias de atraso.
+- O mês de `Carros Finalizados` vem de `data_finalizacao`; o mês de `Carros Entregues` vem de `data_entrega`. A mesma segmentação de calendário aciona a data correta para cada medida.
+- A data final segue a precedência `termino_producao`, `finalizado_at` e evento explícito do histórico MES. Status final sem data permanece como alerta, sem data fabricada.

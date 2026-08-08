@@ -139,3 +139,12 @@ relationship ff3eb0f0-90af-4f52-a782-89130fae2959
 	fromColumn: dCalendario.Data
 	toColumn: LocalDateTable_44ee9f06-a25e-4745-863a-78870fe9fa41.Date
 
+relationship rel_dCalendario_fato_historico_conclusao_data_finalizacao
+	fromColumn: fato_historico_conclusao.data_finalizacao
+	toColumn: dCalendario.Data
+
+relationship rel_dCalendario_fato_historico_conclusao_data_entrega
+	isActive: false
+	fromColumn: fato_historico_conclusao.data_entrega
+	toColumn: dCalendario.Data
+

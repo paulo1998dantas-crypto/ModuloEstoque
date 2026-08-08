@@ -45,6 +45,7 @@ fato_recebimentos_inspecao = fnBiView("fato_recebimentos_inspecao")
 fato_forecast = fnBiView("fato_forecast")
 fato_forecast_necessidades = fnBiView("fato_forecast_necessidades")
 fato_mrp = fnBiView("fato_mrp")
+fato_historico_conclusao = fnBiView("fato_historico_conclusao")
 ```
 
 No Editor Avançado de cada consulta, o conteúdo real deve ser apenas, por exemplo:
