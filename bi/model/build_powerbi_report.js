@@ -31,6 +31,7 @@ const COLORS = {
   canvas: '#F4F6F9',
   white: '#FFFFFF',
 };
+const LOGO_RESOURCE = 'JIMontadoraLogo-202608081600.png';
 
 const literal = (value) => ({ expr: { Literal: { Value: value } } });
 const stringLiteral = (value) => literal(`'${value.replaceAll("'", "''")}'`);
@@ -167,14 +168,14 @@ function divider(pageKey, x, y, width, color, tabOrder) {
   };
 }
 
-function slicer(pageKey, spec, x, tabOrder) {
+function slicer(pageKey, spec, x, tabOrder, width = 200) {
   const name = id(`${pageKey}:slicer:${spec.entity}:${spec.property}`);
   return {
     name,
     json: {
       $schema: `${schemaBase}/visualContainer/2.11.0/schema.json`,
       name,
-      position: position(x, 68, 200, 80, tabOrder),
+      position: position(x, 68, width, 80, tabOrder),
       visual: {
         visualType: 'slicer',
         query: { queryState: { Values: { projections: [projection(spec)] } } },
@@ -191,6 +192,41 @@ function slicer(pageKey, spec, x, tabOrder) {
           field: field(spec.entity, spec.property),
           type: spec.type || 'Categorical',
         }],
+      },
+    },
+  };
+}
+
+function imageVisual(pageKey, key, resourceName, x, y, width, height, tabOrder) {
+  const name = id(`${pageKey}:image:${key}`);
+  return {
+    name,
+    json: {
+      $schema: `${schemaBase}/visualContainer/2.11.0/schema.json`,
+      name,
+      position: position(x, y, width, height, tabOrder),
+      visual: {
+        visualType: 'image',
+        objects: {
+          general: [{
+            properties: {
+              imageUrl: {
+                expr: {
+                  ResourcePackageItem: {
+                    PackageName: 'RegisteredResources',
+                    PackageType: 1,
+                    ItemName: resourceName,
+                  },
+                },
+              },
+            },
+          }],
+        },
+        visualContainerObjects: {
+          background: [{ properties: { show: literal('false') } }],
+          border: [{ properties: { show: literal('false') } }],
+          visualHeader: [{ properties: { show: literal('false') } }],
+        },
       },
     },
   };
@@ -346,23 +382,23 @@ const pageSpecs = [
   {
     key: 'cockpit', displayName: '0. Cockpit Industrial', accent: COLORS.red,
     title: 'Cockpit Industrial', subtitle: 'Riscos e decisões imediatas | atualização no refresh do modelo | modo somente leitura',
-    slicers: [{ ...col('dim_ordem_servico', 'cliente'), label: 'Cliente' }, { ...col('dim_sku', 'grupo'), label: 'Grupo de material' }],
+    slicers: [{ ...col('dim_ordem_servico', 'categoria_servico'), label: 'Tipo de serviço' }, { ...col('dim_ordem_servico', 'cliente'), label: 'Cliente' }, { ...col('dim_sku', 'grupo'), label: 'Grupo de material' }],
     measures: ['O.S. no WIP', 'O.S. Atrasadas', 'O.S. com Material Pendente', 'SKUs Críticos', 'SKUs a Comprar', 'Linhas Atrasadas'],
     charts: [
       { key: 'os_atrasadas_cliente', title: 'O.S. atrasadas por cliente', category: col('dim_ordem_servico', 'cliente'), measure: 'O.S. Atrasadas', color: COLORS.red },
-      { key: 'status_mrp', title: 'Cobertura do MRP — SKUs com demanda', category: col('fato_mrp', 'status_mrp'), measure: 'SKUs MRP em Demanda', color: COLORS.blue },
+      { key: 'skus_criticos_grupo', title: 'SKUs críticos por grupo', category: col('dim_sku', 'grupo'), measure: 'SKUs Críticos', color: COLORS.blue },
     ],
     table: {
       title: 'Ações prioritárias — materiais',
       columns: [col('dim_sku', 'codigo'), col('dim_sku', 'descricao'), col('dim_sku', 'unidade'), measure('Prioridade MRP'), measure('Próxima Necessidade'), measure('O.S. Impactadas pelo SKU'), measure('Necessidade Compra (U.M.)')],
       sort: { entity: 'fato_mrp', property: 'Ordem Prioridade MRP', kind: 'Measure', direction: 'Ascending' },
-      filters: [{ entity: 'fato_mrp', property: 'status_mrp', values: ['COMPRAR'] }],
+      filters: [{ entity: 'fato_necessidades_os', property: 'sem_estoque_disponivel', values: [true] }],
     },
   },
   {
     key: 'estoque', displayName: '1. Visão Estoque', accent: COLORS.teal,
     title: 'Visão Estoque', subtitle: 'Saúde do portfólio, disponibilidade e exceções | quantidades físicas somente por U.M. única',
-    slicers: [{ ...col('dim_sku', 'unidade'), label: 'Unidade de medida' }, { ...col('dim_sku', 'grupo'), label: 'Grupo' }],
+    slicers: [{ ...col('dim_ordem_servico', 'categoria_servico'), label: 'Tipo de serviço' }, { ...col('dim_sku', 'unidade'), label: 'Unidade de medida' }, { ...col('dim_sku', 'grupo'), label: 'Grupo' }],
     measures: ['SKUs Ativos', 'SKUs com Saldo', 'SKUs Zerados', 'SKUs em Risco Estoque', 'SKUs Empenhados', 'Movimentações Ativas', 'Baixas Registradas'],
     charts: [
       { key: 'status_estoque', title: 'Distribuição por status de estoque', category: col('fato_estoque_atual', 'status_estoque'), measure: 'SKUs Ativos', color: COLORS.teal },
@@ -381,7 +417,7 @@ const pageSpecs = [
   {
     key: 'pcp', displayName: '2. Visão PCP', accent: COLORS.amber,
     title: 'Visão PCP', subtitle: 'WIP, prazo, avanço e disponibilidade de materiais por O.S.',
-    slicers: [{ ...col('dim_ordem_servico', 'cliente'), label: 'Cliente' }, { ...col('dim_ordem_servico', 'linha'), label: 'Linha' }],
+    slicers: [{ ...col('dim_ordem_servico', 'categoria_servico'), label: 'Tipo de serviço' }, { ...col('dim_ordem_servico', 'cliente'), label: 'Cliente' }, { ...col('dim_ordem_servico', 'linha_produto'), label: 'Linha' }],
     measures: ['O.S. no WIP', 'O.S. Atrasadas', '% O.S. Atrasadas', 'O.S. com Material Pendente', 'Avanço Médio %', 'Forecasts Ativos'],
     charts: [
       { key: 'wip_cliente', title: 'WIP por cliente', category: col('dim_ordem_servico', 'cliente'), measure: 'O.S. no WIP', color: COLORS.blue },
@@ -389,7 +425,7 @@ const pageSpecs = [
     ],
     table: {
       title: 'Fila de ação — O.S. em WIP',
-      columns: [col('dim_ordem_servico', 'numero_os'), col('dim_ordem_servico', 'cliente'), col('dim_ordem_servico', 'modelo'), col('dim_ordem_servico', 'data_entrega_vigente'), col('dim_ordem_servico', 'percentual_avanco'), col('dim_ordem_servico', 'dias_no_wip'), measure('Risco O.S.'), measure('Linhas Material Pendente O.S.'), measure('Dias para Entrega O.S.')],
+      columns: [col('dim_ordem_servico', 'numero_os'), col('dim_ordem_servico', 'cliente'), col('dim_ordem_servico', 'linha_produto'), col('dim_ordem_servico', 'data_inicio_producao'), col('dim_ordem_servico', 'prazo_producao_dias'), col('dim_ordem_servico', 'data_limite_producao'), col('dim_ordem_servico', 'percentual_avanco'), col('dim_ordem_servico', 'dias_atraso_producao'), measure('Risco O.S.'), measure('Linhas Material Pendente O.S.')],
       sort: { entity: 'fato_mrp', property: 'Dias para Entrega O.S.', kind: 'Measure', direction: 'Ascending' },
       filters: [{ entity: 'dim_ordem_servico', property: 'em_wip', values: [true] }],
     },
@@ -397,7 +433,7 @@ const pageSpecs = [
   {
     key: 'compras', displayName: '3. Compras e Trânsito', accent: COLORS.blue,
     title: 'Compras e Materiais em Trânsito', subtitle: 'Prazo, exposição financeira, recebimentos e inspeção',
-    slicers: [{ ...col('fato_compras_transito', 'fornecedor'), label: 'Fornecedor' }, { ...col('fato_compras_transito', 'situacao_transito'), label: 'Situação' }],
+    slicers: [{ ...col('dim_ordem_servico', 'categoria_servico'), label: 'Tipo de serviço' }, { ...col('fato_compras_transito', 'fornecedor'), label: 'Fornecedor' }, { ...col('fato_compras_transito', 'situacao_transito'), label: 'Situação' }],
     measures: ['Linhas em Trânsito', 'Valor em Trânsito', 'Linhas Atrasadas', 'Linhas sem Data', 'Linhas Data Inválida', 'Taxa Aprovação Média %'],
     charts: [
       { key: 'atrasos_fornecedor', title: 'Linhas atrasadas por fornecedor', category: col('fato_compras_transito', 'fornecedor'), measure: 'Linhas Atrasadas', color: COLORS.red },
@@ -416,17 +452,17 @@ const pageSpecs = [
   {
     key: 'mrp', displayName: '4. Visão MRP', accent: COLORS.blue,
     title: 'Visão MRP I', subtitle: 'Necessidade real versus estoque e trânsito | decisão por SKU e U.M.',
-    slicers: [{ ...col('dim_sku', 'unidade'), label: 'Unidade de medida' }, { ...col('dim_sku', 'grupo'), label: 'Grupo' }],
-    measures: ['SKUs com Demanda', 'SKUs Cobertos', '% SKUs MRP Cobertos', 'SKUs a Comprar', 'SKUs Críticos', 'O.S. Impactadas por Compra'],
+    slicers: [{ ...col('dim_ordem_servico', 'categoria_servico'), label: 'Tipo de serviço' }, { ...col('dim_sku', 'unidade'), label: 'Unidade de medida' }, { ...col('dim_sku', 'grupo'), label: 'Grupo' }],
+    measures: ['SKUs com Demanda', 'SKUs em Risco Estoque', 'SKUs Críticos', 'SKUs a Comprar', 'O.S. com Material Pendente', 'O.S. Impactadas por Compra'],
     charts: [
-      { key: 'cobertura_status', title: 'Cobertura dos SKUs com demanda', category: col('fato_mrp', 'status_mrp'), measure: 'SKUs MRP em Demanda', color: COLORS.blue },
-      { key: 'comprar_grupo', title: 'SKUs a comprar por grupo', category: col('dim_sku', 'grupo'), measure: 'SKUs a Comprar', color: COLORS.amber },
+      { key: 'criticos_grupo', title: 'SKUs críticos por grupo', category: col('dim_sku', 'grupo'), measure: 'SKUs Críticos', color: COLORS.red },
+      { key: 'os_compras_linha', title: 'O.S. impactadas por compras por linha', category: col('dim_ordem_servico', 'linha_produto'), measure: 'O.S. Impactadas por Compra', color: COLORS.amber },
     ],
     table: {
       title: 'Prioridade de materiais — linha operacional do MRP',
       columns: [col('dim_sku', 'codigo'), col('dim_sku', 'descricao'), col('dim_sku', 'unidade'), measure('Prioridade MRP'), measure('Próxima Necessidade'), measure('O.S. Impactadas pelo SKU'), measure('Necessidade Total (U.M.)'), measure('Estoque Disponível MRP (U.M.)'), measure('Em Trânsito (U.M.)'), measure('Necessidade Compra (U.M.)')],
       sort: { entity: 'fato_mrp', property: 'Ordem Prioridade MRP', kind: 'Measure', direction: 'Ascending' },
-      filters: [{ entity: 'fato_mrp', property: 'status_mrp', values: ['COMPRAR'] }],
+      filters: [{ entity: 'fato_necessidades_os', property: 'sem_estoque_disponivel', values: [true] }],
     },
   },
   {
@@ -435,14 +471,15 @@ const pageSpecs = [
     layout: 'history',
     slicers: [
       { ...col('dCalendario', 'AnoMes'), label: 'Mês' },
+      { ...col('dim_ordem_servico', 'categoria_servico'), label: 'Tipo de serviço' },
       { ...col('fato_historico_conclusao', 'mercado'), label: 'Mercado' },
       { ...col('fato_historico_conclusao', 'cliente'), label: 'Cliente' },
       { ...col('fato_historico_conclusao', 'linha_produto'), label: 'Linha de produto' },
     ],
-    measures: ['Carros Finalizados', 'Carros Entregues', 'Tempo Médio Produção (dias)', 'Mediana Produção (dias)', 'Finalizados em Atraso', '% Finalizados em Atraso', 'Durações Inválidas'],
+    measures: ['Carros Finalizados', 'Carros Entregues', 'Carros Retirados', 'Tempo Médio Produção (dias)', 'Mediana Produção (dias)', 'Finalizados em Atraso', '% Finalizados em Atraso'],
     table: {
       title: 'Histórico por veículo — conclusão, entrega e prazo',
-      columns: [col('fato_historico_conclusao', 'numero_os'), col('fato_historico_conclusao', 'chassi_exibicao'), col('fato_historico_conclusao', 'cliente'), col('fato_historico_conclusao', 'mercado'), col('fato_historico_conclusao', 'linha_produto'), col('fato_historico_conclusao', 'data_inicio_producao'), col('fato_historico_conclusao', 'data_finalizacao'), col('fato_historico_conclusao', 'data_entrega'), col('fato_historico_conclusao', 'dias_producao'), col('fato_historico_conclusao', 'prazo_finalizacao'), col('fato_historico_conclusao', 'situacao_finalizacao')],
+      columns: [col('fato_historico_conclusao', 'numero_os'), col('fato_historico_conclusao', 'chassi_exibicao'), col('fato_historico_conclusao', 'cliente'), col('fato_historico_conclusao', 'categoria_servico'), col('fato_historico_conclusao', 'mercado'), col('fato_historico_conclusao', 'linha_produto'), col('fato_historico_conclusao', 'data_inicio_producao'), col('fato_historico_conclusao', 'data_limite_producao'), col('fato_historico_conclusao', 'data_finalizacao'), col('fato_historico_conclusao', 'data_entrega'), col('fato_historico_conclusao', 'data_retirada'), col('fato_historico_conclusao', 'dias_producao'), col('fato_historico_conclusao', 'situacao_finalizacao')],
       sort: { entity: 'fato_historico_conclusao', property: 'data_finalizacao', kind: 'Column', direction: 'Descending' },
       filters: [{ entity: 'fato_historico_conclusao', property: 'status', values: ['FINALIZADA', 'ENTREGUE', 'RETIRADA'] }],
     },
@@ -519,21 +556,22 @@ function writePage(pageSpec, isDrill = false) {
   fs.writeFileSync(path.join(pageDir, 'page.json'), `${JSON.stringify(page, null, 2)}\n`, 'utf8');
 
   const visuals = [
-    textbox(pageSpec.key, 'header', pageSpec.title, pageSpec.subtitle, 20, 8, 820, 50, 0),
+    textbox(pageSpec.key, 'header', pageSpec.title, pageSpec.subtitle, 20, 8, 1120, 50, 0),
     divider(pageSpec.key, 20, 58, 1240, pageSpec.accent, 1),
+    imageVisual(pageSpec.key, 'logo', LOGO_RESOURCE, 1198, 3, 62, 54, 99),
   ];
 
   if (!isDrill) {
     if (pageSpec.layout === 'history') {
-      pageSpec.slicers.forEach((spec, index) => visuals.push(slicer(pageSpec.key, spec, 420 + index * 210, 2 + index)));
-      visuals.push(kpiStrip(pageSpec.key, pageSpec.measures, 156, 6));
-      visuals.push(lineChart(pageSpec.key, 'mensal', 'Finalizados x entregues por mês', col('dCalendario', 'AnoMes'), ['Carros Finalizados', 'Carros Entregues'], 20, 300, 600, 188, 7));
-      visuals.push(barChart(pageSpec.key, 'mercado', 'Carros finalizados por mercado', col('fato_historico_conclusao', 'mercado'), 'Carros Finalizados', 632, 300, 300, 188, COLORS.green, 8));
-      visuals.push(barChart(pageSpec.key, 'linha_tempo', 'Tempo médio por linha (dias)', col('fato_historico_conclusao', 'linha_produto'), 'Tempo Médio Produção (dias)', 944, 300, 316, 188, COLORS.blue, 9));
-      visuals.push(table(pageSpec.key, 'history', pageSpec.table.title, pageSpec.table.columns, 20, 500, 1240, 204, 10, pageSpec.table.sort, pageSpec.table.filters || []));
+      pageSpec.slicers.forEach((spec, index) => visuals.push(slicer(pageSpec.key, spec, 300 + index * 192, 2 + index, 188)));
+      visuals.push(kpiStrip(pageSpec.key, pageSpec.measures, 156, 7));
+      visuals.push(lineChart(pageSpec.key, 'mensal', 'Finalizados, entregues e retirados por mês', col('dCalendario', 'AnoMes'), ['Carros Finalizados', 'Carros Entregues', 'Carros Retirados'], 20, 300, 600, 188, 8));
+      visuals.push(barChart(pageSpec.key, 'mercado', 'Carros finalizados por mercado', col('fato_historico_conclusao', 'mercado'), 'Carros Finalizados', 632, 300, 300, 188, COLORS.green, 9));
+      visuals.push(barChart(pageSpec.key, 'linha_tempo', 'Tempo médio por linha (dias)', col('fato_historico_conclusao', 'linha_produto'), 'Tempo Médio Produção (dias)', 944, 300, 316, 188, COLORS.blue, 10));
+      visuals.push(table(pageSpec.key, 'history', pageSpec.table.title, pageSpec.table.columns, 20, 500, 1240, 204, 11, pageSpec.table.sort, pageSpec.table.filters || []));
     } else {
-      pageSpec.slicers.forEach((spec, index) => visuals.push(slicer(pageSpec.key, spec, 848 + index * 212, 2 + index)));
-      visuals.push(kpiStrip(pageSpec.key, pageSpec.measures, 156, 4));
+      pageSpec.slicers.forEach((spec, index) => visuals.push(slicer(pageSpec.key, spec, 636 + index * 212, 2 + index)));
+      visuals.push(kpiStrip(pageSpec.key, pageSpec.measures, 156, 6));
       pageSpec.charts.forEach((chart, index) => visuals.push(barChart(
         pageSpec.key,
         chart.key,
@@ -545,9 +583,9 @@ function writePage(pageSpec, isDrill = false) {
         612,
         188,
         chart.color,
-        5 + index
+        7 + index
       )));
-      visuals.push(table(pageSpec.key, 'actions', pageSpec.table.title, pageSpec.table.columns, 20, 500, 1240, 204, 7, pageSpec.table.sort, pageSpec.table.filters || []));
+      visuals.push(table(pageSpec.key, 'actions', pageSpec.table.title, pageSpec.table.columns, 20, 500, 1240, 204, 9, pageSpec.table.sort, pageSpec.table.filters || []));
     }
   } else {
     visuals.push(kpiStrip(pageSpec.key, pageSpec.measures, 76, 2));

@@ -405,6 +405,50 @@ table dim_ordem_servico
 
 		annotation SummarizationSetBy = Automatic
 
+	column categoria_servico
+		dataType: string
+		lineageTag: a9e6cb01-92ee-4451-8861-12d0f8c94bb7
+		summarizeBy: none
+		sourceColumn: categoria_servico
+
+	column linha_produto
+		dataType: string
+		lineageTag: 1fae0865-b2a6-468e-9c2b-2daf06454fac
+		summarizeBy: none
+		sourceColumn: linha_produto
+
+	column data_inicio_producao
+		dataType: dateTime
+		formatString: dd/MM/yyyy
+		lineageTag: e603a56c-6258-41bb-93da-d17a348cdef2
+		summarizeBy: none
+		sourceColumn: data_inicio_producao
+
+	column prazo_producao_dias
+		dataType: int64
+		lineageTag: ce12eb2b-76e4-4ae4-a233-e8978985e4c0
+		summarizeBy: none
+		sourceColumn: prazo_producao_dias
+
+	column data_limite_producao
+		dataType: dateTime
+		formatString: dd/MM/yyyy
+		lineageTag: 4b32eb7d-9734-4d99-b162-d6baa7a252e8
+		summarizeBy: none
+		sourceColumn: data_limite_producao
+
+	column producao_atrasada
+		dataType: boolean
+		lineageTag: 2105f659-462e-4cd6-b9ec-b1672df27579
+		summarizeBy: none
+		sourceColumn: producao_atrasada
+
+	column dias_atraso_producao
+		dataType: int64
+		lineageTag: 31b44600-9a4f-4c48-8057-7c90c6a6a42e
+		summarizeBy: none
+		sourceColumn: dias_atraso_producao
+
 	partition dim_ordem_servico = m
 		mode: import
 		source =

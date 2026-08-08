@@ -4,10 +4,10 @@
   "position": {
     "x": 20,
     "y": 500,
-    "z": 7,
+    "z": 9,
     "height": 204,
     "width": 1240,
-    "tabOrder": 7
+    "tabOrder": 9
   },
   "visual": {
     "visualType": "tableEx",
@@ -465,15 +465,15 @@
   "filterConfig": {
     "filters": [
       {
-        "name": "Filterf861dad10e38a96a0d6561c6",
+        "name": "Filter739992a346c458a309607cea",
         "field": {
           "Column": {
             "Expression": {
               "SourceRef": {
-                "Entity": "fato_mrp"
+                "Entity": "fato_necessidades_os"
               }
             },
-            "Property": "status_mrp"
+            "Property": "sem_estoque_disponivel"
           }
         },
         "type": "Categorical",
@@ -481,8 +481,8 @@
           "Version": 2,
           "From": [
             {
-              "Name": "fe058a",
-              "Entity": "fato_mrp",
+              "Name": "f6f25e",
+              "Entity": "fato_necessidades_os",
               "Type": 0
             }
           ],
@@ -495,10 +495,10 @@
                       "Column": {
                         "Expression": {
                           "SourceRef": {
-                            "Source": "fe058a"
+                            "Source": "f6f25e"
                           }
                         },
-                        "Property": "status_mrp"
+                        "Property": "sem_estoque_disponivel"
                       }
                     }
                   ],
@@ -506,7 +506,7 @@
                     [
                       {
                         "Literal": {
-                          "Value": "'COMPRAR'"
+                          "Value": "true"
                         }
                       }
                     ]

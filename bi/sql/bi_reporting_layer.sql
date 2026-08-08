@@ -98,14 +98,50 @@ select
     end as fase_wip,
     case
         when w.status in ('ATIVA', 'EM_PRODUÇÃO')
-         and coalesce(seq.data_entrega_vigente, w.data_comercial_prevista, w.data_comercial_calculada) < current_date
+         and greatest(w.data_aprovacao, e.data_chegada::date) is not null
+         and current_date > greatest(w.data_aprovacao, e.data_chegada::date)
+             + case when upper(trim(coalesce(w.linha, ''))) in ('LE', 'LAE') then 45 else 30 end
         then true else false
     end as entrega_atrasada,
     case
         when w.status in ('ATIVA', 'EM_PRODUÇÃO') then
-            current_date - coalesce(w.ativado_at::date, e.data_chegada::date, w.created_at::date)
+            current_date - greatest(w.data_aprovacao, e.data_chegada::date)
         else null
-    end as dias_no_wip
+    end as dias_no_wip,
+    case
+        when upper(trim(coalesce(w.tipo_servico, ''))) in ('TRANSFORMAÇÃO', 'TRANSFORMACAO') then 'TRANSFORMAÇÃO'
+        when upper(trim(coalesce(w.tipo_servico, ''))) in ('PÓS-VENDA', 'POS-VENDA', 'PÓS VENDA', 'POS VENDA') then 'PÓS-VENDA'
+        when upper(trim(coalesce(w.tipo_servico, ''))) in (
+            'INSTALAÇÃO_DE_ACESSÓRIO', 'INSTALACAO_DE_ACESSORIO',
+            'INSTALAÇÃO DE ACESSÓRIO', 'INSTALACAO DE ACESSORIO'
+        ) then 'INSTALAÇÃO DE ACESSÓRIO'
+        when nullif(trim(coalesce(w.tipo_servico, '')), '') is null then 'NÃO INFORMADO'
+        else 'OUTROS'
+    end as categoria_servico,
+    coalesce(nullif(upper(trim(w.linha)), ''), 'NÃO INFORMADO') as linha_produto,
+    greatest(w.data_aprovacao, e.data_chegada::date) as data_inicio_producao,
+    case when upper(trim(coalesce(w.linha, ''))) in ('LE', 'LAE') then 45 else 30 end as prazo_producao_dias,
+    greatest(w.data_aprovacao, e.data_chegada::date)
+        + case when upper(trim(coalesce(w.linha, ''))) in ('LE', 'LAE') then 45 else 30 end
+        as data_limite_producao,
+    case
+        when w.status in ('ATIVA', 'EM_PRODUÇÃO')
+         and greatest(w.data_aprovacao, e.data_chegada::date) is not null
+         and current_date > greatest(w.data_aprovacao, e.data_chegada::date)
+             + case when upper(trim(coalesce(w.linha, ''))) in ('LE', 'LAE') then 45 else 30 end
+        then true else false
+    end as producao_atrasada,
+    case
+        when w.status in ('ATIVA', 'EM_PRODUÇÃO')
+         and greatest(w.data_aprovacao, e.data_chegada::date) is not null
+         and current_date > greatest(w.data_aprovacao, e.data_chegada::date)
+             + case when upper(trim(coalesce(w.linha, ''))) in ('LE', 'LAE') then 45 else 30 end
+        then current_date - (
+            greatest(w.data_aprovacao, e.data_chegada::date)
+            + case when upper(trim(coalesce(w.linha, ''))) in ('LE', 'LAE') then 45 else 30 end
+        )
+        else 0
+    end as dias_atraso_producao
 from public.erp_work_orders w
 join public.erp_vehicle_entries e on e.id = w.vehicle_entry_id
 join public.erp_vehicles v on v.id = e.vehicle_id
@@ -130,7 +166,8 @@ with (security_barrier = true) as
 with historico_status as (
     select
         h.work_order_id,
-        min(h.created_at) filter (where h.novo_status = 'FINALIZADA') as primeira_finalizacao_historica
+        min(h.created_at) filter (where h.novo_status = 'FINALIZADA') as primeira_finalizacao_historica,
+        min(h.created_at) filter (where h.novo_status = 'RETIRADA') as primeira_retirada_historica
     from public.erp_work_order_status_history h
     group by h.work_order_id
 ), base as (
@@ -150,6 +187,7 @@ with historico_status as (
             else 'NÃO INFORMADO'
         end as mercado,
         coalesce(nullif(upper(trim(w.linha)), ''), 'NÃO INFORMADO') as linha_produto,
+        coalesce(w.tipo_servico, '') as tipo_servico,
         coalesce(w.tipo_veiculo, '') as tipo_veiculo,
         coalesce(w.transformacao, '') as transformacao,
         w.status,
@@ -171,7 +209,10 @@ with historico_status as (
             else 'SEM DATA'
         end as origem_data_finalizacao,
         w.data_entrega as data_entrega_em,
-        coalesce(seq.data_entrega_vigente, w.data_comercial_prevista, w.data_comercial_calculada) as prazo_finalizacao,
+        greatest(w.data_aprovacao, e.data_chegada::date)
+            + case when upper(trim(coalesce(w.linha, ''))) in ('LE', 'LAE') then 45 else 30 end
+            as prazo_finalizacao,
+        hs.primeira_retirada_historica as data_retirada_em,
         w.updated_at
     from public.erp_work_orders w
     join public.erp_vehicle_entries e on e.id = w.vehicle_entry_id
@@ -223,27 +264,46 @@ select
     c.prazo_finalizacao,
     c.dias_producao,
     c.duracao_invalida,
-    c.data_finalizacao is not null as foi_finalizado,
-    c.data_entrega is not null as foi_entregue,
-    c.data_finalizacao is not null
+    c.status in ('FINALIZADA', 'ENTREGUE') and c.data_finalizacao is not null as foi_finalizado,
+    c.status = 'ENTREGUE' and c.data_entrega is not null as foi_entregue,
+    c.status in ('FINALIZADA', 'ENTREGUE')
+        and c.data_finalizacao is not null
         and c.prazo_finalizacao is not null
         and c.data_finalizacao > c.prazo_finalizacao as finalizado_atraso,
     case
-        when c.data_finalizacao is null and c.status in ('FINALIZADA', 'ENTREGUE', 'RETIRADA')
+        when c.status = 'RETIRADA' then 'RETIRADO'
+        when c.data_finalizacao is null and c.status in ('FINALIZADA', 'ENTREGUE')
             then 'CONCLUÍDO SEM DATA FINAL'
         when c.data_finalizacao is null then 'NÃO FINALIZADO'
-        when c.prazo_finalizacao is null then 'FINALIZADO SEM PRAZO'
+        when c.prazo_finalizacao is null then 'FINALIZADO SEM DATA INICIAL'
         when c.data_finalizacao > c.prazo_finalizacao then 'FINALIZADO EM ATRASO'
         else 'FINALIZADO NO PRAZO'
     end as situacao_finalizacao,
     case
-        when c.data_finalizacao is not null
+        when c.status in ('FINALIZADA', 'ENTREGUE')
+         and c.data_finalizacao is not null
          and c.prazo_finalizacao is not null
          and c.data_finalizacao > c.prazo_finalizacao
             then c.data_finalizacao - c.prazo_finalizacao
         else 0
     end as dias_atraso_finalizacao,
-    c.updated_at
+    c.updated_at,
+    coalesce(c.tipo_servico, '') as tipo_servico,
+    case
+        when upper(trim(coalesce(c.tipo_servico, ''))) in ('TRANSFORMAÇÃO', 'TRANSFORMACAO') then 'TRANSFORMAÇÃO'
+        when upper(trim(coalesce(c.tipo_servico, ''))) in ('PÓS-VENDA', 'POS-VENDA', 'PÓS VENDA', 'POS VENDA') then 'PÓS-VENDA'
+        when upper(trim(coalesce(c.tipo_servico, ''))) in (
+            'INSTALAÇÃO_DE_ACESSÓRIO', 'INSTALACAO_DE_ACESSORIO',
+            'INSTALAÇÃO DE ACESSÓRIO', 'INSTALACAO DE ACESSORIO'
+        ) then 'INSTALAÇÃO DE ACESSÓRIO'
+        when nullif(trim(coalesce(c.tipo_servico, '')), '') is null then 'NÃO INFORMADO'
+        else 'OUTROS'
+    end as categoria_servico,
+    case when upper(trim(coalesce(c.linha_produto, ''))) in ('LE', 'LAE') then 45 else 30 end
+        as prazo_producao_dias,
+    c.prazo_finalizacao as data_limite_producao,
+    c.data_retirada_em::date as data_retirada,
+    c.status = 'RETIRADA' as foi_retirado
 from calculado c;
 
 comment on view bi.fato_historico_conclusao is
@@ -479,6 +539,7 @@ active_orders as (
         w.cliente_nome,
         w.linha,
         w.transformacao,
+        w.tipo_servico,
         w.data_comercial_prevista,
         coalesce(seq.data_entrega_vigente, w.data_comercial_prevista, w.data_comercial_calculada) as data_entrega_vigente,
         e.item_number as item,
@@ -533,6 +594,7 @@ active_orders as (
         coalesce(nullif(trim(c.cliente_nome), ''), nullif(trim(c.cliente_entrada), ''), '') as cliente,
         coalesce(c.linha, '') as linha,
         coalesce(c.transformacao, '') as transformacao,
+        coalesce(c.tipo_servico, '') as tipo_servico,
         c.data_comercial_prevista,
         c.data_entrega_vigente,
         c.document_id,
@@ -547,7 +609,7 @@ active_orders as (
     where c.codigo <> '' and c.quantidade > 0
     group by
         c.work_order_id, c.numero_os, c.status_os, c.technical_status, c.item,
-        c.chassi, c.cliente_nome, c.cliente_entrada, c.linha, c.transformacao,
+        c.chassi, c.cliente_nome, c.cliente_entrada, c.linha, c.transformacao, c.tipo_servico,
         c.data_comercial_prevista, c.data_entrega_vigente, c.document_id, c.codigo
 ), bom_paths as (
     select
@@ -624,10 +686,25 @@ select
     case
         when greatest(r.quantidade_necessaria - greatest(coalesce(c.quantidade_coberta, 0), 0), 0) > 0
         then 'PENDENTE' else 'COBERTA'
-    end as status_necessidade
+    end as status_necessidade,
+    r.tipo_servico,
+    case
+        when upper(trim(coalesce(r.tipo_servico, ''))) in ('TRANSFORMAÇÃO', 'TRANSFORMACAO') then 'TRANSFORMAÇÃO'
+        when upper(trim(coalesce(r.tipo_servico, ''))) in ('PÓS-VENDA', 'POS-VENDA', 'PÓS VENDA', 'POS VENDA') then 'PÓS-VENDA'
+        when upper(trim(coalesce(r.tipo_servico, ''))) in (
+            'INSTALAÇÃO_DE_ACESSÓRIO', 'INSTALACAO_DE_ACESSORIO',
+            'INSTALAÇÃO DE ACESSÓRIO', 'INSTALACAO DE ACESSORIO'
+        ) then 'INSTALAÇÃO DE ACESSÓRIO'
+        when nullif(trim(coalesce(r.tipo_servico, '')), '') is null then 'NÃO INFORMADO'
+        else 'OUTROS'
+    end as categoria_servico,
+    coalesce(es.estoque_disponivel, 0) as estoque_disponivel,
+    greatest(r.quantidade_necessaria - greatest(coalesce(c.quantidade_coberta, 0), 0), 0) > 0
+        and coalesce(es.estoque_disponivel, 0) <= 0 as sem_estoque_disponivel
 from required r
 left join public.skus s on upper(trim(s.sku)) = r.codigo
-left join coverage c on c.work_order_id = r.work_order_id and c.covered_sku_id = s.id;
+left join coverage c on c.work_order_id = r.work_order_id and c.covered_sku_id = s.id
+left join bi.fato_estoque_atual es on es.sku_id = s.id;
 
 comment on view bi.fato_necessidades_os is
     'Necessidade real por O.S. e SKU. Empenho do conjunto cobre sua arvore BOM; baixa filha nao duplica cobertura.';

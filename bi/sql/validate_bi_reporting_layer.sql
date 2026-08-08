@@ -78,6 +78,35 @@ with checks as (
         0::numeric
     union all
     select
+        'os_atraso_sla_consistente',
+        (
+            select count(*)::numeric
+            from bi.dim_ordem_servico
+            where producao_atrasada is distinct from
+                (em_wip and data_limite_producao is not null and current_date > data_limite_producao)
+        ),
+        0::numeric
+    union all
+    select
+        'material_pendente_sem_estoque_consistente',
+        (
+            select count(*)::numeric
+            from bi.fato_necessidades_os
+            where sem_estoque_disponivel is distinct from
+                (quantidade_pendente > 0 and estoque_disponivel <= 0)
+        ),
+        0::numeric
+    union all
+    select
+        'retirada_separada_de_finalizacao_entrega',
+        (
+            select count(*)::numeric
+            from bi.fato_historico_conclusao
+            where foi_retirado and (foi_finalizado or foi_entregue)
+        ),
+        0::numeric
+    union all
+    select
         'papel_powerbi_com_select',
         has_table_privilege('powerbi_reader', 'bi.fato_mrp', 'SELECT')::int::numeric,
         1::numeric

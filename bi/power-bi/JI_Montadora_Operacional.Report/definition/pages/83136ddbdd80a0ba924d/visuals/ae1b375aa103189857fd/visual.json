@@ -1,13 +1,13 @@
 {
   "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/visualContainer/2.11.0/schema.json",
-  "name": "7b2d986cf0ed3d4b5aff",
+  "name": "ae1b375aa103189857fd",
   "position": {
     "x": 648,
     "y": 300,
-    "z": 6,
+    "z": 8,
     "height": 188,
     "width": 612,
-    "tabOrder": 6
+    "tabOrder": 8
   },
   "visual": {
     "visualType": "clusteredBarChart",
@@ -20,14 +20,14 @@
                 "Column": {
                   "Expression": {
                     "SourceRef": {
-                      "Entity": "fato_mrp"
+                      "Entity": "dim_sku"
                     }
                   },
-                  "Property": "status_mrp"
+                  "Property": "grupo"
                 }
               },
-              "queryRef": "fato_mrp.status_mrp",
-              "nativeQueryRef": "status_mrp",
+              "queryRef": "dim_sku.grupo",
+              "nativeQueryRef": "grupo",
               "active": true
             }
           ]
@@ -42,11 +42,11 @@
                       "Entity": "fato_mrp"
                     }
                   },
-                  "Property": "SKUs MRP em Demanda"
+                  "Property": "SKUs Críticos"
                 }
               },
-              "queryRef": "fato_mrp.SKUs MRP em Demanda",
-              "nativeQueryRef": "SKUs MRP em Demanda"
+              "queryRef": "fato_mrp.SKUs Críticos",
+              "nativeQueryRef": "SKUs Críticos"
             }
           ]
         }
@@ -61,7 +61,7 @@
                     "Entity": "fato_mrp"
                   }
                 },
-                "Property": "SKUs MRP em Demanda"
+                "Property": "SKUs Críticos"
               }
             },
             "direction": "Descending"
@@ -210,7 +210,7 @@
             "text": {
               "expr": {
                 "Literal": {
-                  "Value": "'Cobertura do MRP — SKUs com demanda'"
+                  "Value": "'SKUs críticos por grupo'"
                 }
               }
             },

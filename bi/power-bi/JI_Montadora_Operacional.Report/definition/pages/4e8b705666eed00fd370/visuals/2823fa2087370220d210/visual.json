@@ -1,13 +1,13 @@
 {
   "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/visualContainer/2.11.0/schema.json",
-  "name": "73113890829132179961",
+  "name": "2823fa2087370220d210",
   "position": {
-    "x": 1060,
+    "x": 636,
     "y": 68,
-    "z": 3,
+    "z": 2,
     "height": 80,
     "width": 200,
-    "tabOrder": 3
+    "tabOrder": 2
   },
   "visual": {
     "visualType": "slicer",
@@ -23,11 +23,11 @@
                       "Entity": "dim_ordem_servico"
                     }
                   },
-                  "Property": "linha"
+                  "Property": "categoria_servico"
                 }
               },
-              "queryRef": "dim_ordem_servico.linha",
-              "nativeQueryRef": "linha"
+              "queryRef": "dim_ordem_servico.categoria_servico",
+              "nativeQueryRef": "categoria_servico"
             }
           ]
         }
@@ -60,7 +60,7 @@
             "text": {
               "expr": {
                 "Literal": {
-                  "Value": "'Linha'"
+                  "Value": "'Tipo de serviço'"
                 }
               }
             }
@@ -204,7 +204,7 @@
   "filterConfig": {
     "filters": [
       {
-        "name": "Filter73113890829132179961f017",
+        "name": "Filter2823fa2087370220d210350a",
         "field": {
           "Column": {
             "Expression": {
@@ -212,7 +212,7 @@
                 "Entity": "dim_ordem_servico"
               }
             },
-            "Property": "linha"
+            "Property": "categoria_servico"
           }
         },
         "type": "Categorical"

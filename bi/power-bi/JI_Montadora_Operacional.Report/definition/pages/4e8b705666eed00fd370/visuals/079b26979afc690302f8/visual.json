@@ -4,10 +4,10 @@
   "position": {
     "x": 20,
     "y": 500,
-    "z": 7,
+    "z": 9,
     "height": 204,
     "width": 1240,
-    "tabOrder": 7
+    "tabOrder": 9
   },
   "visual": {
     "visualType": "tableEx",
@@ -51,11 +51,11 @@
                       "Entity": "dim_ordem_servico"
                     }
                   },
-                  "Property": "modelo"
+                  "Property": "linha_produto"
                 }
               },
-              "queryRef": "dim_ordem_servico.modelo",
-              "nativeQueryRef": "modelo"
+              "queryRef": "dim_ordem_servico.linha_produto",
+              "nativeQueryRef": "linha_produto"
             },
             {
               "field": {
@@ -65,11 +65,39 @@
                       "Entity": "dim_ordem_servico"
                     }
                   },
-                  "Property": "data_entrega_vigente"
+                  "Property": "data_inicio_producao"
                 }
               },
-              "queryRef": "dim_ordem_servico.data_entrega_vigente",
-              "nativeQueryRef": "data_entrega_vigente"
+              "queryRef": "dim_ordem_servico.data_inicio_producao",
+              "nativeQueryRef": "data_inicio_producao"
+            },
+            {
+              "field": {
+                "Column": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "dim_ordem_servico"
+                    }
+                  },
+                  "Property": "prazo_producao_dias"
+                }
+              },
+              "queryRef": "dim_ordem_servico.prazo_producao_dias",
+              "nativeQueryRef": "prazo_producao_dias"
+            },
+            {
+              "field": {
+                "Column": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "dim_ordem_servico"
+                    }
+                  },
+                  "Property": "data_limite_producao"
+                }
+              },
+              "queryRef": "dim_ordem_servico.data_limite_producao",
+              "nativeQueryRef": "data_limite_producao"
             },
             {
               "field": {
@@ -93,11 +121,11 @@
                       "Entity": "dim_ordem_servico"
                     }
                   },
-                  "Property": "dias_no_wip"
+                  "Property": "dias_atraso_producao"
                 }
               },
-              "queryRef": "dim_ordem_servico.dias_no_wip",
-              "nativeQueryRef": "dias_no_wip"
+              "queryRef": "dim_ordem_servico.dias_atraso_producao",
+              "nativeQueryRef": "dias_atraso_producao"
             },
             {
               "field": {
@@ -126,20 +154,6 @@
               },
               "queryRef": "fato_mrp.Linhas Material Pendente O.S.",
               "nativeQueryRef": "Linhas Material Pendente O.S."
-            },
-            {
-              "field": {
-                "Measure": {
-                  "Expression": {
-                    "SourceRef": {
-                      "Entity": "fato_mrp"
-                    }
-                  },
-                  "Property": "Dias para Entrega O.S."
-                }
-              },
-              "queryRef": "fato_mrp.Dias para Entrega O.S.",
-              "nativeQueryRef": "Dias para Entrega O.S."
             }
           ]
         }

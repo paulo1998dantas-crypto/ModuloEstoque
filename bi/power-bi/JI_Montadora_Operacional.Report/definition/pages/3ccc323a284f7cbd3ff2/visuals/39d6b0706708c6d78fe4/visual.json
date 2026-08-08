@@ -4,10 +4,10 @@
   "position": {
     "x": 20,
     "y": 500,
-    "z": 10,
+    "z": 11,
     "height": 204,
     "width": 1240,
-    "tabOrder": 10
+    "tabOrder": 11
   },
   "visual": {
     "visualType": "tableEx",
@@ -65,6 +65,20 @@
                       "Entity": "fato_historico_conclusao"
                     }
                   },
+                  "Property": "categoria_servico"
+                }
+              },
+              "queryRef": "fato_historico_conclusao.categoria_servico",
+              "nativeQueryRef": "categoria_servico"
+            },
+            {
+              "field": {
+                "Column": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "fato_historico_conclusao"
+                    }
+                  },
                   "Property": "mercado"
                 }
               },
@@ -107,6 +121,20 @@
                       "Entity": "fato_historico_conclusao"
                     }
                   },
+                  "Property": "data_limite_producao"
+                }
+              },
+              "queryRef": "fato_historico_conclusao.data_limite_producao",
+              "nativeQueryRef": "data_limite_producao"
+            },
+            {
+              "field": {
+                "Column": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "fato_historico_conclusao"
+                    }
+                  },
                   "Property": "data_finalizacao"
                 }
               },
@@ -135,11 +163,11 @@
                       "Entity": "fato_historico_conclusao"
                     }
                   },
-                  "Property": "dias_producao"
+                  "Property": "data_retirada"
                 }
               },
-              "queryRef": "fato_historico_conclusao.dias_producao",
-              "nativeQueryRef": "dias_producao"
+              "queryRef": "fato_historico_conclusao.data_retirada",
+              "nativeQueryRef": "data_retirada"
             },
             {
               "field": {
@@ -149,11 +177,11 @@
                       "Entity": "fato_historico_conclusao"
                     }
                   },
-                  "Property": "prazo_finalizacao"
+                  "Property": "dias_producao"
                 }
               },
-              "queryRef": "fato_historico_conclusao.prazo_finalizacao",
-              "nativeQueryRef": "prazo_finalizacao"
+              "queryRef": "fato_historico_conclusao.dias_producao",
+              "nativeQueryRef": "dias_producao"
             },
             {
               "field": {

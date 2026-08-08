@@ -55,6 +55,11 @@
           "name": "IndustrialCockpit-e52f9a17.json",
           "path": "IndustrialCockpit-e52f9a17.json",
           "type": "CustomTheme"
+        },
+        {
+          "name": "JIMontadoraLogo-202608081600.png",
+          "path": "JIMontadoraLogo-202608081600.png",
+          "type": "Image"
         }
       ]
     }

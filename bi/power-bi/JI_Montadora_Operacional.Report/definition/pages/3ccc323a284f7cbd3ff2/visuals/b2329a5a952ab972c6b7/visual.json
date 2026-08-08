@@ -4,10 +4,10 @@
   "position": {
     "x": 20,
     "y": 300,
-    "z": 7,
+    "z": 8,
     "height": 188,
     "width": 600,
-    "tabOrder": 7
+    "tabOrder": 8
   },
   "visual": {
     "visualType": "lineChart",
@@ -61,6 +61,20 @@
               },
               "queryRef": "fato_mrp.Carros Entregues",
               "nativeQueryRef": "Carros Entregues"
+            },
+            {
+              "field": {
+                "Measure": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "fato_mrp"
+                    }
+                  },
+                  "Property": "Carros Retirados"
+                }
+              },
+              "queryRef": "fato_mrp.Carros Retirados",
+              "nativeQueryRef": "Carros Retirados"
             }
           ]
         }
@@ -213,7 +227,7 @@
             "text": {
               "expr": {
                 "Literal": {
-                  "Value": "'Finalizados x entregues por mês'"
+                  "Value": "'Finalizados, entregues e retirados por mês'"
                 }
               }
             },

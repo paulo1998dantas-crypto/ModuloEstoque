@@ -27,12 +27,12 @@ O modelo usa **Importar**, com conexão PostgreSQL direta por SSL. A atualizaç�
 ## Cardinalidade e direção
 
 - `dim_sku[sku_id]` tem cardinalidade 1:* para todos os fatos que contêm `sku_id`.
-- `dim_ordem_servico[work_order_id]` tem cardinalidade 1:* para necessidades, empenhos, movimentos, etapas e compras.
-- `dCalendario[Data]` tem cardinalidade 1:* para a data principal de cada fato. No histórico, `data_finalizacao` é ativa e `data_entrega` é inativa.
+- `dim_ordem_servico[work_order_id]` tem cardinalidade 1:* para necessidades, empenhos, movimentos, etapas, compras e histórico de conclusão. Assim, `categoria_servico` filtra também a visão histórica.
+- `dCalendario[Data]` tem cardinalidade 1:* para a data principal de cada fato. No histórico, `data_finalizacao` é ativa; `data_entrega` e `data_retirada` são inativas.
 - A filtragem é unidirecional, da dimensão para o fato.
 - Não existe relacionamento fato a fato. `fato_mrp` é uma consolidação governada por SKU.
 
-Datas principais: movimento=`data`; inventário=`data_contagem`; compras=`data_necessidade`; recebimento=`data`; Forecast=`data_entrega_prevista`; O.S.=`data_entrega_vigente`; histórico=`data_finalizacao`. A data alternativa `fato_historico_conclusao[data_entrega]` fica inativa e é acionada por `USERELATIONSHIP` na medida `Carros Entregues`.
+Datas principais: movimento=`data`; inventário=`data_contagem`; compras=`data_necessidade`; recebimento=`data`; Forecast=`data_entrega_prevista`; O.S.=`data_entrega_vigente`; histórico=`data_finalizacao`. As datas alternativas `data_entrega` e `data_retirada` são acionadas por `USERELATIONSHIP` nas respectivas medidas.
 
 ## Segurança semântica de quantidades
 

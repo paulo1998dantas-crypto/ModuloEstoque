@@ -148,3 +148,12 @@ relationship rel_dCalendario_fato_historico_conclusao_data_entrega
 	fromColumn: fato_historico_conclusao.data_entrega
 	toColumn: dCalendario.Data
 
+relationship rel_dCalendario_fato_historico_conclusao_data_retirada
+	isActive: false
+	fromColumn: fato_historico_conclusao.data_retirada
+	toColumn: dCalendario.Data
+
+relationship rel_dim_ordem_servico_fato_historico_conclusao_work_order_id
+	fromColumn: fato_historico_conclusao.work_order_id
+	toColumn: dim_ordem_servico.work_order_id
+

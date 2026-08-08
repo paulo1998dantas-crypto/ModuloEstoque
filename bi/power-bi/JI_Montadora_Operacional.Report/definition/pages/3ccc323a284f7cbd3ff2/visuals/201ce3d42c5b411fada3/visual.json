@@ -4,10 +4,10 @@
   "position": {
     "x": 20,
     "y": 156,
-    "z": 6,
+    "z": 7,
     "height": 132,
     "width": 1240,
-    "tabOrder": 6
+    "tabOrder": 7
   },
   "visual": {
     "visualType": "cardVisual",
@@ -42,6 +42,20 @@
               },
               "queryRef": "fato_mrp.Carros Entregues",
               "nativeQueryRef": "Carros Entregues"
+            },
+            {
+              "field": {
+                "Measure": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "fato_mrp"
+                    }
+                  },
+                  "Property": "Carros Retirados"
+                }
+              },
+              "queryRef": "fato_mrp.Carros Retirados",
+              "nativeQueryRef": "Carros Retirados"
             },
             {
               "field": {
@@ -98,20 +112,6 @@
               },
               "queryRef": "fato_mrp.% Finalizados em Atraso",
               "nativeQueryRef": "% Finalizados em Atraso"
-            },
-            {
-              "field": {
-                "Measure": {
-                  "Expression": {
-                    "SourceRef": {
-                      "Entity": "fato_mrp"
-                    }
-                  },
-                  "Property": "Durações Inválidas"
-                }
-              },
-              "queryRef": "fato_mrp.Durações Inválidas",
-              "nativeQueryRef": "Durações Inválidas"
             }
           ]
         }

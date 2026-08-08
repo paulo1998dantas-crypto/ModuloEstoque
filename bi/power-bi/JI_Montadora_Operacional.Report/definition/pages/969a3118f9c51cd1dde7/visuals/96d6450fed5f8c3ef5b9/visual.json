@@ -1,13 +1,13 @@
 {
   "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/visualContainer/2.11.0/schema.json",
-  "name": "4409932b925ca7b74d93",
+  "name": "96d6450fed5f8c3ef5b9",
   "position": {
     "x": 648,
     "y": 300,
-    "z": 6,
+    "z": 8,
     "height": 188,
     "width": 612,
-    "tabOrder": 6
+    "tabOrder": 8
   },
   "visual": {
     "visualType": "clusteredBarChart",
@@ -20,14 +20,14 @@
                 "Column": {
                   "Expression": {
                     "SourceRef": {
-                      "Entity": "dim_sku"
+                      "Entity": "dim_ordem_servico"
                     }
                   },
-                  "Property": "grupo"
+                  "Property": "linha_produto"
                 }
               },
-              "queryRef": "dim_sku.grupo",
-              "nativeQueryRef": "grupo",
+              "queryRef": "dim_ordem_servico.linha_produto",
+              "nativeQueryRef": "linha_produto",
               "active": true
             }
           ]
@@ -42,11 +42,11 @@
                       "Entity": "fato_mrp"
                     }
                   },
-                  "Property": "SKUs a Comprar"
+                  "Property": "O.S. Impactadas por Compra"
                 }
               },
-              "queryRef": "fato_mrp.SKUs a Comprar",
-              "nativeQueryRef": "SKUs a Comprar"
+              "queryRef": "fato_mrp.O.S. Impactadas por Compra",
+              "nativeQueryRef": "O.S. Impactadas por Compra"
             }
           ]
         }
@@ -61,7 +61,7 @@
                     "Entity": "fato_mrp"
                   }
                 },
-                "Property": "SKUs a Comprar"
+                "Property": "O.S. Impactadas por Compra"
               }
             },
             "direction": "Descending"
@@ -210,7 +210,7 @@
             "text": {
               "expr": {
                 "Literal": {
-                  "Value": "'SKUs a comprar por grupo'"
+                  "Value": "'O.S. impactadas por compras por linha'"
                 }
               }
             },

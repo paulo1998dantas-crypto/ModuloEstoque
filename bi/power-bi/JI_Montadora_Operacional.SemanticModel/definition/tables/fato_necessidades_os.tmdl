@@ -208,6 +208,30 @@ table fato_necessidades_os
 
 		annotation SummarizationSetBy = Automatic
 
+	column tipo_servico
+		dataType: string
+		lineageTag: f11a63b3-fead-46bf-9639-b8f6b652fe41
+		summarizeBy: none
+		sourceColumn: tipo_servico
+
+	column categoria_servico
+		dataType: string
+		lineageTag: f9a3e48e-802e-49e7-8620-fec703e8aa63
+		summarizeBy: none
+		sourceColumn: categoria_servico
+
+	column estoque_disponivel
+		dataType: double
+		lineageTag: 004599f5-83a8-432d-90e9-f1b52f7718d4
+		summarizeBy: none
+		sourceColumn: estoque_disponivel
+
+	column sem_estoque_disponivel
+		dataType: boolean
+		lineageTag: cde4de72-b1e3-4cd1-b13b-1de31f15c2a7
+		summarizeBy: none
+		sourceColumn: sem_estoque_disponivel
+
 	partition fato_necessidades_os = m
 		mode: import
 		source =

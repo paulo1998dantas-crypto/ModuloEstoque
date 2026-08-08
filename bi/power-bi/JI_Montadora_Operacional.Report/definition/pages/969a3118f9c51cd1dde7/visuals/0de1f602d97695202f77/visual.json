@@ -4,10 +4,10 @@
   "position": {
     "x": 20,
     "y": 156,
-    "z": 4,
+    "z": 6,
     "height": 132,
     "width": 1240,
-    "tabOrder": 4
+    "tabOrder": 6
   },
   "visual": {
     "visualType": "cardVisual",
@@ -37,11 +37,11 @@
                       "Entity": "fato_mrp"
                     }
                   },
-                  "Property": "SKUs Cobertos"
+                  "Property": "SKUs em Risco Estoque"
                 }
               },
-              "queryRef": "fato_mrp.SKUs Cobertos",
-              "nativeQueryRef": "SKUs Cobertos"
+              "queryRef": "fato_mrp.SKUs em Risco Estoque",
+              "nativeQueryRef": "SKUs em Risco Estoque"
             },
             {
               "field": {
@@ -51,11 +51,11 @@
                       "Entity": "fato_mrp"
                     }
                   },
-                  "Property": "% SKUs MRP Cobertos"
+                  "Property": "SKUs Críticos"
                 }
               },
-              "queryRef": "fato_mrp.% SKUs MRP Cobertos",
-              "nativeQueryRef": "% SKUs MRP Cobertos"
+              "queryRef": "fato_mrp.SKUs Críticos",
+              "nativeQueryRef": "SKUs Críticos"
             },
             {
               "field": {
@@ -79,11 +79,11 @@
                       "Entity": "fato_mrp"
                     }
                   },
-                  "Property": "SKUs Críticos"
+                  "Property": "O.S. com Material Pendente"
                 }
               },
-              "queryRef": "fato_mrp.SKUs Críticos",
-              "nativeQueryRef": "SKUs Críticos"
+              "queryRef": "fato_mrp.O.S. com Material Pendente",
+              "nativeQueryRef": "O.S. com Material Pendente"
             },
             {
               "field": {

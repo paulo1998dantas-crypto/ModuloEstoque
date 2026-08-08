@@ -203,6 +203,44 @@ table fato_historico_conclusao
 		summarizeBy: none
 		sourceColumn: updated_at
 
+	column tipo_servico
+		dataType: string
+		lineageTag: b7f677c7-f88d-47e2-84e9-099c9163ca9d
+		summarizeBy: none
+		sourceColumn: tipo_servico
+
+	column categoria_servico
+		dataType: string
+		lineageTag: e3dc80ee-2056-4f16-b577-29299501076a
+		summarizeBy: none
+		sourceColumn: categoria_servico
+
+	column prazo_producao_dias
+		dataType: int64
+		lineageTag: 815b7674-fca0-451d-8a90-1273c5b13949
+		summarizeBy: none
+		sourceColumn: prazo_producao_dias
+
+	column data_limite_producao
+		dataType: dateTime
+		formatString: dd/MM/yyyy
+		lineageTag: ea164438-f67e-4759-b7bd-492c803632e9
+		summarizeBy: none
+		sourceColumn: data_limite_producao
+
+	column data_retirada
+		dataType: dateTime
+		formatString: dd/MM/yyyy
+		lineageTag: 55080c3b-3e3e-4b65-8f8a-0809b40d736a
+		summarizeBy: none
+		sourceColumn: data_retirada
+
+	column foi_retirado
+		dataType: boolean
+		lineageTag: b09f71f8-3f86-4a20-aa35-1e7b620e2b31
+		summarizeBy: none
+		sourceColumn: foi_retirado
+
 	partition fato_historico_conclusao = m
 		mode: import
 		source =

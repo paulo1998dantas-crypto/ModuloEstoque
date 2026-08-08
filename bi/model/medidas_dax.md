@@ -1,14 +1,14 @@
 # Medidas DAX
 
-A fonte única das medidas é [`powerbi_measures.json`](powerbi_measures.json). O arquivo contém nome, expressão DAX, formato e descrição das 88 medidas publicadas. Os scripts `sync_powerbi_tmdl.js` e `sync_powerbi_measures.ps1` mantêm o projeto PBIP e o modelo aberto no Power BI Desktop sincronizados com essa definição.
+A fonte única das medidas é [`powerbi_measures.json`](powerbi_measures.json). O arquivo contém nome, expressão DAX, formato e descrição das 89 medidas publicadas. Os scripts `sync_powerbi_tmdl.js` e `sync_powerbi_measures.ps1` mantêm o projeto PBIP e o modelo aberto no Power BI Desktop sincronizados com essa definição.
 
 ## Indicadores executivos
 
 - Estoque: `SKUs Ativos`, `SKUs com Saldo`, `SKUs Zerados`, `SKUs em Risco Estoque`, `Movimentações Ativas` e `Baixas Registradas`.
 - PCP: `O.S. no WIP`, `O.S. Atrasadas`, `% O.S. Atrasadas`, `Avanço Médio %`, `O.S. com Material Pendente` e `Forecasts Ativos`.
 - Compras: `Linhas em Trânsito`, `Valor em Trânsito`, `Linhas Atrasadas`, `Linhas sem Data`, `Linhas Data Inválida`, `O.C. Abertas` e `Taxa Aprovação Média %`.
-- MRP: `SKUs com Demanda`, `SKUs Cobertos`, `% SKUs MRP Cobertos`, `SKUs a Comprar`, `SKUs Críticos`, `SKUs Urgentes` e `O.S. Impactadas por Compra`.
-- Histórico: `Carros Finalizados`, `Carros Entregues`, `Tempo Médio Produção (dias)`, `Mediana Produção (dias)`, `Finalizados em Atraso`, `% Finalizados em Atraso`, `Finalizados sem Prazo`, `Concluídos sem Data Final` e `Durações Inválidas`.
+- MRP: `SKUs com Demanda`, `SKUs em Risco Estoque`, `SKUs a Comprar`, `SKUs Críticos` e `O.S. Impactadas por Compra`, com resposta ao filtro de tipo de serviço.
+- Histórico: `Carros Finalizados`, `Carros Entregues`, `Carros Retirados`, `Tempo Médio Produção (dias)`, `Mediana Produção (dias)`, `Finalizados em Atraso` e `% Finalizados em Atraso`.
 
 ## Quantidades físicas protegidas por unidade
 
