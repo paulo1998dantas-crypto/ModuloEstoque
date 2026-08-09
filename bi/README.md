@@ -47,9 +47,12 @@ Quantidades físicas de unidades diferentes não são somadas. Cartões e compar
 node bi/model/sync_powerbi_tmdl.js
 node bi/model/normalize_powerbi_tmdl.js
 node bi/model/build_powerbi_report.js
+node bi/model/sync_process_colors.js
 node bi/model/validate_powerbi_bindings.js
 pnpm dlx @microsoft/powerbi-report-authoring-cli@latest validate bi/power-bi/JI_Montadora_Operacional.Report
 ```
+
+`sync_process_colors.js` usa o gráfico **Conclusões diárias por processo** como referência e replica a paleta por processo nos gráficos mensal e anual. Execute-o após ajustar manualmente as cores do gráfico diário no Power BI Desktop.
 
 Para atualizar o modelo já aberto no Desktop, executar `bi/model/refresh_powerbi_model.ps1`. O relatório detalhado de QA está em `VALIDACAO_POWER_BI_2026-08-08.md`.
 

@@ -33,9 +33,47 @@ const COLORS = {
 };
 const LOGO_RESOURCE = 'JIMontadoraLogoGradient-202608081845.png';
 
+// Perfil aprovado no gráfico diário: a cor identifica o processo, não a posição
+// dele no gráfico. Assim, a mesma etapa mantém a mesma leitura em qualquer período.
+const PROCESS_COLOR_PROFILE = [
+  { sector: 'ACESSÓRIOS', themeColorId: 1, percent: 0 },
+  { sector: 'AR CONDICIONADO', themeColorId: 9, percent: -0.5 },
+  { sector: 'BANCOS', themeColorId: 5, percent: 0 },
+  { sector: 'DESMONTAGEM', themeColorId: 0, percent: -0.6 },
+  { sector: 'ELÉTRICA', themeColorId: 2, percent: -0.5 },
+  { sector: 'EXPEDIÇÃO', color: '#C2ADBB' },
+  { sector: 'LIBERAÇÃO', color: '#04FF08' },
+  { sector: 'PLOTAGEM', color: '#64304E' },
+  { sector: 'PREPARAÇÃO', themeColorId: 1, percent: 0.4 },
+  { sector: 'REVESTIMENTO', color: '#E7B16B' },
+  { sector: 'SERRALHERIA', themeColorId: 6, percent: -0.5 },
+  { sector: 'VIDROS', color: '#B4B16B' },
+];
+
 const literal = (value) => ({ expr: { Literal: { Value: value } } });
 const stringLiteral = (value) => literal(`'${value.replaceAll("'", "''")}'`);
 const colorLiteral = (value) => ({ solid: { color: stringLiteral(value) } });
+
+function processColorDataPoints() {
+  return PROCESS_COLOR_PROFILE.map(({ sector, color, themeColorId, percent }) => ({
+    properties: {
+      fill: color
+        ? colorLiteral(color)
+        : { solid: { color: { expr: { ThemeDataColor: { ColorId: themeColorId, Percent: percent } } } } },
+    },
+    selector: {
+      data: [{
+        scopeId: {
+          Comparison: {
+            ComparisonKind: 0,
+            Left: { Column: { Expression: { SourceRef: { Entity: 'fato_progresso_producao' } }, Property: 'setor' } },
+            Right: { Literal: { Value: `'${sector}'` } },
+          },
+        },
+      }],
+    },
+  }));
+}
 
 const field = (entity, property, kind = 'Column') => ({
   [kind]: {
@@ -348,6 +386,9 @@ function stackedColumnChart(pageKey, key, title, category, legend, measureName, 
           sortDefinition: { sort: [{ field: field(category.entity, category.property, category.kind || 'Column'), direction: 'Ascending' }], isDefaultSort: true },
         },
         objects: {
+          ...(legend.entity === 'fato_progresso_producao' && legend.property === 'setor'
+            ? { dataPoint: processColorDataPoints() }
+            : {}),
           labels: [{ properties: { show: literal('true'), optimizeLabelDisplay: literal('true') } }],
           legend: [{ properties: { show: literal('true'), position: stringLiteral('Top') } }],
           categoryAxis: [{ properties: { labelColor: colorLiteral(COLORS.muted), titleText: stringLiteral('') } }],
