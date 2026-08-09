@@ -1,13 +1,13 @@
 {
   "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/visualContainer/2.11.0/schema.json",
-  "name": "6a7cdbfeced55b0b079b",
+  "name": "47d510ec547fd9ff92a0",
   "position": {
-    "x": 20,
-    "y": 248,
-    "z": 8,
+    "x": 440,
+    "y": 486,
+    "z": 10,
     "height": 218,
-    "width": 820,
-    "tabOrder": 8
+    "width": 400,
+    "tabOrder": 10
   },
   "visual": {
     "visualType": "clusteredColumnChart",
@@ -23,11 +23,11 @@
                       "Entity": "fato_progresso_producao"
                     }
                   },
-                  "Property": "semana_inicio"
+                  "Property": "ano_mes"
                 }
               },
-              "queryRef": "fato_progresso_producao.semana_inicio",
-              "nativeQueryRef": "semana_inicio",
+              "queryRef": "fato_progresso_producao.ano_mes",
+              "nativeQueryRef": "ano_mes",
               "active": true
             }
           ]
@@ -80,7 +80,7 @@
                     "Entity": "fato_progresso_producao"
                   }
                 },
-                "Property": "semana_inicio"
+                "Property": "ano_mes"
               }
             },
             "direction": "Ascending"
@@ -218,7 +218,7 @@
             "text": {
               "expr": {
                 "Literal": {
-                  "Value": "'Etapas concluídas por setor — semanal'"
+                  "Value": "'Conclusões por processo — mensal'"
                 }
               }
             },

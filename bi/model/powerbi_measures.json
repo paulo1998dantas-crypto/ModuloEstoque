@@ -77,9 +77,9 @@
   { "name": "Última Atualização Histórico", "expression": "MAX(fato_historico_conclusao[updated_at])", "folder": "5. Histórico de Produção\\Qualidade", "format": "dd/MM/yyyy HH:mm" },
 
   { "name": "Etapas Concluídas", "expression": "CALCULATE(DISTINCTCOUNT(fato_progresso_producao[evento_id]), fato_progresso_producao[tipo_evento] = \"ETAPA CONCLUÍDA\")", "folder": "6. Fechamento de Produção", "format": "0" },
-  { "name": "Veículos Finalizados (Produção)", "expression": "CALCULATE(DISTINCTCOUNT(fato_progresso_producao[work_order_id]), fato_progresso_producao[tipo_evento] = \"VEÍCULO FINALIZADO\")", "folder": "6. Fechamento de Produção", "format": "0" },
-  { "name": "Veículos Entregues (Produção)", "expression": "CALCULATE(DISTINCTCOUNT(fato_progresso_producao[work_order_id]), fato_progresso_producao[tipo_evento] = \"VEÍCULO ENTREGUE\")", "folder": "6. Fechamento de Produção", "format": "0" },
-  { "name": "Setores com Produção", "expression": "COUNTROWS(FILTER(VALUES(fato_progresso_producao[setor]), CALCULATE([Etapas Concluídas]) > 0))", "folder": "6. Fechamento de Produção", "format": "0" },
+  { "name": "O.S. Finalizadas na Fábrica", "expression": "CALCULATE(DISTINCTCOUNT(fato_progresso_producao[work_order_id]), fato_progresso_producao[tipo_evento] = \"VEÍCULO FINALIZADO\")", "folder": "6. Fechamento de Produção", "format": "0" },
+  { "name": "Veículos Entregues ao Cliente", "expression": "CALCULATE(DISTINCTCOUNT(fato_progresso_producao[work_order_id]), fato_progresso_producao[tipo_evento] = \"VEÍCULO ENTREGUE\")", "folder": "6. Fechamento de Produção", "format": "0" },
+  { "name": "Processos com Apontamentos", "expression": "COUNTROWS(FILTER(VALUES(fato_progresso_producao[setor]), CALCULATE([Etapas Concluídas]) > 0))", "folder": "6. Fechamento de Produção", "format": "0" },
 
   { "name": "Última Atualização", "expression": "MAX(fato_mrp[atualizado_em])", "folder": "5. Auditoria", "format": "dd/MM/yyyy HH:mm" },
 

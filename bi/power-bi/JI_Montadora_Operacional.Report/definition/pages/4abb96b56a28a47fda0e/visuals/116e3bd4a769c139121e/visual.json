@@ -32,7 +32,7 @@
               {
                 "textRuns": [
                   {
-                    "value": "Etapas concluídas por setor, finalizações e entregas | semanas, meses e anos",
+                    "value": "Leitura por processo: cada série mostra suas próprias conclusões, sem soma entre setores",
                     "textStyle": {
                       "fontFamily": "Segoe UI",
                       "fontSize": "10px",

@@ -4,10 +4,10 @@
   "position": {
     "x": 20,
     "y": 486,
-    "z": 10,
+    "z": 9,
     "height": 218,
-    "width": 610,
-    "tabOrder": 10
+    "width": 400,
+    "tabOrder": 9
   },
   "visual": {
     "visualType": "lineChart",
@@ -23,11 +23,11 @@
                       "Entity": "fato_progresso_producao"
                     }
                   },
-                  "Property": "semana_inicio"
+                  "Property": "data_evento"
                 }
               },
-              "queryRef": "fato_progresso_producao.semana_inicio",
-              "nativeQueryRef": "semana_inicio",
+              "queryRef": "fato_progresso_producao.data_evento",
+              "nativeQueryRef": "data_evento",
               "active": true
             }
           ]
@@ -42,11 +42,11 @@
                       "Entity": "fato_mrp"
                     }
                   },
-                  "Property": "Veículos Finalizados (Produção)"
+                  "Property": "O.S. Finalizadas na Fábrica"
                 }
               },
-              "queryRef": "fato_mrp.Veículos Finalizados (Produção)",
-              "nativeQueryRef": "Veículos Finalizados (Produção)"
+              "queryRef": "fato_mrp.O.S. Finalizadas na Fábrica",
+              "nativeQueryRef": "O.S. Finalizadas na Fábrica"
             },
             {
               "field": {
@@ -56,11 +56,11 @@
                       "Entity": "fato_mrp"
                     }
                   },
-                  "Property": "Veículos Entregues (Produção)"
+                  "Property": "Veículos Entregues ao Cliente"
                 }
               },
-              "queryRef": "fato_mrp.Veículos Entregues (Produção)",
-              "nativeQueryRef": "Veículos Entregues (Produção)"
+              "queryRef": "fato_mrp.Veículos Entregues ao Cliente",
+              "nativeQueryRef": "Veículos Entregues ao Cliente"
             }
           ]
         }
@@ -75,7 +75,7 @@
                     "Entity": "fato_progresso_producao"
                   }
                 },
-                "Property": "semana_inicio"
+                "Property": "data_evento"
               }
             },
             "direction": "Ascending"
@@ -213,7 +213,7 @@
             "text": {
               "expr": {
                 "Literal": {
-                  "Value": "'Finalizações e entregas — semanal'"
+                  "Value": "'O.S. finalizadas na fábrica × veículos entregues ao cliente — diário'"
                 }
               }
             },

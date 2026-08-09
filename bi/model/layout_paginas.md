@@ -54,10 +54,11 @@ O relatório usa canvas 16:9 (1280 × 720), navegação por abas, fundo claro e 
 ## 6. Fechamento de Produção
 
 - Página exclusivamente gráfica para reunião e fechamento produtivo.
-- Colunas empilhadas: etapas concluídas por setor e semana, com a data real de término de cada etapa.
-- Rosca: participação dos setores no período filtrado.
-- Linhas: veículos finalizados e entregues por semana, como eventos distintos.
-- Barras adicionais: consolidação mensal e anual das etapas concluídas.
+- Colunas agrupadas: conclusões diárias por processo, com a data real de término de cada etapa. Cada cor representa um processo e não existe soma visual entre setores.
+- As leituras mensal e anual preservam a separação por processo.
+- O gráfico de saída de veículos compara dois marcos diferentes: `O.S. Finalizadas na Fábrica` (produção encerrada) e `Veículos Entregues ao Cliente` (entrega física ao cliente).
+- Linhas: comparação diária entre O.S. finalizadas na fábrica e veículos entregues ao cliente, como eventos distintos.
+- Colunas adicionais: consolidação mensal e anual das conclusões, preservando uma série para cada processo.
 - Segmentadores: tipo de serviço, linha de produto, setor produtivo e ano.
 - `A/C`/`AC`, `ELÉTRICA`/`ELETRICA`, `LIBERAÇÃO`/`LIBERACAO` e demais códigos foram normalizados para não dividir o mesmo setor nos gráficos.
 

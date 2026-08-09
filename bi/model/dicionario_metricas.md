@@ -59,6 +59,8 @@
 - Forecast sem estrutura de materiais fica como alerta e não gera demanda fictícia no MRP.
 - Datas de compra anteriores ao ano 2000 são tratadas como erro de qualidade, não como milhares de dias de atraso.
 - O mês de `Carros Finalizados` vem de `data_finalizacao`; o mês de `Carros Entregues` vem de `data_entrega`. A mesma segmentação de calendário aciona a data correta para cada medida.
+- No Fechamento de Produção, `O.S. Finalizadas na Fábrica` conta O.S. cuja produção foi encerrada na data de finalização. `Veículos Entregues ao Cliente` conta a entrega física na data de entrega; retirada não compõe nenhum dos dois indicadores.
+- `Etapas Concluídas` é utilizado apenas nos gráficos por processo e é contado pela data real de término do apontamento; os processos aparecem em séries separadas, sem somatória entre eles.
 - A data final segue a precedência `termino_producao`, `finalizado_at` e evento explícito do histórico MES. Status final sem data permanece como alerta, sem data fabricada.
 - O filtro `Mês com dados` da visão histórica usa `dim_mes_historico`: mostra somente meses que tiveram finalização, entrega ou retirada.
 - Nos visuais gerenciais de materiais, `Categoria de material` usa `public.skus.categoria`. O campo bruto `public.skus.grupo` é uma família/subgrupo técnico e permanece disponível apenas para detalhamento.

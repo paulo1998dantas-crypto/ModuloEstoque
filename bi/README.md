@@ -19,7 +19,7 @@ Este diretório contém a fonte versionada do BI consultivo conectado ao Supabas
 3. **Compras e Trânsito** — O.C. abertas, valor, prazo, recebimento e inspeção.
 4. **Visão MRP** — demanda, cobertura, prioridade, trânsito e necessidade de compra.
 5. **Histórico de Produção** — finalização, entrega e retirada separadas, SLA técnico e duração por veículo, tipo de serviço, mercado, cliente e linha de produto.
-6. **Fechamento de Produção** — etapas concluídas por setor e semana, participação por setor, finalizações, entregas e consolidação mensal/anual.
+6. **Fechamento de Produção** — conclusões diárias, mensais e anuais por processo (sem somar setores), além de O.S. finalizadas na fábrica e veículos entregues ao cliente.
 
 O relatório inclui páginas ocultas de drill-through para SKU, O.S. e fornecedor. O detalhamento e as interações estão documentados em `model/layout_paginas.md`.
 

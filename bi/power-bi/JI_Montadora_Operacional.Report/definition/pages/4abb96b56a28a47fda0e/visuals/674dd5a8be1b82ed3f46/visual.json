@@ -23,11 +23,11 @@
                       "Entity": "fato_mrp"
                     }
                   },
-                  "Property": "Etapas Concluídas"
+                  "Property": "Processos com Apontamentos"
                 }
               },
-              "queryRef": "fato_mrp.Etapas Concluídas",
-              "nativeQueryRef": "Etapas Concluídas"
+              "queryRef": "fato_mrp.Processos com Apontamentos",
+              "nativeQueryRef": "Processos com Apontamentos"
             },
             {
               "field": {
@@ -37,11 +37,11 @@
                       "Entity": "fato_mrp"
                     }
                   },
-                  "Property": "Veículos Finalizados (Produção)"
+                  "Property": "O.S. Finalizadas na Fábrica"
                 }
               },
-              "queryRef": "fato_mrp.Veículos Finalizados (Produção)",
-              "nativeQueryRef": "Veículos Finalizados (Produção)"
+              "queryRef": "fato_mrp.O.S. Finalizadas na Fábrica",
+              "nativeQueryRef": "O.S. Finalizadas na Fábrica"
             },
             {
               "field": {
@@ -51,25 +51,11 @@
                       "Entity": "fato_mrp"
                     }
                   },
-                  "Property": "Veículos Entregues (Produção)"
+                  "Property": "Veículos Entregues ao Cliente"
                 }
               },
-              "queryRef": "fato_mrp.Veículos Entregues (Produção)",
-              "nativeQueryRef": "Veículos Entregues (Produção)"
-            },
-            {
-              "field": {
-                "Measure": {
-                  "Expression": {
-                    "SourceRef": {
-                      "Entity": "fato_mrp"
-                    }
-                  },
-                  "Property": "Setores com Produção"
-                }
-              },
-              "queryRef": "fato_mrp.Setores com Produção",
-              "nativeQueryRef": "Setores com Produção"
+              "queryRef": "fato_mrp.Veículos Entregues ao Cliente",
+              "nativeQueryRef": "Veículos Entregues ao Cliente"
             }
           ]
         }

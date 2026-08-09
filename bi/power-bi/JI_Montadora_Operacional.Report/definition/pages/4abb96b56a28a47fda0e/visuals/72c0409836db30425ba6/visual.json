@@ -1,19 +1,38 @@
 {
   "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/visualContainer/2.11.0/schema.json",
-  "name": "328b63c4842f24cd0e66",
+  "name": "72c0409836db30425ba6",
   "position": {
     "x": 860,
-    "y": 248,
-    "z": 9,
+    "y": 486,
+    "z": 11,
     "height": 218,
     "width": 400,
-    "tabOrder": 9
+    "tabOrder": 11
   },
   "visual": {
-    "visualType": "donutChart",
+    "visualType": "clusteredColumnChart",
     "query": {
       "queryState": {
         "Category": {
+          "projections": [
+            {
+              "field": {
+                "Column": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "fato_progresso_producao"
+                    }
+                  },
+                  "Property": "ano"
+                }
+              },
+              "queryRef": "fato_progresso_producao.ano",
+              "nativeQueryRef": "ano",
+              "active": true
+            }
+          ]
+        },
+        "Series": {
           "projections": [
             {
               "field": {
@@ -55,22 +74,42 @@
         "sort": [
           {
             "field": {
-              "Measure": {
+              "Column": {
                 "Expression": {
                   "SourceRef": {
-                    "Entity": "fato_mrp"
+                    "Entity": "fato_progresso_producao"
                   }
                 },
-                "Property": "Etapas Concluídas"
+                "Property": "ano"
               }
             },
-            "direction": "Descending"
+            "direction": "Ascending"
           }
         ],
         "isDefaultSort": true
       }
     },
     "objects": {
+      "labels": [
+        {
+          "properties": {
+            "show": {
+              "expr": {
+                "Literal": {
+                  "Value": "true"
+                }
+              }
+            },
+            "optimizeLabelDisplay": {
+              "expr": {
+                "Literal": {
+                  "Value": "true"
+                }
+              }
+            }
+          }
+        }
+      ],
       "legend": [
         {
           "properties": {
@@ -84,27 +123,80 @@
             "position": {
               "expr": {
                 "Literal": {
-                  "Value": "'RightCenter'"
+                  "Value": "'Top'"
                 }
               }
             }
           }
         }
       ],
-      "labels": [
+      "categoryAxis": [
         {
           "properties": {
-            "show": {
-              "expr": {
-                "Literal": {
-                  "Value": "true"
+            "labelColor": {
+              "solid": {
+                "color": {
+                  "expr": {
+                    "Literal": {
+                      "Value": "'#667085'"
+                    }
+                  }
                 }
               }
             },
-            "labelStyle": {
+            "titleText": {
               "expr": {
                 "Literal": {
-                  "Value": "'Category, percent of total'"
+                  "Value": "''"
+                }
+              }
+            }
+          }
+        }
+      ],
+      "valueAxis": [
+        {
+          "properties": {
+            "start": {
+              "expr": {
+                "Literal": {
+                  "Value": "0D"
+                }
+              }
+            },
+            "labelColor": {
+              "solid": {
+                "color": {
+                  "expr": {
+                    "Literal": {
+                      "Value": "'#667085'"
+                    }
+                  }
+                }
+              }
+            },
+            "gridlineColor": {
+              "solid": {
+                "color": {
+                  "expr": {
+                    "Literal": {
+                      "Value": "'#E7EBF1'"
+                    }
+                  }
+                }
+              }
+            },
+            "gridlineStyle": {
+              "expr": {
+                "Literal": {
+                  "Value": "'solid'"
+                }
+              }
+            },
+            "gridlineThickness": {
+              "expr": {
+                "Literal": {
+                  "Value": "1D"
                 }
               }
             }
@@ -126,7 +218,7 @@
             "text": {
               "expr": {
                 "Literal": {
-                  "Value": "'Participação da produção por setor'"
+                  "Value": "'Conclusões por processo — anual'"
                 }
               }
             },

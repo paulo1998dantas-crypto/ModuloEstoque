@@ -290,15 +290,15 @@ table fato_mrp
 		formatString: 0
 		displayFolder: 6. Fechamento de Produção
 
-	measure 'Veículos Finalizados (Produção)' = CALCULATE(DISTINCTCOUNT(fato_progresso_producao[work_order_id]), fato_progresso_producao[tipo_evento] = "VEÍCULO FINALIZADO")
+	measure 'O.S. Finalizadas na Fábrica' = CALCULATE(DISTINCTCOUNT(fato_progresso_producao[work_order_id]), fato_progresso_producao[tipo_evento] = "VEÍCULO FINALIZADO")
 		formatString: 0
 		displayFolder: 6. Fechamento de Produção
 
-	measure 'Veículos Entregues (Produção)' = CALCULATE(DISTINCTCOUNT(fato_progresso_producao[work_order_id]), fato_progresso_producao[tipo_evento] = "VEÍCULO ENTREGUE")
+	measure 'Veículos Entregues ao Cliente' = CALCULATE(DISTINCTCOUNT(fato_progresso_producao[work_order_id]), fato_progresso_producao[tipo_evento] = "VEÍCULO ENTREGUE")
 		formatString: 0
 		displayFolder: 6. Fechamento de Produção
 
-	measure 'Setores com Produção' = COUNTROWS(FILTER(VALUES(fato_progresso_producao[setor]), CALCULATE([Etapas Concluídas]) > 0))
+	measure 'Processos com Apontamentos' = COUNTROWS(FILTER(VALUES(fato_progresso_producao[setor]), CALCULATE([Etapas Concluídas]) > 0))
 		formatString: 0
 		displayFolder: 6. Fechamento de Produção
 

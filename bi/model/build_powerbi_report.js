@@ -545,7 +545,7 @@ const pageSpecs = [
   },
   {
     key: 'fechamento_producao', displayName: '6. Fechamento de Produção', accent: COLORS.blue,
-    title: 'Fechamento de Produção', subtitle: 'Etapas concluídas por setor, finalizações e entregas | semanas, meses e anos',
+    title: 'Fechamento de Produção', subtitle: 'Leitura por processo: cada série mostra suas próprias conclusões, sem soma entre setores',
     layout: 'production',
     slicers: [
       { ...col('dim_ordem_servico', 'categoria_servico'), label: 'Tipo de serviço' },
@@ -553,7 +553,7 @@ const pageSpecs = [
       { ...col('fato_progresso_producao', 'setor'), label: 'Setor produtivo' },
       { ...col('fato_progresso_producao', 'ano'), label: 'Ano' },
     ],
-    measures: ['Etapas Concluídas', 'Veículos Finalizados (Produção)', 'Veículos Entregues (Produção)', 'Setores com Produção'],
+    measures: ['Processos com Apontamentos', 'O.S. Finalizadas na Fábrica', 'Veículos Entregues ao Cliente'],
   },
 ];
 
@@ -643,11 +643,10 @@ function writePage(pageSpec, isDrill = false) {
     } else if (pageSpec.layout === 'production') {
       pageSpec.slicers.forEach((spec, index) => visuals.push(slicer(pageSpec.key, spec, 420 + index * 176, 2 + index, 164)));
       visuals.push(kpiStrip(pageSpec.key, pageSpec.measures, 92, 7));
-      visuals.push(stackedColumnChart(pageSpec.key, 'semanal_setor', 'Etapas concluídas por setor — semanal', col('fato_progresso_producao', 'semana_inicio'), col('fato_progresso_producao', 'setor'), 'Etapas Concluídas', 20, 248, 820, 218, 8));
-      visuals.push(donutChart(pageSpec.key, 'mix_setor', 'Participação da produção por setor', col('fato_progresso_producao', 'setor'), 'Etapas Concluídas', 860, 248, 400, 218, 9));
-      visuals.push(lineChart(pageSpec.key, 'finalizacao_entrega', 'Finalizações e entregas — semanal', col('fato_progresso_producao', 'semana_inicio'), ['Veículos Finalizados (Produção)', 'Veículos Entregues (Produção)'], 20, 486, 610, 218, 10));
-      visuals.push(barChart(pageSpec.key, 'mensal_setor', 'Etapas concluídas por mês', col('fato_progresso_producao', 'ano_mes'), 'Etapas Concluídas', 648, 486, 300, 218, COLORS.teal, 11));
-      visuals.push(barChart(pageSpec.key, 'anual_setor', 'Etapas concluídas por ano', col('fato_progresso_producao', 'ano'), 'Etapas Concluídas', 960, 486, 300, 218, COLORS.blue, 12));
+      visuals.push(stackedColumnChart(pageSpec.key, 'diario_setor', 'Conclusões diárias por processo', col('fato_progresso_producao', 'data_evento'), col('fato_progresso_producao', 'setor'), 'Etapas Concluídas', 20, 248, 1240, 218, 8));
+      visuals.push(lineChart(pageSpec.key, 'finalizacao_entrega', 'O.S. finalizadas na fábrica × veículos entregues ao cliente — diário', col('fato_progresso_producao', 'data_evento'), ['O.S. Finalizadas na Fábrica', 'Veículos Entregues ao Cliente'], 20, 486, 400, 218, 9));
+      visuals.push(stackedColumnChart(pageSpec.key, 'mensal_setor', 'Conclusões por processo — mensal', col('fato_progresso_producao', 'ano_mes'), col('fato_progresso_producao', 'setor'), 'Etapas Concluídas', 440, 486, 400, 218, 10));
+      visuals.push(stackedColumnChart(pageSpec.key, 'anual_setor', 'Conclusões por processo — anual', col('fato_progresso_producao', 'ano'), col('fato_progresso_producao', 'setor'), 'Etapas Concluídas', 860, 486, 400, 218, 11));
     } else {
       pageSpec.slicers.forEach((spec, index) => visuals.push(slicer(pageSpec.key, spec, 636 + index * 212, 2 + index)));
       visuals.push(kpiStrip(pageSpec.key, pageSpec.measures, 156, 6));
