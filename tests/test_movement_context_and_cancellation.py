@@ -607,6 +607,55 @@ class MovementContextAndCancellationTest(unittest.TestCase):
             )
         self.db.rollback()
 
+    def test_only_admin_can_cancel_a_goods_receipt_movement(self):
+        movement = register_movement(
+            self.db,
+            self.sku,
+            "ENTRADA",
+            5,
+            self.user.id,
+        )
+        movement.source_type = "GOODS_RECEIPT"
+        movement.source_id = str(uuid4())
+        movement.source_line_id = str(uuid4())
+        self.db.commit()
+
+        with self.assertRaisesRegex(ValueError, "Inspecao de Recebimento"):
+            cancel_movement(
+                self.db,
+                movement,
+                self.user.id,
+                "Tentativa sem permissao administrativa.",
+            )
+        self.db.rollback()
+
+        movement = self.db.get(Movement, movement.id)
+        canceled, reversal, replayed = cancel_movement(
+            self.db,
+            movement,
+            self.other_user.id,
+            "Entrada de recebimento registrada incorretamente.",
+            allow_any=True,
+        )
+        balance = self.db.query(StockBalance).filter_by(sku_id=self.sku.id).one()
+
+        self.assertFalse(replayed)
+        self.assertEqual("CANCELADA", canceled.movement_status)
+        self.assertEqual(self.other_user.id, canceled.canceled_by)
+        self.assertEqual("MOVEMENT_CANCELLATION", reversal.source_type)
+        self.assertEqual(canceled.id, reversal.related_movement_id)
+        self.assertEqual(Decimal("0.000"), balance.saldo_atual)
+
+        _, replay_reversal, replayed = cancel_movement(
+            self.db,
+            canceled,
+            self.other_user.id,
+            "Repeticao segura.",
+            allow_any=True,
+        )
+        self.assertTrue(replayed)
+        self.assertEqual(reversal.id, replay_reversal.id)
+
     def test_work_order_must_be_technically_open(self):
         self.db.execute(
             text(
