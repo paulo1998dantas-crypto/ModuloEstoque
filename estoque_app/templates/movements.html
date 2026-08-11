@@ -107,7 +107,9 @@
                             <form method="post" action="{{ url_for('cancel_movement_route', movement_id=mv.id) }}" class="form-grid">
                                 <input type="hidden" name="tipo" value="{{ tipo }}">
                                 <input name="reason" placeholder="Motivo obrigatório" required>
-                                <button class="btn small danger" type="submit">Cancelar</button>
+                                <button class="btn small danger" type="submit">
+                                    {{ 'Excluir (estorno)' if can_cancel_any else 'Cancelar' }}
+                                </button>
                             </form>
                         {% elif (mv.movement_status or 'ATIVA') == 'ATIVA' and is_composite_parent and (can_cancel_any or (can_cancel_own and mv.usuario_id == current_user.id)) %}
                             <form method="post" action="{{ url_for('cancel_movement_route', movement_id=mv.id) }}" class="form-grid" data-cancel-composite-operation>
@@ -117,6 +119,19 @@
                                     Cancelar conjunto ({{ mv.operation_size }})
                                 </button>
                                 <small>Estorna a entrada e todos os componentes do backflush em uma única operação.</small>
+                            </form>
+                        {% elif (mv.movement_status or 'ATIVA') == 'ATIVA' and is_receipt_movement and can_cancel_any %}
+                            <form method="post" action="{{ url_for('cancel_movement_route', movement_id=mv.id) }}" class="form-grid">
+                                <input type="hidden" name="tipo" value="{{ tipo }}">
+                                <input name="reason" placeholder="Motivo obrigatório" required>
+                                <button
+                                    class="btn small danger"
+                                    type="submit"
+                                    title="Exclusão auditável: estorna o saldo e preserva o histórico."
+                                    onclick="return confirm('Tem certeza que deseja excluir esta movimentação? O sistema fará um estorno auditável.');">
+                                    Excluir (estorno)
+                                </button>
+                                <small>Somente ADMIN. O recebimento original permanece no histórico.</small>
                             </form>
                         {% elif (mv.movement_status or 'ATIVA') == 'ATIVA' and is_receipt_movement %}
                             <span class="badge alerta" title="Recebimentos preservam a rastreabilidade da O.C. e da inspeção.">

@@ -1132,7 +1132,10 @@ def cancel_movement(
     reason = str(reason or "").strip()
     if not reason:
         raise ValueError("Informe o motivo do cancelamento.")
-    if movement.source_type in {"GOODS_RECEIPT", "GOODS_RECEIPT_REVERSAL"}:
+    if (
+        movement.source_type in {"GOODS_RECEIPT", "GOODS_RECEIPT_REVERSAL"}
+        and not allow_any
+    ):
         raise ValueError(
             "Movimento de recebimento deve ser estornado pela Inspecao de Recebimento."
         )
@@ -1168,6 +1171,7 @@ def cancel_movement(
             context_kind="LEGACY",
         )
         reversal.source_type = "MOVEMENT_CANCELLATION"
+        reversal.related_movement_id = movement.id
         reversal.idempotency_key = f"movement-cancellation:{movement.id}"
         reversal.work_order_id = movement.work_order_id
         reversal.context_kind = movement.context_kind
