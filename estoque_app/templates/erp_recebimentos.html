@@ -31,6 +31,7 @@
   .receipt-lines{display:flex;flex-direction:column;gap:8px}.receipt-line{border:1px solid #dce4ed;border-radius:6px;padding:9px;background:#fff}
   .receipt-line-head{display:grid;grid-template-columns:55px 150px 1fr 120px;gap:9px;align-items:center;margin-bottom:7px}
   .receipt-line-title{font-weight:750;color:#172033}.receipt-line-description{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .receipt-bom{margin:0 0 10px;border:1px solid #bae6fd;border-radius:6px;background:#f0f9ff;overflow:hidden}.receipt-bom summary{cursor:pointer;padding:8px 10px;color:#075985;font-size:.78rem;font-weight:750}.receipt-bom table{width:100%;border-collapse:collapse;font-size:.74rem}.receipt-bom th,.receipt-bom td{padding:6px 9px;border-top:1px solid #dbeafe;text-align:left}.receipt-bom th{text-transform:uppercase;font-size:.62rem;letter-spacing:.04em;color:#475569}.receipt-bom .num{text-align:right;font-variant-numeric:tabular-nums}.receipt-bom-warning{margin:0 0 10px;padding:8px 10px;border:1px solid #fdba74;border-radius:6px;background:#fff7ed;color:#9a3412;font-size:.76rem}
   .receipt-grid{display:grid;grid-template-columns:repeat(6,minmax(100px,1fr));gap:7px}
   .receipt-grid .erp-field input,.receipt-grid .erp-field select{width:100%;min-width:0}.receipt-grid .wide{grid-column:span 2}.receipt-grid .checks{display:flex;align-items:center;gap:12px;padding-top:18px}
   .receipt-grid .checks label{font-size:.72rem;white-space:nowrap}.receipt-footer{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:10px 14px;border-top:1px solid #dce4ed;background:#f8fafc}
@@ -93,6 +94,7 @@
     <div class="receipt-line-head">
       <div class="receipt-line-title"></div><div class="receipt-sku"></div><div class="receipt-line-description"></div><div class="receipt-pending"></div>
     </div>
+    <div class="receipt-bom-slot"></div>
     <div class="receipt-grid">
       <div class="erp-field"><label>Qtd. física</label><input class="physical" type="number" min="0" step="0.001"></div>
       <div class="erp-field"><label>Aprovada</label><input class="approved" type="number" min="0" step="0.001"></div>
@@ -191,11 +193,23 @@
       card.querySelector('.receipt-sku').innerHTML=line.sku_id?`<span class="erp-badge good">${escapeHtml(line.sku_codigo||`SKU ${line.sku_id}`)}</span>`:'<span class="erp-badge warn">Sem SKU</span>';
       card.querySelector('.receipt-line-description').textContent=line.descricao_original||'Item sem descrição';
       card.querySelector('.receipt-pending').innerHTML=`Pendente: <strong>${qty(pending)} ${escapeHtml(line.unidade||'')}</strong>`;
+      renderBomPreview(card.querySelector('.receipt-bom-slot'),line);
       card.querySelector('.physical').value=suggested;card.querySelector('.approved').value=line.sku_id?suggested:0;card.querySelector('.value').value=number(line.valor_unitario_pedido);
       for(const input of card.querySelectorAll('input,select')) input.addEventListener('input',updateReceiptSummary);
       holder.append(node);
     }
     updateReceiptSummary();document.getElementById('receipt-dialog').showModal();
+  }
+  function renderBomPreview(holder,line){
+    const components=line.bom_components||[];
+    if(line.receipt_mode!=='BOM_COMPONENTS')return;
+    if(line.bom_error){
+      holder.innerHTML=`<div class="receipt-bom-warning"><strong>B.O.M. precisa de correção antes do recebimento:</strong> ${escapeHtml(line.bom_error)}</div>`;
+      return;
+    }
+    if(!components.length)return;
+    const parent=line.bom_parent||{};
+    holder.innerHTML=`<details class="receipt-bom" open><summary>Entrada em componentes da B.O.M. — conjunto comercial ${escapeHtml(parent.sku_codigo||line.sku_codigo||'')}</summary><table><thead><tr><th>SKU unitário</th><th>Descrição</th><th>Un.</th><th class="num">A entrar</th></tr></thead><tbody>${components.map(component=>`<tr><td><strong>${escapeHtml(component.sku_codigo||'—')}</strong></td><td>${escapeHtml(component.descricao||'—')}</td><td>${escapeHtml(component.unidade||'')}</td><td class="num"><strong>${qty(component.quantidade_pendente)} ${escapeHtml(component.unidade||'')}</strong></td></tr>`).join('')}</tbody></table></details>`;
   }
   function closeReceipt(){document.getElementById('receipt-dialog').close();state.active=null;}
   function linePayload(card){
