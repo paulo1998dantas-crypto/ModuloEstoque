@@ -139,7 +139,7 @@ from services.erp_service import (
     correct_purchase_order_number,
     create_purchase_order,
     explode_confirmed_receipt_bom,
-    pending_purchase_orders,
+    pending_receipt_orders,
     pending_purchase_order_lines_by_sku,
     purchase_order_financial_detail,
     purchase_orders_dashboard,
@@ -2236,7 +2236,7 @@ def erp_create_purchase_order():
 @permission_required("estoque.inspection.receive")
 @erp_feature_required
 def erp_pending_receipts():
-    return jsonify({"ok": True, "orders": pending_purchase_orders(db())})
+    return jsonify({"ok": True, "orders": pending_receipt_orders(db())})
 
 
 @app.route("/api/erp/purchase-orders/pending-by-sku")
@@ -2578,7 +2578,7 @@ def erp_internal_financial_detail_purchase_order(order_id):
 @erp_feature_required
 def erp_internal_pending_receipts():
     if not _erp_internal_allowed(): return jsonify({"ok": False, "error": "Servico nao autorizado."}), 401
-    return jsonify({"ok": True, "orders": pending_purchase_orders(db())})
+    return jsonify({"ok": True, "orders": pending_receipt_orders(db())})
 
 
 @app.route("/api/erp/internal/dashboard")

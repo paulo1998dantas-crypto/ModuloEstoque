@@ -448,6 +448,59 @@ def pending_purchase_orders(db):
         order by o.data_necessidade nulls last,o.numero_oc,l.numero_linha"""))]
 
 
+def pending_receipt_orders(db):
+    """Return receipt targets enriched with the physical B.O.M. preview.
+
+    An O.C. remains a commercial document: a line may buy one kit, while the
+    warehouse receives its leaf components. Confirmation already updates stock
+    only for those leaves. This read model makes that rule visible before the
+    operator confirms the receipt, without changing quantities or stock.
+    """
+    rows = pending_purchase_orders(db)
+    sku_cache = {}
+    for row in rows:
+        row["receipt_mode"] = "DIRECT"
+        row["bom_parent"] = None
+        row["bom_components"] = []
+        row["bom_error"] = ""
+        sku_id = row.get("sku_id")
+        if not sku_id:
+            continue
+        sku_id = int(sku_id)
+        if sku_id not in sku_cache:
+            sku_cache[sku_id] = db.get(SKU, sku_id)
+        parent_sku = sku_cache[sku_id]
+        if not parent_sku or not bom_components_for_sku(db, parent_sku):
+            continue
+
+        row["receipt_mode"] = "BOM_COMPONENTS"
+        row["bom_parent"] = {
+            "sku_id": parent_sku.id,
+            "sku_codigo": parent_sku.sku,
+            "descricao": parent_sku.descricao,
+            "unidade": parent_sku.unidade,
+        }
+        try:
+            components = _explode_receipt_bom(
+                db, parent_sku, row["quantidade_pendente"]
+            )
+            row["bom_components"] = [
+                {
+                    "sku_id": component_sku.id,
+                    "sku_codigo": component_sku.sku,
+                    "descricao": component_sku.descricao,
+                    "unidade": component_sku.unidade,
+                    "quantidade_pendente": component_quantity,
+                }
+                for component_sku, component_quantity in components
+            ]
+        except ValueError as exc:
+            # Never hide an invalid B.O.M. by suggesting a direct parent
+            # balance: confirmation will block it until Cadastro is fixed.
+            row["bom_error"] = str(exc)
+    return rows
+
+
 def pending_purchase_order_lines_by_sku(db, sku_id=None, sku_code=""):
     normalized_code = str(sku_code or "").strip().upper()
     if not sku_id and not normalized_code:
