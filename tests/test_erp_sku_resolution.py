@@ -19,6 +19,7 @@ from models import BomComponent, Movement, SKU, StockBalance, User  # noqa: E402
 from services.erp_service import (  # noqa: E402
     confirm_receipt,
     create_purchase_order,
+    pending_receipt_orders,
     reverse_receipt,
     reconcile_pending_purchase_line_skus,
     sync_legacy_purchase_order,
@@ -509,6 +510,50 @@ class ErpSkuResolutionTest(unittest.TestCase):
         self.assertEqual(Decimal("0"), self.db.query(StockBalance).filter_by(sku_id=nested_leaf.id).one().saldo_atual)
         reversed_line = self._line(order["id"])
         self.assertEqual(Decimal("0"), reversed_line["quantidade_recebida"])
+
+    def test_pending_receipt_exposes_leaf_bom_components_without_changing_commercial_line(self):
+        assembly = SKU(
+            sku="CJ-PREVIEW",
+            descricao="Conjunto comercial",
+            unidade="CJ",
+            active=True,
+        )
+        component = SKU(
+            sku="COMP-PREVIEW",
+            descricao="Componente unitario",
+            unidade="PC",
+            active=True,
+        )
+        self.db.add_all([assembly, component])
+        self.db.commit()
+        self.db.add(
+            BomComponent(
+                item_sku_id=assembly.id,
+                component_sku_id=component.id,
+                quantidade=Decimal("3"),
+            )
+        )
+        self.db.commit()
+
+        order = create_purchase_order(
+            self.db,
+            self._payload(str(uuid4()), "CJ-PREVIEW", quantity=2),
+            "comprador-teste",
+        )
+        line = self._line(order["id"])
+
+        pending = pending_receipt_orders(self.db)
+        preview = next(row for row in pending if row["line_id"] == line["id"])
+
+        self.assertEqual("BOM_COMPONENTS", preview["receipt_mode"])
+        self.assertEqual("CJ-PREVIEW", preview["bom_parent"]["sku_codigo"])
+        self.assertEqual(1, len(preview["bom_components"]))
+        self.assertEqual("COMP-PREVIEW", preview["bom_components"][0]["sku_codigo"])
+        self.assertEqual(
+            Decimal("6"),
+            Decimal(str(preview["bom_components"][0]["quantidade_pendente"])),
+        )
+        self.assertEqual(Decimal("2"), Decimal(str(preview["quantidade_pendente"])))
 
 
 if __name__ == "__main__":
