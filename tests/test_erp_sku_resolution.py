@@ -20,6 +20,7 @@ from services.erp_service import (  # noqa: E402
     confirm_receipt,
     create_purchase_order,
     reverse_receipt,
+    reconcile_pending_purchase_line_skus,
     sync_legacy_purchase_order,
 )
 
@@ -259,6 +260,32 @@ class ErpSkuResolutionTest(unittest.TestCase):
                 line = self._line(order["id"])
                 self.assertIsNone(line["sku_id"])
                 self.assertEqual(code, line["sku_codigo"])
+
+    def test_reconcile_pending_line_links_sku_created_after_purchase_order(self):
+        order = create_purchase_order(
+            self.db,
+            self._payload(str(uuid4()), "FUTURO-001"),
+            "comprador-teste",
+        )
+        self.assertIsNone(self._line(order["id"])["sku_id"])
+        late_sku = SKU(
+            sku="FUTURO-001",
+            descricao="SKU sincronizado depois da O.C.",
+            unidade="UN",
+            active=True,
+        )
+        self.db.add(late_sku)
+        self.db.commit()
+
+        updated = reconcile_pending_purchase_line_skus(self.db)
+        line = self._line(order["id"])
+        self.assertEqual([str(line["id"])], updated)
+        self.assertEqual(late_sku.id, line["sku_id"])
+        self.assertEqual("FUTURO-001", line["sku_codigo"])
+        audit_count = self.db.execute(
+            text("select count(*) from erp_audit_events where action='SKU_VINCULADO_POR_RECONCILIACAO'")
+        ).scalar_one()
+        self.assertEqual(1, audit_count)
 
     def test_legacy_sync_resolves_sku_when_replacing_existing_lines(self):
         key = str(uuid4())

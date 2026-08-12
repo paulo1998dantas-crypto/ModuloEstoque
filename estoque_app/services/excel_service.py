@@ -6,7 +6,7 @@ import unicodedata
 from openpyxl import Workbook, load_workbook
 from openpyxl.styles import Font, PatternFill
 from openpyxl.worksheet.datavalidation import DataValidation
-from sqlalchemy import func, or_
+from sqlalchemy import func, or_, text
 
 from config import EXPORTS_DIR
 from models import BomComponent, InventoryCount, InventorySession, LabelPrintJob, Movement, SKU, StockBalance
@@ -1661,6 +1661,7 @@ def export_movements_report(db, user, tipo=None):
         "Saldo anterior",
         "Saldo posterior disponivel",
         "Empenho origem",
+        "O.S. / chassi vinculado",
         "Documento",
         "Observacao",
     ])
@@ -1671,6 +1672,29 @@ def export_movements_report(db, user, tipo=None):
         query = query.filter(Movement.tipo == tipo)
     rows = query.order_by(Movement.created_at.desc()).all()
     available_snapshots = movement_available_snapshots(db, rows)
+    work_order_labels = {}
+    for work_order_id in {str(mv.work_order_id) for mv in rows if mv.work_order_id}:
+        linked = db.execute(
+            text(
+                """
+                select w.numero_os,e.item_number,v.chassi
+                  from erp_work_orders w
+                  join erp_vehicle_entries e on e.id=w.vehicle_entry_id
+                  join erp_vehicles v on v.id=e.vehicle_id
+                 where w.id=:work_order_id
+                """
+            ),
+            {"work_order_id": work_order_id},
+        ).mappings().first()
+        if linked:
+            order_number = str(linked["numero_os"] or linked["item_number"] or "").strip()
+            chassis = str(linked["chassi"] or "").strip()
+            values = []
+            if order_number:
+                values.append(f"O.S. {order_number}")
+            if chassis:
+                values.append(f"Chassi {chassis}")
+            work_order_labels[work_order_id] = " · ".join(values)
     for mv in rows:
         tipo_display = "EMPENHO" if mv.tipo == "SAIDA" else mv.tipo
         ws.append([
@@ -1684,6 +1708,7 @@ def export_movements_report(db, user, tipo=None):
             decimal_to_str(mv.saldo_anterior),
             decimal_to_str(available_snapshots.get(mv.id, mv.saldo_posterior)),
             mv.related_movement_id or "",
+            work_order_labels.get(str(mv.work_order_id), "") if mv.work_order_id else "",
             mv.documento,
             mv.observacao,
         ])

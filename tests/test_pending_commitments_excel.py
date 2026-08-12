@@ -23,6 +23,7 @@ from services.estoque_service import (  # noqa: E402
 )
 from services.excel_service import (  # noqa: E402
     export_pending_commitments_report,
+    export_movements_report,
     import_pending_commitment_consumptions,
     parse_commitment_corrections_from_excel,
     parse_mass_materials_from_excel,
@@ -34,6 +35,10 @@ class PendingCommitmentsExcelTest(unittest.TestCase):
     def setUp(self):
         self.engine = create_engine("sqlite:///:memory:", future=True)
         Base.metadata.create_all(self.engine)
+        with self.engine.begin() as connection:
+            connection.execute(text("create table erp_vehicles (id text primary key, chassi text not null)"))
+            connection.execute(text("create table erp_vehicle_entries (id text primary key, vehicle_id text not null, item_number integer not null)"))
+            connection.execute(text("create table erp_work_orders (id text primary key, vehicle_entry_id text not null, numero_os text, status text not null, technical_status text not null default 'ABERTA')"))
         self.Session = sessionmaker(bind=self.engine, future=True)
         self.db = self.Session()
         self.user = User(username="tester", password_hash="hash", role="ADM", active=True)
@@ -289,6 +294,36 @@ class PendingCommitmentsExcelTest(unittest.TestCase):
         self.assertEqual([], legacy_preview["errors"])
         self.assertEqual(self.sku.sku, legacy_preview["rows"][0]["codigo"])
         self.assertEqual("1", legacy_preview["rows"][0]["quantidade"])
+
+    def test_movement_export_includes_linked_work_order_and_chassis(self):
+        work_order_id = "11111111-1111-1111-1111-111111111111"
+        with self.engine.begin() as connection:
+            connection.execute(text("insert into erp_vehicles(id,chassi) values ('vehicle-1','9V8VPFC3XTA008976')"))
+            connection.execute(text("insert into erp_vehicle_entries(id,vehicle_id,item_number) values ('entry-1','vehicle-1',3071)"))
+            connection.execute(text("insert into erp_work_orders(id,vehicle_entry_id,numero_os,status) values (:id,'entry-1','3071','ATIVA')"), {"id": work_order_id})
+        movement = register_movement(
+            self.db,
+            self.sku,
+            "EMPENHO",
+            1,
+            self.user.id,
+        )
+        movement.work_order_id = work_order_id
+        movement.context_kind = "OS"
+        self.db.commit()
+        with tempfile.TemporaryDirectory() as directory:
+            with patch("services.excel_service.EXPORTS_DIR", Path(directory)):
+                path = export_movements_report(self.db, self.user)
+            workbook = load_workbook(path, data_only=True)
+            ws = workbook["Movimentacoes"]
+            header_row = next(
+                row_number
+                for row_number in range(1, 25)
+                if "O.S. / chassi vinculado" in [cell.value for cell in ws[row_number]]
+            )
+            headers = {cell.value: index for index, cell in enumerate(ws[header_row], start=1) if cell.value}
+            values = [row[headers["O.S. / chassi vinculado"] - 1] for row in ws.iter_rows(min_row=header_row + 1, values_only=True)]
+        self.assertIn("O.S. 3071 · Chassi 9V8VPFC3XTA008976", values)
 
 
 if __name__ == "__main__":

@@ -4,6 +4,7 @@ from decimal import Decimal
 from uuid import uuid4
 
 from sqlalchemy import Uuid, bindparam, text
+from sqlalchemy.exc import MultipleResultsFound
 
 from models import Movement, SKU
 from services.estoque_service import (
@@ -32,6 +33,81 @@ def _resolve_sku_reference(db, sku_id, sku_code):
     if sku:
         return sku.id, sku.sku
     return None, normalized_code or None
+
+
+def reconcile_pending_purchase_line_skus(db):
+    """Backfill only unambiguous SKU links on purchase lines still receivable.
+
+    A purchase order can be issued before the Cadastro/Estoque synchronisation
+    creates its active SKU.  The visible code remains in the line, but the
+    receipt screen must not treat that line as automatically linked until the
+    internal ``sku_id`` is safely known.  This routine only fills a missing id
+    when the current active SKU lookup resolves to exactly one record.
+    """
+    rows = db.execute(
+        text(
+            """
+            select l.id,l.sku_codigo
+              from erp_purchase_order_lines l
+              join erp_purchase_orders o on o.id=l.purchase_order_id
+             where l.sku_id is null
+               and nullif(trim(coalesce(l.sku_codigo,'')), '') is not null
+               and o.status in ('EMITIDA','PARCIALMENTE_RECEBIDA')
+               and coalesce(o.technical_status,'ABERTA') <> 'CONCLUIDA'
+               and l.quantidade_pedida > l.quantidade_recebida
+            """
+        )
+    ).mappings().all()
+    updated = []
+    for row in rows:
+        try:
+            sku_id, sku_code = _resolve_sku_reference(db, None, row["sku_codigo"])
+        except MultipleResultsFound:
+            # A duplicate or invalid SKU is intentionally left for manual
+            # correction; a code alone must never choose an arbitrary record.
+            continue
+        if not sku_id:
+            continue
+        changed = db.execute(
+            text(
+                """
+                update erp_purchase_order_lines
+                   set sku_id=:sku_id,
+                       sku_codigo=:sku_codigo
+                 where id=:line_id
+                   and sku_id is null
+                """
+            ),
+            {"line_id": row["id"], "sku_id": sku_id, "sku_codigo": sku_code},
+        ).rowcount
+        if changed:
+            db.execute(
+                text(
+                    """
+                    insert into erp_audit_events(
+                        entity_type,entity_id,action,actor,origin,
+                        before_data,after_data,reason
+                    ) values (
+                        'PURCHASE_ORDER_LINE',:line_id,
+                        'SKU_VINCULADO_POR_RECONCILIACAO','sistema:estoque',
+                        'ESTOQUE',
+                        jsonb_build_object('sku_id',null,'sku_codigo',:old_code),
+                        jsonb_build_object('sku_id',:sku_id,'sku_codigo',:sku_codigo),
+                        'Código de SKU ativo vinculado automaticamente por correspondência única.'
+                    )
+                    """
+                ),
+                {
+                    "line_id": row["id"],
+                    "old_code": row["sku_codigo"],
+                    "sku_id": sku_id,
+                    "sku_codigo": sku_code,
+                },
+            )
+            updated.append(str(row["id"]))
+    if updated:
+        db.commit()
+    return updated
 
 
 def _explode_receipt_bom(db, parent_sku, received_quantity):
@@ -436,6 +512,7 @@ def correct_purchase_order_number(db, order_id, actor, data):
 
 
 def pending_purchase_orders(db):
+    reconcile_pending_purchase_line_skus(db)
     return [_row(r) for r in db.execute(text("""select o.id,o.numero_oc,o.categoria,o.fornecedor_nome,o.status,o.data_necessidade,
         o.destino,o.valor_total_pedido,l.id as line_id,l.numero_linha,l.sku_id,l.sku_codigo,l.descricao_original,
         l.unidade,l.quantidade_pedida,l.quantidade_recebida,l.valor_unitario_pedido,
