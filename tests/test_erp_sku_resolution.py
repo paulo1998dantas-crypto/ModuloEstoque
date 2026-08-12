@@ -526,6 +526,10 @@ class ErpSkuResolutionTest(unittest.TestCase):
             Decimal("6"),
             Decimal(str(preview["bom_components"][0]["quantidade_pendente"])),
         )
+        self.assertEqual(
+            Decimal("3"),
+            Decimal(str(preview["bom_components"][0]["quantidade_por_unidade_pai"])),
+        )
         self.assertEqual(Decimal("2"), Decimal(str(preview["quantidade_pendente"])))
 
 

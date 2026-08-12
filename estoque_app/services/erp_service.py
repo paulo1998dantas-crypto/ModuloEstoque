@@ -491,6 +491,9 @@ def pending_receipt_orders(db):
                     "descricao": component_sku.descricao,
                     "unidade": component_sku.unidade,
                     "quantidade_pendente": component_quantity,
+                    "quantidade_por_unidade_pai": (
+                        component_quantity / to_decimal(row["quantidade_pendente"])
+                    ),
                 }
                 for component_sku, component_quantity in components
             ]
