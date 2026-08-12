@@ -193,14 +193,18 @@
       card.querySelector('.receipt-sku').innerHTML=line.sku_id?`<span class="erp-badge good">${escapeHtml(line.sku_codigo||`SKU ${line.sku_id}`)}</span>`:'<span class="erp-badge warn">Sem SKU</span>';
       card.querySelector('.receipt-line-description').textContent=line.descricao_original||'Item sem descrição';
       card.querySelector('.receipt-pending').innerHTML=`Pendente: <strong>${qty(pending)} ${escapeHtml(line.unidade||'')}</strong>`;
-      renderBomPreview(card.querySelector('.receipt-bom-slot'),line);
+      const bomSlot=card.querySelector('.receipt-bom-slot');
+      renderBomPreview(bomSlot,line,suggested);
       card.querySelector('.physical').value=suggested;card.querySelector('.approved').value=line.sku_id?suggested:0;card.querySelector('.value').value=number(line.valor_unitario_pedido);
-      for(const input of card.querySelectorAll('input,select')) input.addEventListener('input',updateReceiptSummary);
+      for(const input of card.querySelectorAll('input,select')) input.addEventListener('input',()=>{
+        if(input.classList.contains('physical'))renderBomPreview(bomSlot,line,number(input.value));
+        updateReceiptSummary();
+      });
       holder.append(node);
     }
     updateReceiptSummary();document.getElementById('receipt-dialog').showModal();
   }
-  function renderBomPreview(holder,line){
+  function renderBomPreview(holder,line,parentQuantity){
     const components=line.bom_components||[];
     if(line.receipt_mode!=='BOM_COMPONENTS')return;
     if(line.bom_error){
@@ -209,7 +213,8 @@
     }
     if(!components.length)return;
     const parent=line.bom_parent||{};
-    holder.innerHTML=`<details class="receipt-bom" open><summary>Entrada em componentes da B.O.M. — conjunto comercial ${escapeHtml(parent.sku_codigo||line.sku_codigo||'')}</summary><table><thead><tr><th>SKU unitário</th><th>Descrição</th><th>Un.</th><th class="num">A entrar</th></tr></thead><tbody>${components.map(component=>`<tr><td><strong>${escapeHtml(component.sku_codigo||'—')}</strong></td><td>${escapeHtml(component.descricao||'—')}</td><td>${escapeHtml(component.unidade||'')}</td><td class="num"><strong>${qty(component.quantidade_pendente)} ${escapeHtml(component.unidade||'')}</strong></td></tr>`).join('')}</tbody></table></details>`;
+    const quantity=parentQuantity===undefined?number(line.quantidade_pendente):number(parentQuantity);
+    holder.innerHTML=`<details class="receipt-bom" open><summary>Entrada em componentes da B.O.M. — conjunto comercial ${escapeHtml(parent.sku_codigo||line.sku_codigo||'')}</summary><table><thead><tr><th>SKU unitário</th><th>Descrição</th><th>Un.</th><th class="num">Nesta remessa</th></tr></thead><tbody>${components.map(component=>{const componentQuantity=quantity*number(component.quantidade_por_unidade_pai);return `<tr><td><strong>${escapeHtml(component.sku_codigo||'—')}</strong></td><td>${escapeHtml(component.descricao||'—')}</td><td>${escapeHtml(component.unidade||'')}</td><td class="num"><strong>${qty(componentQuantity)} ${escapeHtml(component.unidade||'')}</strong></td></tr>`;}).join('')}</tbody></table></details>`;
   }
   function closeReceipt(){document.getElementById('receipt-dialog').close();state.active=null;}
   function linePayload(card){
