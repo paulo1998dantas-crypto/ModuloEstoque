@@ -159,7 +159,6 @@ ROLE_PERMISSION_MAP = {
         "mes.users.manage",
         "suprimentos.master_data.manage",
         "suprimentos.system.admin",
-        "cadastro.access",
     },
     "ENGENHARIA": (
         set(PERMISSION_DEFINITIONS)
