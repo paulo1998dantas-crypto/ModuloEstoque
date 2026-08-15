@@ -408,6 +408,125 @@ class ErpSkuResolutionTest(unittest.TestCase):
         self.assertEqual(0, receipt_count)
         self.assertEqual(0, self.db.query(Movement).count())
 
+    def test_approved_inspection_uses_only_received_quantity(self):
+        order = create_purchase_order(
+            self.db,
+            self._payload(str(uuid4()), "MAT-001", quantity=5),
+            "comprador-teste",
+        )
+        line = self._line(order["id"])
+
+        result = confirm_receipt(
+            self.db,
+            {
+                "idempotency_key": str(uuid4()),
+                "purchase_order_id": order["id"],
+                "numero_nf": "NF-APROVADA",
+                "lines": [{
+                    "purchase_order_line_id": line["id"],
+                    "quantidade_fisica": 2,
+                    "resultado_inspecao": "A",
+                }],
+            },
+            "almoxarife-teste",
+            self.user_id,
+        )
+
+        receipt_line = self.db.execute(text("""
+            select quantidade_fisica,quantidade_aprovada,quantidade_condicional,
+                   quantidade_rejeitada
+              from erp_goods_receipt_lines where goods_receipt_id=:id
+        """), {"id": result["id"]}).mappings().one()
+        balance = self.db.query(StockBalance).filter_by(sku_id=self.active_sku_id).one()
+        self.assertEqual(Decimal("2"), Decimal(str(receipt_line["quantidade_fisica"])))
+        self.assertEqual(Decimal("2"), Decimal(str(receipt_line["quantidade_aprovada"])))
+        self.assertEqual(Decimal("0"), Decimal(str(receipt_line["quantidade_condicional"])))
+        self.assertEqual(Decimal("0"), Decimal(str(receipt_line["quantidade_rejeitada"])))
+        self.assertEqual(Decimal("2"), balance.saldo_atual)
+
+    def test_conditional_inspection_uses_approved_and_quarantine_quantities(self):
+        order = create_purchase_order(
+            self.db,
+            self._payload(str(uuid4()), "MAT-001", quantity=5),
+            "comprador-teste",
+        )
+        line = self._line(order["id"])
+
+        result = confirm_receipt(
+            self.db,
+            {
+                "idempotency_key": str(uuid4()),
+                "purchase_order_id": order["id"],
+                "numero_nf": "NF-CONDICIONAL",
+                "lines": [{
+                    "purchase_order_line_id": line["id"],
+                    "quantidade_aprovada": 1,
+                    "quantidade_condicional": 2,
+                    "resultado_inspecao": "AC",
+                }],
+            },
+            "almoxarife-teste",
+            self.user_id,
+        )
+
+        receipt_line = self.db.execute(text("""
+            select quantidade_fisica,quantidade_aprovada,quantidade_condicional,
+                   quantidade_rejeitada
+              from erp_goods_receipt_lines where goods_receipt_id=:id
+        """), {"id": result["id"]}).mappings().one()
+        balance = self.db.query(StockBalance).filter_by(sku_id=self.active_sku_id).one()
+        self.assertEqual(Decimal("3"), Decimal(str(receipt_line["quantidade_fisica"])))
+        self.assertEqual(Decimal("1"), Decimal(str(receipt_line["quantidade_aprovada"])))
+        self.assertEqual(Decimal("2"), Decimal(str(receipt_line["quantidade_condicional"])))
+        self.assertEqual(Decimal("0"), Decimal(str(receipt_line["quantidade_rejeitada"])))
+        self.assertEqual(Decimal("1"), balance.saldo_atual)
+
+    def test_rejected_inspection_creates_trace_movement_without_stock_entry(self):
+        order = create_purchase_order(
+            self.db,
+            self._payload(str(uuid4()), "MAT-001", quantity=5),
+            "comprador-teste",
+        )
+        line = self._line(order["id"])
+
+        result = confirm_receipt(
+            self.db,
+            {
+                "idempotency_key": str(uuid4()),
+                "purchase_order_id": order["id"],
+                "numero_nf": "NF-REJEITADA",
+                "lines": [{
+                    "purchase_order_line_id": line["id"],
+                    "quantidade_rejeitada": 3,
+                    "resultado_inspecao": "D",
+                }],
+            },
+            "almoxarife-teste",
+            self.user_id,
+        )
+
+        receipt_line = self.db.execute(text("""
+            select quantidade_fisica,quantidade_aprovada,quantidade_condicional,
+                   quantidade_rejeitada
+              from erp_goods_receipt_lines where goods_receipt_id=:id
+        """), {"id": result["id"]}).mappings().one()
+        rejection = self.db.query(Movement).filter_by(
+            source_id=result["id"], tipo="REJEICAO"
+        ).one()
+        balance = self.db.query(StockBalance).filter_by(sku_id=self.active_sku_id).one()
+        self.assertEqual(Decimal("3"), Decimal(str(receipt_line["quantidade_fisica"])))
+        self.assertEqual(Decimal("0"), Decimal(str(receipt_line["quantidade_aprovada"])))
+        self.assertEqual(Decimal("0"), Decimal(str(receipt_line["quantidade_condicional"])))
+        self.assertEqual(Decimal("3"), Decimal(str(receipt_line["quantidade_rejeitada"])))
+        self.assertEqual(Decimal("0"), balance.saldo_atual)
+        self.assertEqual(Decimal("0"), rejection.saldo_anterior)
+        self.assertEqual(Decimal("0"), rejection.saldo_posterior)
+
+        reverse_receipt(
+            self.db, result["id"], "almoxarife-teste", self.user_id, "Devolução cancelada"
+        )
+        self.assertEqual("CANCELADA", self.db.get(Movement, rejection.id).movement_status)
+
     def test_confirm_receipt_rejects_line_from_another_purchase_order(self):
         first = create_purchase_order(
             self.db,

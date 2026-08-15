@@ -36,6 +36,8 @@
   .receipt-grid .erp-field input,.receipt-grid .erp-field select{width:100%;min-width:0}.receipt-grid .wide{grid-column:span 2}.receipt-grid .checks{display:flex;align-items:center;gap:12px;padding-top:18px}
   .receipt-grid .checks label{font-size:.72rem;white-space:nowrap}.receipt-footer{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:10px 14px;border-top:1px solid #dce4ed;background:#f8fafc}
   .receipt-summary{font-size:.78rem;color:#526174}.receipt-footer-actions{display:flex;gap:8px}
+  [data-inspection-field][hidden]{display:none!important}
+  .inspection-help{grid-column:span 2;margin:-2px 0 0;color:#64748b;font-size:.7rem}
   @media(max-width:900px){.erp-metrics{grid-template-columns:repeat(2,1fr)}.erp-head{flex-direction:column}.erp-search{min-width:100%}.receipt-general{grid-template-columns:1fr}.receipt-line-head{grid-template-columns:50px 1fr}.receipt-line-description{grid-column:1/-1}.receipt-grid{grid-template-columns:repeat(2,1fr)}}
 </style>
 
@@ -96,11 +98,12 @@
     </div>
     <div class="receipt-bom-slot"></div>
     <div class="receipt-grid">
-      <div class="erp-field"><label>Qtd. física</label><input class="physical" type="number" min="0" step="0.001"></div>
-      <div class="erp-field"><label>Aprovada</label><input class="approved" type="number" min="0" step="0.001"></div>
-      <div class="erp-field"><label>Condicional</label><input class="conditional" type="number" min="0" step="0.001" value="0"></div>
-      <div class="erp-field"><label>Rejeitada</label><input class="rejected" type="number" min="0" step="0.001" value="0"></div>
+      <div class="erp-field" data-inspection-field="received"><label>Quantidade recebida</label><input class="physical" type="number" min="0" step="0.001"></div>
+      <div class="erp-field" data-inspection-field="approved"><label>Quantidade aprovada</label><input class="approved" type="number" min="0" step="0.001"></div>
+      <div class="erp-field" data-inspection-field="conditional"><label>Quantidade condicional</label><input class="conditional" type="number" min="0" step="0.001" value="0"></div>
+      <div class="erp-field" data-inspection-field="rejected"><label>Quantidade rejeitada / devolvida</label><input class="rejected" type="number" min="0" step="0.001" value="0"></div>
       <div class="erp-field"><label>Inspeção</label><select class="inspection"><option value="A">A — Aprovado</option><option value="AC">AC — Condicional</option><option value="D">D — Devolver</option></select></div>
+      <div class="inspection-help" data-inspection-help></div>
       <div class="erp-field"><label>Valor unit. real</label><input class="value" type="number" min="0" step="0.01"></div>
       <div class="erp-field"><label>Validade certificado</label><input class="certificate-expiry" type="date"></div>
       <div class="checks"><label><input class="certificate-required" type="checkbox"> Cert. exigido</label><label><input class="certificate-presented" type="checkbox"> Apresentado</label></div>
@@ -120,6 +123,45 @@
   };
   const escapeHtml=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   const normalize=v=>String(v??'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase();
+
+  function inspectionValues(result, physical, approved, conditional, rejected){
+    const received=number(physical?.value),accepted=number(approved?.value),held=number(conditional?.value),returned=number(rejected?.value);
+    if(result==='A')return {quantidade_fisica:received,quantidade_aprovada:received,quantidade_condicional:0,quantidade_rejeitada:0};
+    if(result==='AC')return {quantidade_fisica:accepted+held,quantidade_aprovada:accepted,quantidade_condicional:held,quantidade_rejeitada:0};
+    return {quantidade_fisica:returned,quantidade_aprovada:0,quantidade_condicional:0,quantidade_rejeitada:returned};
+  }
+  function setInspectionVisibility(scope, result, component=false){
+    const selector=component?'.component-inspection-field':'[data-inspection-field]';
+    scope.querySelectorAll(selector).forEach(field=>{
+      const kind=field.dataset.inspectionField;
+      field.hidden=!((result==='A'&&kind==='received')||(result==='AC'&&(kind==='approved'||kind==='conditional'))||(result==='D'&&kind==='rejected'));
+    });
+    const help=scope.querySelector(component?'.component-inspection-help':'[data-inspection-help]');
+    if(help){
+      help.textContent=result==='A'
+        ?'Aprovado: informe somente o total recebido.'
+        :result==='AC'
+          ?'Condicional: informe o que foi aprovado e o que ficará em quarentena; não entra no saldo disponível.'
+          :'Devolver: informe somente a quantidade rejeitada. Ela será registrada como rejeição, sem entrar no estoque.';
+    }
+  }
+  function applyInspectionMode(scope, component=false){
+    const inspection=scope.querySelector(component?'.component-inspection':'.inspection');
+    const physical=scope.querySelector(component?'.component-physical':'.physical');
+    const approved=scope.querySelector(component?'.component-approved':'.approved');
+    const conditional=scope.querySelector(component?'.component-conditional':'.conditional');
+    const rejected=scope.querySelector(component?'.component-rejected':'.rejected');
+    const result=inspection.value;
+    if(result==='A'){
+      approved.value=physical.value||0;conditional.value=0;rejected.value=0;
+    }else if(result==='AC'){
+      physical.value=number(approved.value)+number(conditional.value);rejected.value=0;
+    }else{
+      physical.value=rejected.value||0;approved.value=0;conditional.value=0;
+    }
+    setInspectionVisibility(scope,result,component);
+    updateReceiptSummary();
+  }
 
   function groupOrders(lines){
     const grouped=new Map();
@@ -201,7 +243,15 @@
       }else{
         renderBomPreview(bomSlot,line,suggested);
         card.querySelector('.physical').value=suggested;card.querySelector('.approved').value=line.sku_id?suggested:0;card.querySelector('.value').value=number(line.valor_unitario_pedido);
+        applyInspectionMode(card);
       }
+      card.querySelectorAll('.component-inspection').forEach(select=>{
+        const row=select.closest('.bom-component-row');
+        applyInspectionMode(row,true);
+        select.addEventListener('change',()=>applyInspectionMode(row,true));
+      });
+      const inspection=card.querySelector('.inspection');
+      if(inspection)inspection.addEventListener('change',()=>applyInspectionMode(card));
       for(const input of card.querySelectorAll('input,select')){
         input.addEventListener('input',updateReceiptSummary);
         input.addEventListener('change',updateReceiptSummary);
@@ -225,18 +275,18 @@
   function renderBomComponentInputs(holder,line){
     const components=line.bom_components||[],parent=line.bom_parent||{};
     if(!components.length)return;
-    holder.innerHTML=`<details class="receipt-bom" open><summary>Inspeção por componente da B.O.M. — O.C. comercial: ${escapeHtml(parent.sku_codigo||line.sku_codigo||'')}</summary><table><thead><tr><th>SKU</th><th>Componente</th><th>Un.</th><th class="num">Recebido antes</th><th class="num">Pendente</th><th>Qtd. física</th><th>Aprovada</th><th>Condicional</th><th>Rejeitada</th><th>Inspeção</th><th>Valor un. real</th><th>Observação</th></tr></thead><tbody>${components.map(component=>{
+    holder.innerHTML=`<details class="receipt-bom" open><summary>Inspeção por componente da B.O.M. — O.C. comercial: ${escapeHtml(parent.sku_codigo||line.sku_codigo||'')}</summary><table><thead><tr><th>SKU</th><th>Componente</th><th>Un.</th><th class="num">Recebido antes</th><th class="num">Pendente</th><th>Qtd. recebida</th><th>Aprovada</th><th>Condicional</th><th>Rejeitada</th><th>Inspeção</th><th>Valor un. real</th><th>Observação</th></tr></thead><tbody>${components.map(component=>{
       const pending=number(component.quantidade_pendente);
-      return `<tr class="bom-component-row" data-sku-id="${escapeHtml(component.sku_id)}" data-pending="${pending}" data-sku-code="${escapeHtml(component.sku_codigo||'')}"><td><strong>${escapeHtml(component.sku_codigo||'—')}</strong></td><td class="component-description">${escapeHtml(component.descricao||'—')}</td><td>${escapeHtml(component.unidade||'')}</td><td class="num">${qty(component.quantidade_recebida_anterior)} ${escapeHtml(component.unidade||'')}</td><td class="num"><strong>${qty(pending)} ${escapeHtml(component.unidade||'')}</strong></td><td><input class="component-physical" type="number" min="0" max="${pending}" step="0.001" value="${pending}"></td><td><input class="component-approved" type="number" min="0" step="0.001" value="${pending}"></td><td><input class="component-conditional" type="number" min="0" step="0.001" value="0"></td><td><input class="component-rejected" type="number" min="0" step="0.001" value="0"></td><td><select class="component-inspection"><option value="A">A — Aprovado</option><option value="AC">AC — Condicional</option><option value="D">D — Devolver</option></select></td><td><input class="component-value" type="number" min="0" step="0.01" value="0"></td><td><input class="component-reason component-note"></td></tr>`;
+      return `<tr class="bom-component-row" data-sku-id="${escapeHtml(component.sku_id)}" data-pending="${pending}" data-sku-code="${escapeHtml(component.sku_codigo||'')}"><td><strong>${escapeHtml(component.sku_codigo||'—')}</strong></td><td class="component-description">${escapeHtml(component.descricao||'—')}</td><td>${escapeHtml(component.unidade||'')}</td><td class="num">${qty(component.quantidade_recebida_anterior)} ${escapeHtml(component.unidade||'')}</td><td class="num"><strong>${qty(pending)} ${escapeHtml(component.unidade||'')}</strong></td><td class="component-inspection-field" data-inspection-field="received"><input class="component-physical" type="number" min="0" max="${pending}" step="0.001" value="${pending}"></td><td class="component-inspection-field" data-inspection-field="approved"><input class="component-approved" type="number" min="0" step="0.001" value="${pending}"></td><td class="component-inspection-field" data-inspection-field="conditional"><input class="component-conditional" type="number" min="0" step="0.001" value="0"></td><td class="component-inspection-field" data-inspection-field="rejected"><input class="component-rejected" type="number" min="0" step="0.001" value="0"></td><td><select class="component-inspection"><option value="A">A — Aprovado</option><option value="AC">AC — Condicional</option><option value="D">D — Devolver</option></select><small class="component-inspection-help"></small></td><td><input class="component-value" type="number" min="0" step="0.01" value="0"></td><td><input class="component-reason component-note"></td></tr>`;
     }).join('')}</tbody></table></details>`;
   }
   function closeReceipt(){document.getElementById('receipt-dialog').close();state.active=null;}
   function linePayload(card){
     const get=selector=>card.querySelector(selector);
     if(card.dataset.receiptMode==='BOM_COMPONENTS'){
-      return {purchase_order_line_id:card.dataset.lineId,component_receipts:[...card.querySelectorAll('.bom-component-row')].map(row=>({sku_id:row.dataset.skuId,quantidade_fisica:row.querySelector('.component-physical').value,quantidade_aprovada:row.querySelector('.component-approved').value,quantidade_condicional:row.querySelector('.component-conditional').value,quantidade_rejeitada:row.querySelector('.component-rejected').value,resultado_inspecao:row.querySelector('.component-inspection').value,valor_unitario_real:row.querySelector('.component-value').value,justificativa_divergencia:row.querySelector('.component-reason').value}))};
+      return {purchase_order_line_id:card.dataset.lineId,component_receipts:[...card.querySelectorAll('.bom-component-row')].map(row=>({sku_id:row.dataset.skuId,...inspectionValues(row.querySelector('.component-inspection').value,row.querySelector('.component-physical'),row.querySelector('.component-approved'),row.querySelector('.component-conditional'),row.querySelector('.component-rejected')),resultado_inspecao:row.querySelector('.component-inspection').value,valor_unitario_real:row.querySelector('.component-value').value,justificativa_divergencia:row.querySelector('.component-reason').value}))};
     }
-    return {purchase_order_line_id:card.dataset.lineId,quantidade_fisica:get('.physical').value,quantidade_aprovada:get('.approved').value,quantidade_condicional:get('.conditional').value,quantidade_rejeitada:get('.rejected').value,resultado_inspecao:get('.inspection').value,valor_unitario_real:get('.value').value,certificado_exigido:get('.certificate-required').checked,certificado_apresentado:get('.certificate-presented').checked,validade_certificado:get('.certificate-expiry').value||null,justificativa_divergencia:get('.reason').value};
+    return {purchase_order_line_id:card.dataset.lineId,...inspectionValues(get('.inspection').value,get('.physical'),get('.approved'),get('.conditional'),get('.rejected')),resultado_inspecao:get('.inspection').value,valor_unitario_real:get('.value').value,certificado_exigido:get('.certificate-required').checked,certificado_apresentado:get('.certificate-presented').checked,validade_certificado:get('.certificate-expiry').value||null,justificativa_divergencia:get('.reason').value};
   }
   function updateReceiptSummary(){
     const cards=[...document.querySelectorAll('#receipt-lines .receipt-line')],totals=cards.reduce((sum,card)=>{const line=linePayload(card),rows=line.component_receipts||[line];for(const row of rows){sum.physical+=number(row.quantidade_fisica);sum.approved+=number(row.quantidade_aprovada);sum.conditional+=number(row.quantidade_condicional);sum.rejected+=number(row.quantidade_rejeitada);}return sum;},{physical:0,approved:0,conditional:0,rejected:0});
@@ -250,9 +300,11 @@
         const expected=line.component_receipts?number(card.querySelector(`.bom-component-row[data-sku-id="${row.sku_id}"]`).dataset.pending):number(card.dataset.pending),physical=number(row.quantidade_fisica),distributed=number(row.quantidade_aprovada)+number(row.quantidade_condicional)+number(row.quantidade_rejeitada),label=line.component_receipts?`SKU ${row.sku_id}`:`Linha ${card.dataset.lineId.slice(0,8)}`;
         if(physical>expected)issues.push(`${label}: quantidade acima do saldo.`);
         if(Math.abs(physical-distributed)>.0001)issues.push(`${label}: física diferente da soma da inspeção.`);
-        if(number(row.quantidade_aprovada)>0&&(!line.component_receipts&&!card.dataset.skuId))issues.push(`${label}: aprovada sem SKU vinculado.`);
+        if((number(row.quantidade_aprovada)>0||number(row.quantidade_rejeitada)>0)&&(!line.component_receipts&&!card.dataset.skuId))issues.push(`${label}: aprovada ou rejeitada sem SKU vinculado.`);
       }
     }
+    const totalPhysical=cards.reduce((total,card)=>{const line=linePayload(card);return total+(line.component_receipts||[line]).reduce((sum,row)=>sum+number(row.quantidade_fisica),0);},0);
+    if(totalPhysical<=0)issues.push('Informe ao menos uma quantidade recebida, condicional ou rejeitada.');
     const nf=document.getElementById('receipt-nf').value.trim();if(!nf)issues.push('Número da nota fiscal não informado.');
     if(issues.length&&!confirm(`Divergências encontradas:\n\n• ${issues.join('\n• ')}\n\nDeseja tentar confirmar mesmo assim?`))return;
     receive(cards);
