@@ -125,23 +125,23 @@
   const normalize=v=>String(v??'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase();
 
   function inspectionValues(result, physical, approved, conditional, rejected){
-    const received=number(physical?.value),accepted=number(approved?.value),held=number(conditional?.value),returned=number(rejected?.value);
+    const received=number(physical?.value),accepted=number(approved?.value),returned=number(rejected?.value);
     if(result==='A')return {quantidade_fisica:received,quantidade_aprovada:received,quantidade_condicional:0,quantidade_rejeitada:0};
-    if(result==='AC')return {quantidade_fisica:accepted+held,quantidade_aprovada:accepted,quantidade_condicional:held,quantidade_rejeitada:0};
+    if(result==='AC')return {quantidade_fisica:accepted+returned,quantidade_aprovada:accepted,quantidade_condicional:0,quantidade_rejeitada:returned};
     return {quantidade_fisica:returned,quantidade_aprovada:0,quantidade_condicional:0,quantidade_rejeitada:returned};
   }
   function setInspectionVisibility(scope, result, component=false){
     const selector=component?'.component-inspection-field':'[data-inspection-field]';
     scope.querySelectorAll(selector).forEach(field=>{
       const kind=field.dataset.inspectionField;
-      field.hidden=!((result==='A'&&kind==='received')||(result==='AC'&&(kind==='approved'||kind==='conditional'))||(result==='D'&&kind==='rejected'));
+      field.hidden=!((result==='A'&&kind==='received')||(result==='AC'&&(kind==='approved'||kind==='rejected'))||(result==='D'&&kind==='rejected'));
     });
     const help=scope.querySelector(component?'.component-inspection-help':'[data-inspection-help]');
     if(help){
       help.textContent=result==='A'
         ?'Aprovado: informe somente o total recebido.'
         :result==='AC'
-          ?'Condicional: informe o que foi aprovado e o que ficará em quarentena; não entra no saldo disponível.'
+          ?'Aprovado condicional: informe as quantidades aprovadas e rejeitadas/devolvidas. Apenas a parte aprovada entra no estoque.'
           :'Devolver: informe somente a quantidade rejeitada. Ela será registrada como rejeição, sem entrar no estoque.';
     }
   }
@@ -155,7 +155,7 @@
     if(result==='A'){
       approved.value=physical.value||0;conditional.value=0;rejected.value=0;
     }else if(result==='AC'){
-      physical.value=number(approved.value)+number(conditional.value);rejected.value=0;
+      physical.value=number(approved.value)+number(rejected.value);conditional.value=0;
     }else{
       physical.value=rejected.value||0;approved.value=0;conditional.value=0;
     }

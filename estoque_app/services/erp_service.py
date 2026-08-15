@@ -53,9 +53,9 @@ def _inspection_quantities(payload, label="linha"):
         approved, conditional, rejected = physical, Decimal("0"), Decimal("0")
     elif result == "AC":
         approved = to_decimal(payload.get("quantidade_aprovada"))
-        conditional = to_decimal(payload.get("quantidade_condicional"))
-        rejected = Decimal("0")
-        physical = approved + conditional
+        rejected = to_decimal(payload.get("quantidade_rejeitada"))
+        conditional = Decimal("0")
+        physical = approved + rejected
     else:  # D — Devolver
         rejected = to_decimal(
             payload.get("quantidade_rejeitada", payload.get("quantidade_fisica"))

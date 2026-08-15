@@ -444,7 +444,7 @@ class ErpSkuResolutionTest(unittest.TestCase):
         self.assertEqual(Decimal("0"), Decimal(str(receipt_line["quantidade_rejeitada"])))
         self.assertEqual(Decimal("2"), balance.saldo_atual)
 
-    def test_conditional_inspection_uses_approved_and_quarantine_quantities(self):
+    def test_conditional_inspection_uses_approved_and_rejected_quantities(self):
         order = create_purchase_order(
             self.db,
             self._payload(str(uuid4()), "MAT-001", quantity=5),
@@ -461,7 +461,7 @@ class ErpSkuResolutionTest(unittest.TestCase):
                 "lines": [{
                     "purchase_order_line_id": line["id"],
                     "quantidade_aprovada": 1,
-                    "quantidade_condicional": 2,
+                    "quantidade_rejeitada": 2,
                     "resultado_inspecao": "AC",
                 }],
             },
@@ -475,11 +475,16 @@ class ErpSkuResolutionTest(unittest.TestCase):
               from erp_goods_receipt_lines where goods_receipt_id=:id
         """), {"id": result["id"]}).mappings().one()
         balance = self.db.query(StockBalance).filter_by(sku_id=self.active_sku_id).one()
+        rejection = self.db.query(Movement).filter_by(
+            source_id=result["id"], tipo="REJEICAO"
+        ).one()
         self.assertEqual(Decimal("3"), Decimal(str(receipt_line["quantidade_fisica"])))
         self.assertEqual(Decimal("1"), Decimal(str(receipt_line["quantidade_aprovada"])))
-        self.assertEqual(Decimal("2"), Decimal(str(receipt_line["quantidade_condicional"])))
-        self.assertEqual(Decimal("0"), Decimal(str(receipt_line["quantidade_rejeitada"])))
+        self.assertEqual(Decimal("0"), Decimal(str(receipt_line["quantidade_condicional"])))
+        self.assertEqual(Decimal("2"), Decimal(str(receipt_line["quantidade_rejeitada"])))
         self.assertEqual(Decimal("1"), balance.saldo_atual)
+        self.assertEqual(Decimal("1"), rejection.saldo_anterior)
+        self.assertEqual(Decimal("1"), rejection.saldo_posterior)
 
     def test_rejected_inspection_creates_trace_movement_without_stock_entry(self):
         order = create_purchase_order(
