@@ -189,6 +189,16 @@ def get_sku_by_code(db, code, active_only=False):
 def ensure_balance(db, sku):
     if sku.balance:
         return sku.balance
+    # ``StockBalance`` can be created earlier in the same transaction (for
+    # example, an approved portion followed by a rejection movement).  The
+    # relationship may still be cached as None even though the row exists.
+    existing = (
+        db.query(StockBalance)
+        .filter(StockBalance.sku_id == sku.id)
+        .one_or_none()
+    )
+    if existing:
+        return existing
     balance = StockBalance(sku_id=sku.id, saldo_atual=Decimal("0.000"))
     db.add(balance)
     db.flush()
