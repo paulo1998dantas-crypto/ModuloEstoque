@@ -16,6 +16,9 @@
             <a class="btn secondary" href="{{ url_for('import_bom') }}">Sincronizar B.O.M</a>
             {% endif %}
         {% else %}
+        {% if erp_feature_enabled and can('suprimentos.work_order.view') %}
+        <a class="btn secondary" href="{{ work_order_tracking_url }}" target="_blank" rel="noopener">Acompanhar Ordens de Serviço</a>
+        {% endif %}
         {% if erp_feature_enabled and can('suprimentos.production_order.execute') %}
         <a class="btn primary" href="{{ production_orders_url }}" target="_blank" rel="noopener">Ordens de Producao / Serralheria</a>
         {% endif %}

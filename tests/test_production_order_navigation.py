@@ -15,6 +15,12 @@ class ProductionOrderNavigationTest(unittest.TestCase):
         self.assertIn("production_orders_url", template)
         self.assertIn("Ordens de Producao / Serralheria", template)
 
+    def test_empenho_links_to_active_work_order_tracking(self):
+        template = TEMPLATE.read_text(encoding="utf-8")
+        self.assertIn("work_order_tracking_url", template)
+        self.assertIn("Acompanhar Ordens de Serviço", template)
+        self.assertIn("suprimentos.work_order.view", template)
+
 
 if __name__ == "__main__":
     unittest.main()
