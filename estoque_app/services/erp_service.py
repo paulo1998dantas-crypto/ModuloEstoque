@@ -35,6 +35,66 @@ def _resolve_sku_reference(db, sku_id, sku_code):
     return None, normalized_code or None
 
 
+def _inspection_quantities(payload, label="linha"):
+    """Normalize the operational inspection input into stored quantities.
+
+    The screen deliberately asks only the quantities meaningful to each
+    outcome.  Keeping the normalization server-side makes the rule effective
+    for the UI, imports and direct API callers alike.
+    """
+    result = str(payload.get("resultado_inspecao") or "A").strip().upper()
+    if result not in {"A", "AC", "D"}:
+        raise ValueError(f"Resultado de inspeção inválido para {label}.")
+
+    if result == "A":
+        physical = to_decimal(
+            payload.get("quantidade_recebida", payload.get("quantidade_fisica"))
+        )
+        approved, conditional, rejected = physical, Decimal("0"), Decimal("0")
+    elif result == "AC":
+        approved = to_decimal(payload.get("quantidade_aprovada"))
+        conditional = to_decimal(payload.get("quantidade_condicional"))
+        rejected = Decimal("0")
+        physical = approved + conditional
+    else:  # D — Devolver
+        rejected = to_decimal(
+            payload.get("quantidade_rejeitada", payload.get("quantidade_fisica"))
+        )
+        physical, approved, conditional = rejected, Decimal("0"), Decimal("0")
+
+    if min(physical, approved, conditional, rejected) < 0:
+        raise ValueError(f"Quantidade inválida para {label}.")
+    return {
+        "resultado": result,
+        "fisica": physical,
+        "aprovada": approved,
+        "condicional": conditional,
+        "rejeitada": rejected,
+    }
+
+
+def _register_rejection_movement(
+    db, sku, quantity, user_id, receipt_id, receipt_line_id, document, note, key
+):
+    """Record a physical rejection without creating stock availability."""
+    if not quantity:
+        return None
+    return register_movement(
+        db,
+        sku,
+        "REJEICAO",
+        quantity,
+        user_id,
+        documento=str(document or ""),
+        observacao=note,
+        commit=False,
+        source_type="GOODS_RECEIPT",
+        source_id=receipt_id,
+        source_line_id=receipt_line_id,
+        idempotency_key=key,
+    )
+
+
 def reconcile_pending_purchase_line_skus(db):
     """Backfill only unambiguous SKU links on purchase lines still receivable.
 
@@ -1314,20 +1374,14 @@ def _confirm_bom_component_receipt(
         requirements.items(), start=1
     ):
         component_input = received_by_sku[component_id]
-        physical = to_decimal(component_input.get("quantidade_fisica"))
-        approved = to_decimal(component_input.get("quantidade_aprovada"))
-        conditional = to_decimal(component_input.get("quantidade_condicional"))
-        rejected = to_decimal(component_input.get("quantidade_rejeitada"))
-        result = str(component_input.get("resultado_inspecao") or "A").upper()
-        if (
-            result not in {"A", "AC", "D"}
-            or min(physical, approved, conditional, rejected) < 0
-            or approved + conditional + rejected != physical
-        ):
-            raise ValueError(
-                f"Quantidades ou resultado de inspeção inválidos para "
-                f"{definition['sku'].sku}."
-            )
+        inspection = _inspection_quantities(
+            component_input, f"componente {definition['sku'].sku}"
+        )
+        physical = inspection["fisica"]
+        approved = inspection["aprovada"]
+        conditional = inspection["condicional"]
+        rejected = inspection["rejeitada"]
+        result = inspection["resultado"]
         pending = max(
             Decimal("0"),
             definition["ordered"]
@@ -1401,6 +1455,20 @@ def _confirm_bom_component_receipt(
                 source_line_id=line_id,
                 idempotency_key=f"{component_key}:movement",
             )
+        _register_rejection_movement(
+            db,
+            definition["sku"],
+            rejected,
+            user_id,
+            receipt_id,
+            line_id,
+            data.get("numero_nf"),
+            (
+                f"Rejeição no recebimento ERP {receipt_id} · componente de "
+                f"{parent_sku.sku}"
+            ),
+            f"{component_key}:rejection",
+        )
         _insert_receipt_stock_link(
             db,
             line_id,
@@ -1508,9 +1576,12 @@ def confirm_receipt(db, data, actor, user_id):
                 )
                 touched_purchase_lines.add(str(po_line_id))
                 continue
-        physical=to_decimal(input_line.get("quantidade_fisica")); approved=to_decimal(input_line.get("quantidade_aprovada")); conditional=to_decimal(input_line.get("quantidade_condicional")); rejected=to_decimal(input_line.get("quantidade_rejeitada"))
-        result=str(input_line.get("resultado_inspecao") or "A").upper()
-        if result not in {'A','AC','D'} or min(physical,approved,conditional,rejected)<0 or approved+conditional+rejected>physical: raise ValueError("Quantidades ou resultado de inspecao invalidos.")
+        inspection = _inspection_quantities(input_line, "linha de recebimento")
+        physical = inspection["fisica"]
+        approved = inspection["aprovada"]
+        conditional = inspection["condicional"]
+        rejected = inspection["rejeitada"]
+        result = inspection["resultado"]
         if po_line and physical > Decimal(str(po_line['quantidade_pedida']))-Decimal(str(po_line['quantidade_recebida'])) and not data.get('allow_overreceipt'): raise ValueError("Recebimento acima do saldo pendente.")
         sku_id, sku_code = _resolve_sku_reference(
             db,
@@ -1529,7 +1600,10 @@ def confirm_receipt(db, data, actor, user_id):
             != str(sku_code).strip().upper()
         ):
             raise ValueError("SKU recebido nao corresponde ao codigo da linha da O.C.")
-        if approved and not sku_id: raise ValueError("SKU e obrigatorio para quantidade aprovada em estoque.")
+        if (approved or rejected) and not sku_id:
+            raise ValueError(
+                "SKU e obrigatorio para quantidade aprovada em estoque ou rejeitada."
+            )
         line_id=_id(); pending=(Decimal(str(po_line['quantidade_pedida']))-Decimal(str(po_line['quantidade_recebida']))) if po_line else Decimal('0')
         db.execute(text("""insert into erp_goods_receipt_lines(id,goods_receipt_id,purchase_order_line_id,sku_id,sku_codigo,quantidade_esperada,quantidade_recebida_anterior,saldo_pendente,quantidade_fisica,quantidade_aprovada,quantidade_condicional,quantidade_rejeitada,valor_unitario_pedido,valor_unitario_real,certificado_exigido,certificado_apresentado,validade_certificado,resultado_inspecao,justificativa_divergencia) values(:id,:receipt,:po_line,:sku_id,:sku_code,:expected,:previous,:pending,:physical,:approved,:conditional,:rejected,:ordered_value,:actual_value,:cert_required,:cert_presented,:cert_expiry,:result,:reason)"""),{"id":line_id,"receipt":receipt_id,"po_line":po_line_id,"sku_id":sku_id,"sku_code":sku_code,"expected":po_line['quantidade_pedida'] if po_line else 0,"previous":po_line['quantidade_recebida'] if po_line else 0,"pending":pending,"physical":physical,"approved":approved,"conditional":conditional,"rejected":rejected,"ordered_value":po_line['valor_unitario_pedido'] if po_line else 0,"actual_value":to_decimal(input_line.get('valor_unitario_real')),"cert_required":bool(input_line.get('certificado_exigido')),"cert_presented":bool(input_line.get('certificado_apresentado')),"cert_expiry":input_line.get('validade_certificado') or None,"result":result,"reason":str(input_line.get('justificativa_divergencia') or '')})
         # A purchased assembly is stocked through its complete B.O.M. rather
@@ -1586,6 +1660,17 @@ def confirm_receipt(db, data, actor, user_id):
             if approved:
                 movement_key = f"{key}:line:{po_line_id or sku_id}:{line_index}"
                 movement=register_movement(db,parent_sku,'ENTRADA',approved,user_id,documento=str(data.get('numero_nf') or ''),observacao=f'Recebimento ERP {receipt_id}',commit=False,source_type='GOODS_RECEIPT',source_id=receipt_id,source_line_id=line_id,idempotency_key=movement_key)
+            _register_rejection_movement(
+                db,
+                parent_sku,
+                rejected,
+                user_id,
+                receipt_id,
+                line_id,
+                data.get("numero_nf"),
+                f"Rejeição no recebimento ERP {receipt_id}",
+                f"{key}:line:{po_line_id or sku_id or line_index}:{line_index}:rejection",
+            )
             link_key = f"{key}:line:{po_line_id or sku_id or line_index}:{line_index}"
             _insert_receipt_stock_link(
                 db, line_id, movement.id if movement else None, approved,
@@ -1820,6 +1905,25 @@ def reverse_receipt(db, receipt_id, actor, user_id, reason):
             )
         if line['purchase_order_line_id']:
             touched_purchase_lines.add(str(line['purchase_order_line_id']))
+    # Rejections do not alter stock, but they are operational movements.  On
+    # reversal keep their audit trail and explicitly mark them cancelled so a
+    # reversed receipt is never presented as an active rejection.
+    rejection_cancel_statement = text("""
+        update movements
+           set movement_status='CANCELADA',
+               canceled_at=now(),
+               canceled_by=:user_id,
+               cancel_reason=:reason
+         where source_type='GOODS_RECEIPT'
+           and source_id=:receipt_id
+           and tipo='REJEICAO'
+           and coalesce(movement_status,'ATIVA')='ATIVA'
+    """).bindparams(bindparam("receipt_id", type_=Uuid(as_uuid=False)))
+    db.execute(rejection_cancel_statement, {
+        "receipt_id": receipt_id,
+        "user_id": user_id,
+        "reason": reason or "Estorno do recebimento.",
+    })
     db.execute(text("update erp_goods_receipts set status='ESTORNADO',reversed_at=now(),motivo_excecao=:reason where id=:id"),{'id':receipt_id,'reason':reason or ''})
     if receipt['purchase_order_id']:
         for purchase_line_id in touched_purchase_lines:

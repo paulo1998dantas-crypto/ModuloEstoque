@@ -482,7 +482,7 @@ def register_movement(
         raise ValueError("COD inativo. Movimentacao bloqueada.")
 
     quantidade = to_decimal(quantidade)
-    if quantidade <= 0 and tipo in {"ENTRADA", "EMPENHO", "BAIXA"}:
+    if quantidade <= 0 and tipo in {"ENTRADA", "EMPENHO", "BAIXA", "REJEICAO"}:
         raise ValueError("Quantidade deve ser maior que zero.")
 
     idempotency_key = str(idempotency_key or "").strip() or None
@@ -585,6 +585,10 @@ def register_movement(
         saldo_posterior = saldo_anterior - quantidade
         if saldo_posterior < 0 and not allow_negative:
             raise ValueError("Baixa bloqueada: saldo insuficiente.")
+    elif tipo == "REJEICAO":
+        # A rejected material is recorded for traceability, but it was
+        # returned/devolved and therefore must never alter physical stock.
+        saldo_posterior = saldo_anterior
     elif tipo in {"INVENTARIO", "AJUSTE"}:
         saldo_posterior = saldo_anterior + quantidade
         if saldo_posterior < 0 and not allow_negative:
