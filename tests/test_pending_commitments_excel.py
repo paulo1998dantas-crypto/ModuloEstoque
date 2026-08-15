@@ -131,25 +131,11 @@ class PendingCommitmentsExcelTest(unittest.TestCase):
             ]
         )
         with self.engine.begin() as connection:
-            connection.execute(
-                text(
-                    "create table erp_vehicles "
-                    "(id text primary key,chassi text not null,marca text,modelo text,versao text)"
-                )
-            )
-            connection.execute(
-                text(
-                    "create table erp_vehicle_entries "
-                    "(id text primary key,vehicle_id text not null,item_number integer not null)"
-                )
-            )
-            connection.execute(
-                text(
-                    "create table erp_work_orders "
-                    "(id text primary key,vehicle_entry_id text not null,numero_os text not null,"
-                    "cliente_nome text,status text not null,technical_status text default 'ABERTA')"
-                )
-            )
+            connection.execute(text("alter table erp_vehicles add column marca text"))
+            connection.execute(text("alter table erp_vehicles add column modelo text"))
+            connection.execute(text("alter table erp_vehicles add column versao text"))
+            connection.execute(text("alter table erp_work_orders add column cliente_nome text"))
+            connection.execute(text("alter table erp_work_orders add column data_comercial_prevista text"))
             connection.execute(
                 text(
                     "create table suprimentos_documentos "
@@ -167,7 +153,8 @@ class PendingCommitmentsExcelTest(unittest.TestCase):
             )
             connection.execute(
                 text(
-                    "insert into erp_work_orders values "
+                    "insert into erp_work_orders "
+                    "(id,vehicle_entry_id,numero_os,cliente_nome,status,technical_status) values "
                     "(:id,:entry_id,'3100','CLIENTE','ATIVA','ABERTA')"
                 ),
                 {"id": work_order_id, "entry_id": entry_id},
