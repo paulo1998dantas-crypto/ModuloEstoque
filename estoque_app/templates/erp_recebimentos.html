@@ -31,7 +31,8 @@
   .receipt-lines{display:flex;flex-direction:column;gap:8px}.receipt-line{border:1px solid #dce4ed;border-radius:6px;padding:9px;background:#fff}
   .receipt-line-head{display:grid;grid-template-columns:55px 150px 1fr 120px;gap:9px;align-items:center;margin-bottom:7px}
   .receipt-line-title{font-weight:750;color:#172033}.receipt-line-description{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-  .receipt-bom{margin:0 0 10px;border:1px solid #bae6fd;border-radius:6px;background:#f0f9ff;overflow:auto}.receipt-bom summary{cursor:pointer;padding:8px 10px;color:#075985;font-size:.78rem;font-weight:750}.receipt-bom table{width:100%;min-width:1100px;border-collapse:collapse;font-size:.74rem}.receipt-bom th,.receipt-bom td{padding:6px 9px;border-top:1px solid #dbeafe;text-align:left;vertical-align:middle}.receipt-bom th{text-transform:uppercase;font-size:.62rem;letter-spacing:.04em;color:#475569}.receipt-bom .num{text-align:right;font-variant-numeric:tabular-nums}.receipt-bom input,.receipt-bom select{width:100%;min-width:76px;padding:6px;border:1px solid #b9c8d8;border-radius:4px;background:#fff}.receipt-bom .component-description{min-width:230px;max-width:350px}.receipt-bom .component-note{min-width:150px}.receipt-bom-warning{margin:0 0 10px;padding:8px 10px;border:1px solid #fdba74;border-radius:6px;background:#fff7ed;color:#9a3412;font-size:.76rem}
+  .receipt-bom{margin:0 0 10px;border:1px solid #bae6fd;border-radius:6px;background:#f0f9ff;overflow:auto}.receipt-bom summary{cursor:pointer;padding:8px 10px;color:#075985;font-size:.78rem;font-weight:750}.receipt-bom table{width:100%;min-width:900px;border-collapse:collapse;font-size:.74rem}.receipt-bom th,.receipt-bom td{padding:6px 9px;border-top:1px solid #dbeafe;text-align:left;vertical-align:middle}.receipt-bom th{text-transform:uppercase;font-size:.62rem;letter-spacing:.04em;color:#475569}.receipt-bom .num{text-align:right;font-variant-numeric:tabular-nums}.receipt-bom input,.receipt-bom select{width:100%;min-width:76px;padding:6px;border:1px solid #b9c8d8;border-radius:4px;background:#fff}.receipt-bom .component-description{min-width:230px;max-width:350px}.receipt-bom-warning{margin:0 0 10px;padding:8px 10px;border:1px solid #fdba74;border-radius:6px;background:#fff7ed;color:#9a3412;font-size:.76rem}
+  .component-result{min-width:255px}.component-result select{margin-bottom:6px}.component-quantities{display:grid;grid-template-columns:repeat(2,minmax(90px,1fr));gap:6px}.component-quantities label{display:flex;flex-direction:column;gap:2px;color:#526174;font-size:.65rem;font-weight:700}.component-inspection-help{display:block;margin-top:5px;color:#64748b;font-size:.64rem;line-height:1.25}
   .receipt-grid{display:grid;grid-template-columns:repeat(6,minmax(100px,1fr));gap:7px}
   .receipt-grid .erp-field input,.receipt-grid .erp-field select{width:100%;min-width:0}.receipt-grid .wide{grid-column:span 2}.receipt-grid .checks{display:flex;align-items:center;gap:12px;padding-top:18px}
   .receipt-grid .checks label{font-size:.72rem;white-space:nowrap}.receipt-footer{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:10px 14px;border-top:1px solid #dce4ed;background:#f8fafc}
@@ -74,7 +75,7 @@
 
 <dialog id="receipt-dialog" class="receipt-dialog">
   <div class="receipt-modal-head">
-    <div><h3 id="receipt-title">Receber O.C.</h3><small id="receipt-subtitle"></small></div>
+    <div><h3 id="receipt-title">Inspecionar O.C.</h3><small id="receipt-subtitle"></small></div>
     <button class="btn receipt-close" type="button" onclick="closeReceipt()">Fechar</button>
   </div>
   <div class="receipt-body">
@@ -98,14 +99,13 @@
     </div>
     <div class="receipt-bom-slot"></div>
     <div class="receipt-grid">
-      <div class="erp-field" data-inspection-field="received"><label>Recebido</label><input class="physical" type="number" min="0" step="0.001"></div>
+      <div class="erp-field" data-inspection-field="received"><label data-received-label>Recebido</label><input class="physical" type="number" min="0" step="0.001"></div>
       <div class="erp-field" data-inspection-field="returned"><label>Devolvido</label><input class="rejected" type="number" min="0" step="0.001" value="0"></div>
-      <div class="erp-field"><label>Inspeção</label><select class="inspection"><option value="A">A — Aprovado</option><option value="AC">AC — Condicional</option><option value="D">D — Devolver</option></select></div>
+      <div class="erp-field"><label>Situação</label><select class="inspection"><option value="A">A — Aprovado</option><option value="AC">AC — Condicional</option><option value="D">D — Devolver</option></select></div>
       <div class="inspection-help" data-inspection-help></div>
       <div class="erp-field"><label>Valor unit. real</label><input class="value" type="number" min="0" step="0.01"></div>
       <div class="erp-field"><label>Validade certificado</label><input class="certificate-expiry" type="date"></div>
       <div class="checks"><label><input class="certificate-required" type="checkbox"> Cert. exigido</label><label><input class="certificate-presented" type="checkbox"> Apresentado</label></div>
-      <div class="erp-field wide"><label>Divergência / observação</label><input class="reason"></div>
     </div>
   </section>
 </template>
@@ -217,7 +217,7 @@
       ?state.active.lines.filter(line=>String(line.line_id)===String(preferredLineId))
       :state.active.lines;
     if(!visibleLines.length){showMessage('A linha sugerida não está mais pendente nesta O.C.',true);return;}
-    document.getElementById('receipt-title').textContent=`Receber O.C. ${state.active.numero_oc}`;
+    document.getElementById('receipt-title').textContent=`Inspecionar O.C. ${state.active.numero_oc}`;
     document.getElementById('receipt-subtitle').textContent=`${state.active.fornecedor_nome||'Fornecedor não informado'} · ${visibleLines.length} linha(s) selecionada(s)`;
     document.getElementById('receipt-nf').value=preferredDocument||'';document.getElementById('receipt-note').value='';document.getElementById('receipt-date').value=new Date().toISOString().slice(0,10);
     const holder=document.getElementById('receipt-lines');holder.innerHTML='';
@@ -269,22 +269,24 @@
   function renderBomComponentInputs(holder,line){
     const components=line.bom_components||[],parent=line.bom_parent||{};
     if(!components.length)return;
-    holder.innerHTML=`<details class="receipt-bom" open><summary>Inspeção por componente da B.O.M. — O.C. comercial: ${escapeHtml(parent.sku_codigo||line.sku_codigo||'')}</summary><table><thead><tr><th>SKU</th><th>Componente</th><th>Un.</th><th class="num">Recebido antes</th><th class="num">Pendente</th><th>Recebido</th><th>Devolvido</th><th>Inspeção</th><th>Valor un. real</th><th>Observação</th></tr></thead><tbody>${components.map(component=>{
+    holder.innerHTML=`<details class="receipt-bom" open><summary>Inspeção por componente da B.O.M. — O.C. comercial: ${escapeHtml(parent.sku_codigo||line.sku_codigo||'')}</summary><table><thead><tr><th>SKU</th><th>Componente</th><th>Un.</th><th class="num">Recebido antes</th><th class="num">Pendente</th><th>Resultado e quantidades</th><th>Valor un. real</th></tr></thead><tbody>${components.map(component=>{
       const pending=number(component.quantidade_pendente);
-      return `<tr class="bom-component-row" data-sku-id="${escapeHtml(component.sku_id)}" data-pending="${pending}" data-sku-code="${escapeHtml(component.sku_codigo||'')}"><td><strong>${escapeHtml(component.sku_codigo||'—')}</strong></td><td class="component-description">${escapeHtml(component.descricao||'—')}</td><td>${escapeHtml(component.unidade||'')}</td><td class="num">${qty(component.quantidade_recebida_anterior)} ${escapeHtml(component.unidade||'')}</td><td class="num"><strong>${qty(pending)} ${escapeHtml(component.unidade||'')}</strong></td><td class="component-inspection-field" data-inspection-field="received"><input class="component-physical" type="number" min="0" max="${pending}" step="0.001" value="${pending}"></td><td class="component-inspection-field" data-inspection-field="returned"><input class="component-rejected" type="number" min="0" step="0.001" value="0"></td><td><select class="component-inspection"><option value="A">A — Aprovado</option><option value="AC">AC — Condicional</option><option value="D">D — Devolver</option></select><small class="component-inspection-help"></small></td><td><input class="component-value" type="number" min="0" step="0.01" value="0"></td><td><input class="component-reason component-note"></td></tr>`;
+      return `<tr class="bom-component-row" data-sku-id="${escapeHtml(component.sku_id)}" data-pending="${pending}" data-sku-code="${escapeHtml(component.sku_codigo||'')}"><td><strong>${escapeHtml(component.sku_codigo||'—')}</strong></td><td class="component-description">${escapeHtml(component.descricao||'—')}</td><td>${escapeHtml(component.unidade||'')}</td><td class="num">${qty(component.quantidade_recebida_anterior)} ${escapeHtml(component.unidade||'')}</td><td class="num"><strong>${qty(pending)} ${escapeHtml(component.unidade||'')}</strong></td><td class="component-result"><select class="component-inspection"><option value="A">A — Aprovado</option><option value="AC">AC — Condicional</option><option value="D">D — Devolver</option></select><div class="component-quantities"><label class="component-inspection-field" data-inspection-field="received"><span data-component-received-label>Recebido</span><input class="component-physical" type="number" min="0" max="${pending}" step="0.001" value="${pending}"></label><label class="component-inspection-field" data-inspection-field="returned"><span>Devolvido</span><input class="component-rejected" type="number" min="0" step="0.001" value="0"></label></div><small class="component-inspection-help"></small></td><td><input class="component-value" type="number" min="0" step="0.01" value="0"></td></tr>`;
     }).join('')}</tbody></table></details>`;
   }
   function closeReceipt(){document.getElementById('receipt-dialog').close();state.active=null;}
   function linePayload(card){
     const get=selector=>card.querySelector(selector);
     if(card.dataset.receiptMode==='BOM_COMPONENTS'){
-      return {purchase_order_line_id:card.dataset.lineId,component_receipts:[...card.querySelectorAll('.bom-component-row')].map(row=>({sku_id:row.dataset.skuId,...inspectionValues(row.querySelector('.component-inspection').value,row.querySelector('.component-physical'),row.querySelector('.component-rejected')),resultado_inspecao:row.querySelector('.component-inspection').value,valor_unitario_real:row.querySelector('.component-value').value,justificativa_divergencia:row.querySelector('.component-reason').value}))};
+      return {purchase_order_line_id:card.dataset.lineId,component_receipts:[...card.querySelectorAll('.bom-component-row')].map(row=>({sku_id:row.dataset.skuId,...inspectionValues(row.querySelector('.component-inspection').value,row.querySelector('.component-physical'),row.querySelector('.component-rejected')),resultado_inspecao:row.querySelector('.component-inspection').value,valor_unitario_real:row.querySelector('.component-value').value,justificativa_divergencia:''}))};
     }
-    return {purchase_order_line_id:card.dataset.lineId,...inspectionValues(get('.inspection').value,get('.physical'),get('.rejected')),resultado_inspecao:get('.inspection').value,valor_unitario_real:get('.value').value,certificado_exigido:get('.certificate-required').checked,certificado_apresentado:get('.certificate-presented').checked,validade_certificado:get('.certificate-expiry').value||null,justificativa_divergencia:get('.reason').value};
+    return {purchase_order_line_id:card.dataset.lineId,...inspectionValues(get('.inspection').value,get('.physical'),get('.rejected')),resultado_inspecao:get('.inspection').value,valor_unitario_real:get('.value').value,certificado_exigido:get('.certificate-required').checked,certificado_apresentado:get('.certificate-presented').checked,validade_certificado:get('.certificate-expiry').value||null,justificativa_divergencia:''};
   }
   function updateReceiptSummary(){
     const cards=[...document.querySelectorAll('#receipt-lines .receipt-line')],totals=cards.reduce((sum,card)=>{const line=linePayload(card),rows=line.component_receipts||[line];for(const row of rows){sum.physical+=number(row.quantidade_fisica);sum.approved+=number(row.quantidade_aprovada);sum.conditional+=number(row.quantidade_condicional);sum.rejected+=number(row.quantidade_rejeitada);}return sum;},{physical:0,approved:0,conditional:0,rejected:0});
     document.getElementById('receipt-summary').textContent=`Recebido ${qty(totals.approved)} · Devolvido ${qty(totals.rejected)}`;
+    const button=document.getElementById('confirm-receipt');
+    button.textContent=totals.rejected>0?(totals.approved>0?'Confirmar recebimento condicional':'Confirmar devolução'):'Confirmar recebimento';
   }
   function prepareReceipt(){
     const cards=[...document.querySelectorAll('#receipt-lines .receipt-line')],issues=[];
@@ -311,7 +313,7 @@
       if(!response.ok)throw new Error(body.error||'Não foi possível confirmar o recebimento.');
       state.receiptKeys.delete(activeId);
       closeReceipt();await loadOrders();showMessage(`Recebimento da O.C. ${activeNumber} confirmado com sucesso.`);
-    }catch(error){showMessage(error.message,true);}finally{button.disabled=false;button.textContent='Confirmar recebimento';}
+    }catch(error){showMessage(error.message,true);}finally{button.disabled=false;updateReceiptSummary();}
   }
   function showMessage(text,error=false){const box=document.getElementById('result');box.hidden=false;box.className=error?'erp-message error':'erp-message';box.textContent=text;}
   function hideMessage(){document.getElementById('result').hidden=true;}
