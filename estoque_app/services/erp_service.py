@@ -91,8 +91,14 @@ def reconcile_pending_purchase_line_skus(db):
                         'PURCHASE_ORDER_LINE',:line_id,
                         'SKU_VINCULADO_POR_RECONCILIACAO','sistema:estoque',
                         'ESTOQUE',
-                        jsonb_build_object('sku_id',null,'sku_codigo',:old_code),
-                        jsonb_build_object('sku_id',:sku_id,'sku_codigo',:sku_codigo),
+                        jsonb_build_object(
+                            'sku_id',cast(null as integer),
+                            'sku_codigo',cast(:old_code as text)
+                        ),
+                        jsonb_build_object(
+                            'sku_id',cast(:sku_id as integer),
+                            'sku_codigo',cast(:sku_codigo as text)
+                        ),
                         'Código de SKU ativo vinculado automaticamente por correspondência única.'
                     )
                     """
