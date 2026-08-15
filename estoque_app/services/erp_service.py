@@ -35,6 +35,85 @@ def _resolve_sku_reference(db, sku_id, sku_code):
     return None, normalized_code or None
 
 
+PURCHASE_ALLOCATION_MODES = {"ESTOQUE", "WORK_ORDER", "AG_CHEGADA"}
+
+
+def _purchase_allocation(db, data, current=None):
+    """Validate and normalize the operational destination of a purchase order."""
+    supplied = "allocation_mode" in data
+    mode = str(
+        data.get("allocation_mode")
+        if supplied
+        else (current or {}).get("allocation_mode") or "ESTOQUE"
+    ).strip().upper()
+    if mode not in PURCHASE_ALLOCATION_MODES:
+        raise ValueError("Selecione ESTOQUE, uma O.S. ativa ou AG CHEGADA.")
+
+    work_order_id = data.get("work_order_id") if supplied else (current or {}).get("work_order_id")
+    work_order_id = str(work_order_id or "").strip() or None
+    vehicle_entry_id = (current or {}).get("vehicle_entry_id")
+    reference = str((
+        data.get("allocation_reference")
+        if supplied
+        else (current or {}).get("allocation_reference") or ""
+    ) or "").strip()
+
+    if mode == "WORK_ORDER":
+        if not work_order_id:
+            raise ValueError("Selecione a O.S. ativa vinculada ao pedido de compra.")
+        target = db.execute(text("""
+            select id,numero_os,vehicle_entry_id
+              from erp_work_orders
+             where id=:id
+               and is_current=true
+               and coalesce(technical_status,'ABERTA')='ABERTA'
+               and status in ('ATIVA','EM_PRODUÇÃO')
+        """), {"id": work_order_id}).mappings().first()
+        if not target:
+            raise ValueError("A O.S. selecionada não está ativa ou em produção.")
+        vehicle_entry_id = target["vehicle_entry_id"]
+        reference = reference or f"O.S. {target['numero_os']}"
+    else:
+        work_order_id = None
+        if mode == "ESTOQUE":
+            vehicle_entry_id = None
+            reference = reference or "ESTOQUE"
+        elif mode == "AG_CHEGADA":
+            vehicle_entry_id = None if supplied else vehicle_entry_id
+            reference = reference or str(data.get("destino") or "").strip()
+            if not reference:
+                raise ValueError(
+                    "Para AG CHEGADA, informe chassi, proposta, ITEM ou futura O.S."
+                )
+
+    return mode, work_order_id, vehicle_entry_id, reference
+
+
+def _record_purchase_allocation_event(
+    db, order_id, actor, mode, work_order_id, vehicle_entry_id, reference,
+    *, previous_mode=None, previous_work_order_id=None,
+    previous_vehicle_entry_id=None, action="LINK", reason=""
+):
+    db.execute(text("""
+        insert into erp_purchase_order_allocation_events(
+            purchase_order_id,from_mode,to_mode,from_work_order_id,to_work_order_id,
+            from_vehicle_entry_id,to_vehicle_entry_id,reference_text,
+            action,actor,origin,reason
+        ) values (
+            :order_id,:from_mode,:to_mode,:from_work_order,:to_work_order,
+            :from_vehicle_entry,:to_vehicle_entry,:reference,
+            :action,:actor,'SUPRIMENTOS',:reason
+        )
+    """), {
+        "order_id": order_id, "from_mode": previous_mode, "to_mode": mode,
+        "from_work_order": previous_work_order_id, "to_work_order": work_order_id,
+        "from_vehicle_entry": previous_vehicle_entry_id,
+        "to_vehicle_entry": vehicle_entry_id,
+        "reference": reference, "action": action, "actor": actor,
+        "reason": reason,
+    })
+
+
 def _inspection_quantities(payload, label="linha"):
     """Normalize the operational inspection input into stored quantities.
 
@@ -563,12 +642,59 @@ def create_purchase_order(db, data, actor):
         if qty <= 0:
             raise ValueError("Quantidade pedida deve ser maior que zero.")
         total += qty * to_decimal(line.get("valor_unitario_pedido"))
-    db.execute(text("""insert into erp_purchase_orders (id,numero_oc,categoria,fornecedor_id,fornecedor_nome,data_emissao,criado_por,status,destino,frete,data_necessidade,observacoes,valor_total_pedido,idempotency_key) values (:id,:numero,:categoria,:fornecedor_id,:fornecedor_nome,:emissao,:actor,'EMITIDA',:destino,:frete,:necessidade,:obs,:total,:key)"""), {"id":order_id,"numero":str(data.get("numero_oc") or "").strip() or order_id[:8],"categoria":str(data.get("categoria") or "GERAL").upper(),"fornecedor_id":data.get("fornecedor_id"),"fornecedor_nome":str(data.get("fornecedor_nome") or ""),"emissao":data.get("data_emissao") or datetime.utcnow(),"actor":actor,"destino":str(data.get("destino") or ""),"frete":to_decimal(data.get("frete")),"necessidade":data.get("data_necessidade") or None,"obs":str(data.get("observacoes") or ""),"total":total,"key":key})
+    allocation_mode, work_order_id, vehicle_entry_id, allocation_reference = _purchase_allocation(db, data)
+    db.execute(text("""insert into erp_purchase_orders (
+        id,numero_oc,categoria,fornecedor_id,fornecedor_nome,data_emissao,criado_por,
+        status,destino,frete,data_necessidade,observacoes,valor_total_pedido,
+        idempotency_key,allocation_mode,work_order_id,vehicle_entry_id,allocation_reference,
+        allocation_updated_at,allocation_updated_by
+    ) values (
+        :id,:numero,:categoria,:fornecedor_id,:fornecedor_nome,:emissao,:actor,
+        'EMITIDA',:destino,:frete,:necessidade,:obs,:total,:key,:allocation_mode,
+        :work_order_id,:vehicle_entry_id,:allocation_reference,now(),:actor
+    )"""), {
+        "id":order_id,"numero":str(data.get("numero_oc") or "").strip() or order_id[:8],
+        "categoria":str(data.get("categoria") or "GERAL").upper(),
+        "fornecedor_id":data.get("fornecedor_id"),
+        "fornecedor_nome":str(data.get("fornecedor_nome") or ""),
+        "emissao":data.get("data_emissao") or datetime.utcnow(),"actor":actor,
+        "destino":str(data.get("destino") or ""),"frete":to_decimal(data.get("frete")),
+        "necessidade":data.get("data_necessidade") or None,
+        "obs":str(data.get("observacoes") or ""),"total":total,"key":key,
+        "allocation_mode":allocation_mode,"work_order_id":work_order_id,
+        "vehicle_entry_id":vehicle_entry_id,
+        "allocation_reference":allocation_reference,
+    })
     for number, line in enumerate(lines, 1):
         sku_id, sku_code = _resolve_sku_reference(
             db, line.get("sku_id"), line.get("sku_codigo")
         )
-        db.execute(text("""insert into erp_purchase_order_lines (id,purchase_order_id,numero_linha,sku_id,sku_codigo,descricao_original,unidade,quantidade_pedida,valor_unitario_pedido,destino,data_necessidade) values (:id,:order,:number,:sku_id,:sku_codigo,:descricao,:unidade,:qty,:value,:destino,:necessidade)"""), {"id":_id(),"order":order_id,"number":number,"sku_id":sku_id,"sku_codigo":sku_code,"descricao":str(line.get("descricao_original") or line.get("descricao") or "ITEM SEM DESCRICAO"),"unidade":str(line.get("unidade") or "UN"),"qty":to_decimal(line.get("quantidade_pedida")),"value":to_decimal(line.get("valor_unitario_pedido")),"destino":str(line.get("destino") or data.get("destino") or ""),"necessidade":line.get("data_necessidade") or data.get("data_necessidade") or None})
+        db.execute(text("""insert into erp_purchase_order_lines (
+            id,purchase_order_id,numero_linha,sku_id,sku_codigo,descricao_original,
+            unidade,quantidade_pedida,valor_unitario_pedido,destino,data_necessidade,
+            work_order_id
+        ) values (
+            :id,:order,:number,:sku_id,:sku_codigo,:descricao,:unidade,:qty,:value,
+            :destino,:necessidade,:work_order_id
+        )"""), {
+            "id":_id(),"order":order_id,"number":number,"sku_id":sku_id,
+            "sku_codigo":sku_code,
+            "descricao":str(line.get("descricao_original") or line.get("descricao") or "ITEM SEM DESCRICAO"),
+            "unidade":str(line.get("unidade") or "UN"),
+            "qty":to_decimal(line.get("quantidade_pedida")),
+            "value":to_decimal(line.get("valor_unitario_pedido")),
+            "destino":str(line.get("destino") or data.get("destino") or ""),
+            "necessidade":line.get("data_necessidade") or data.get("data_necessidade") or None,
+            "work_order_id":work_order_id,
+        })
+    _record_purchase_allocation_event(
+        db, order_id, actor, allocation_mode, work_order_id, vehicle_entry_id,
+        allocation_reference, action="CREATED", reason="Destino operacional definido na emissão da O.C."
+    )
+    if allocation_mode == "AG_CHEGADA":
+        db.execute(text("select erp_try_auto_allocate_purchase_order(:id,:actor,'SUPRIMENTOS')"), {
+            "id": order_id, "actor": actor,
+        })
     db.execute(text("insert into erp_audit_events(entity_type,entity_id,action,actor,after_data) values ('PURCHASE_ORDER',:id,'EMITIDA',:actor,jsonb_build_object('numero_oc',cast(:numero as text)))"), {"id":order_id,"actor":actor,"numero":str(data.get("numero_oc") or "")})
     db.commit(); return {"id":order_id,"replayed":False}
 
@@ -583,11 +709,19 @@ def sync_legacy_purchase_order(db, data, actor):
     key = str(data.get("idempotency_key") or "").strip()
     if not key:
         raise ValueError("idempotency_key e obrigatoria.")
-    found = _row(db.execute(text("select id from erp_purchase_orders where idempotency_key=:key for update"), {"key": key}).first())
+    found = _row(db.execute(text("""
+        select id,allocation_mode,work_order_id,vehicle_entry_id,allocation_reference
+          from erp_purchase_orders
+         where idempotency_key=:key
+         for update
+    """), {"key": key}).first())
     if not found:
         return create_purchase_order(db, data, actor)
 
     order_id = str(found["id"])
+    allocation_mode, work_order_id, vehicle_entry_id, allocation_reference = _purchase_allocation(
+        db, data, current=found
+    )
     receipt_count = db.execute(text("select count(*) from erp_goods_receipts where purchase_order_id=:id and status='CONFIRMADO'"), {"id": order_id}).scalar_one()
     if receipt_count:
         return {"id": order_id, "replayed": True, "locked": True}
@@ -606,13 +740,20 @@ def sync_legacy_purchase_order(db, data, actor):
         set numero_oc=:numero,categoria=:categoria,fornecedor_id=:fornecedor_id,
             fornecedor_nome=:fornecedor_nome,data_emissao=:emissao,destino=:destino,
             frete=:frete,data_necessidade=:necessidade,observacoes=:obs,
-            valor_total_pedido=:total,status='EMITIDA',version=version+1,updated_at=now()
+            valor_total_pedido=:total,status='EMITIDA',
+            allocation_mode=:allocation_mode,work_order_id=:work_order_id,
+            vehicle_entry_id=:vehicle_entry_id,
+            allocation_reference=:allocation_reference,allocation_updated_at=now(),
+            allocation_updated_by=:actor,version=version+1,updated_at=now()
         where id=:id"""), {
         "id": order_id, "numero": str(data.get("numero_oc") or "").strip() or order_id[:8],
         "categoria": str(data.get("categoria") or "GERAL").upper(), "fornecedor_id": data.get("fornecedor_id"),
         "fornecedor_nome": str(data.get("fornecedor_nome") or ""), "emissao": data.get("data_emissao") or datetime.utcnow(),
         "destino": str(data.get("destino") or ""), "frete": to_decimal(data.get("frete")),
         "necessidade": data.get("data_necessidade") or None, "obs": str(data.get("observacoes") or ""), "total": total,
+        "allocation_mode": allocation_mode, "work_order_id": work_order_id,
+        "vehicle_entry_id": vehicle_entry_id,
+        "allocation_reference": allocation_reference, "actor": actor,
     })
     db.execute(text("delete from erp_purchase_order_lines where purchase_order_id=:id"), {"id": order_id})
     for number, line in enumerate(lines, 1):
@@ -620,13 +761,36 @@ def sync_legacy_purchase_order(db, data, actor):
             db, line.get("sku_id"), line.get("sku_codigo")
         )
         db.execute(text("""insert into erp_purchase_order_lines
-            (id,purchase_order_id,numero_linha,sku_id,sku_codigo,descricao_original,unidade,quantidade_pedida,valor_unitario_pedido,destino,data_necessidade)
-            values (:id,:order,:number,:sku_id,:sku_codigo,:descricao,:unidade,:qty,:value,:destino,:necessidade)"""), {
+            (id,purchase_order_id,numero_linha,sku_id,sku_codigo,descricao_original,
+             unidade,quantidade_pedida,valor_unitario_pedido,destino,data_necessidade,
+             work_order_id)
+            values (:id,:order,:number,:sku_id,:sku_codigo,:descricao,:unidade,:qty,
+                    :value,:destino,:necessidade,:work_order_id)"""), {
             "id": _id(), "order": order_id, "number": number, "sku_id": sku_id,
             "sku_codigo": sku_code, "descricao": str(line.get("descricao_original") or line.get("descricao") or "ITEM SEM DESCRICAO"),
             "unidade": str(line.get("unidade") or "UN"), "qty": to_decimal(line.get("quantidade_pedida")),
             "value": to_decimal(line.get("valor_unitario_pedido")), "destino": str(line.get("destino") or data.get("destino") or ""),
             "necessidade": line.get("data_necessidade") or data.get("data_necessidade") or None,
+            "work_order_id": work_order_id,
+        })
+    if (
+        str(found.get("allocation_mode") or "ESTOQUE") != allocation_mode
+        or str(found.get("work_order_id") or "") != str(work_order_id or "")
+        or str(found.get("vehicle_entry_id") or "") != str(vehicle_entry_id or "")
+        or str(found.get("allocation_reference") or "") != allocation_reference
+    ):
+        _record_purchase_allocation_event(
+            db, order_id, actor, allocation_mode, work_order_id, vehicle_entry_id,
+            allocation_reference,
+            previous_mode=str(found.get("allocation_mode") or "ESTOQUE"),
+            previous_work_order_id=found.get("work_order_id"),
+            previous_vehicle_entry_id=found.get("vehicle_entry_id"),
+            action="UPDATED",
+            reason="Destino operacional atualizado em Suprimentos.",
+        )
+    if allocation_mode == "AG_CHEGADA":
+        db.execute(text("select erp_try_auto_allocate_purchase_order(:id,:actor,'SUPRIMENTOS')"), {
+            "id": order_id, "actor": actor,
         })
     db.execute(text("""insert into erp_audit_events(entity_type,entity_id,action,actor,origin,after_data)
         values ('PURCHASE_ORDER',:id,'ATUALIZADA_ORIGEM_SUPRIMENTOS',:actor,'SUPRIMENTOS',jsonb_build_object('idempotency_key',cast(:key as text)))"""),
