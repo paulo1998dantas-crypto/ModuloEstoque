@@ -559,6 +559,90 @@ class ErpSkuResolutionTest(unittest.TestCase):
         )
         self.assertEqual(Decimal("2"), Decimal(str(preview["quantidade_pendente"])))
 
+    def test_component_receipt_keeps_commercial_conjunto_partial_until_bom_is_complete(self):
+        """A bought kit is received and inspected per leaf, not as parent stock."""
+        assembly = SKU(sku="CJ-INSPECAO", descricao="Conjunto comercial", unidade="CJ", active=True)
+        first_component = SKU(sku="PC-INSPECAO-1", descricao="Peca um", unidade="PC", active=True)
+        second_component = SKU(sku="PC-INSPECAO-2", descricao="Peca dois", unidade="PC", active=True)
+        self.db.add_all([assembly, first_component, second_component])
+        self.db.commit()
+        self.db.add_all([
+            BomComponent(item_sku_id=assembly.id, component_sku_id=first_component.id, quantidade=Decimal("2")),
+            BomComponent(item_sku_id=assembly.id, component_sku_id=second_component.id, quantidade=Decimal("1")),
+        ])
+        self.db.commit()
+        order = create_purchase_order(
+            self.db,
+            self._payload(str(uuid4()), "CJ-INSPECAO", quantity=2),
+            "comprador-teste",
+        )
+        line = self._line(order["id"])
+
+        first_receipt = confirm_receipt(
+            self.db,
+            {
+                "idempotency_key": str(uuid4()),
+                "purchase_order_id": order["id"],
+                "numero_nf": "NF-COMP-1",
+                "lines": [{
+                    "purchase_order_line_id": line["id"],
+                    "component_receipts": [
+                        {"sku_id": first_component.id, "quantidade_fisica": 2, "quantidade_aprovada": 2, "quantidade_condicional": 0, "quantidade_rejeitada": 0, "resultado_inspecao": "A", "valor_unitario_real": 4},
+                        {"sku_id": second_component.id, "quantidade_fisica": 0, "quantidade_aprovada": 0, "quantidade_condicional": 0, "quantidade_rejeitada": 0, "resultado_inspecao": "A", "valor_unitario_real": 6},
+                    ],
+                }],
+            },
+            "almoxarife-teste",
+            self.user_id,
+        )
+        partial_line = self._line(order["id"])
+        order_status = self.db.execute(
+            text("select status from erp_purchase_orders where id=:id"), {"id": order["id"]}
+        ).scalar_one()
+        self.assertEqual("PARCIALMENTE_RECEBIDA", partial_line["status"])
+        self.assertEqual(Decimal("0"), Decimal(str(partial_line["quantidade_recebida"])))
+        self.assertEqual("PARCIALMENTE_RECEBIDA", order_status)
+        self.assertEqual(Decimal("2"), self.db.query(StockBalance).filter_by(sku_id=first_component.id).one().saldo_atual)
+        self.assertIsNone(self.db.query(StockBalance).filter_by(sku_id=assembly.id).one_or_none())
+
+        pending = next(row for row in pending_receipt_orders(self.db) if row["line_id"] == line["id"])
+        pending_by_sku = {row["sku_codigo"]: Decimal(str(row["quantidade_pendente"])) for row in pending["bom_components"]}
+        self.assertEqual(Decimal("2"), pending_by_sku["PC-INSPECAO-1"])
+        self.assertEqual(Decimal("2"), pending_by_sku["PC-INSPECAO-2"])
+
+        second_receipt = confirm_receipt(
+            self.db,
+            {
+                "idempotency_key": str(uuid4()),
+                "purchase_order_id": order["id"],
+                "numero_nf": "NF-COMP-2",
+                "lines": [{
+                    "purchase_order_line_id": line["id"],
+                    "component_receipts": [
+                        {"sku_id": first_component.id, "quantidade_fisica": 2, "quantidade_aprovada": 2, "quantidade_condicional": 0, "quantidade_rejeitada": 0, "resultado_inspecao": "A", "valor_unitario_real": 4},
+                        {"sku_id": second_component.id, "quantidade_fisica": 2, "quantidade_aprovada": 2, "quantidade_condicional": 0, "quantidade_rejeitada": 0, "resultado_inspecao": "A", "valor_unitario_real": 6},
+                    ],
+                }],
+            },
+            "almoxarife-teste",
+            self.user_id,
+        )
+        received_line = self._line(order["id"])
+        self.assertEqual("RECEBIDA", received_line["status"])
+        self.assertEqual(Decimal("2"), Decimal(str(received_line["quantidade_recebida"])))
+        self.assertEqual(Decimal("4"), self.db.query(StockBalance).filter_by(sku_id=first_component.id).one().saldo_atual)
+        self.assertEqual(Decimal("2"), self.db.query(StockBalance).filter_by(sku_id=second_component.id).one().saldo_atual)
+
+        reverse_receipt(
+            self.db, second_receipt["id"], "almoxarife-teste", self.user_id, "Teste de estorno parcial"
+        )
+        reverted_line = self._line(order["id"])
+        self.assertEqual("PARCIALMENTE_RECEBIDA", reverted_line["status"])
+        self.assertEqual(Decimal("0"), Decimal(str(reverted_line["quantidade_recebida"])))
+        self.assertEqual(Decimal("2"), self.db.query(StockBalance).filter_by(sku_id=first_component.id).one().saldo_atual)
+        self.assertEqual(Decimal("0"), self.db.query(StockBalance).filter_by(sku_id=second_component.id).one().saldo_atual)
+        self.assertTrue(first_receipt["id"])
+
 
 if __name__ == "__main__":
     unittest.main()

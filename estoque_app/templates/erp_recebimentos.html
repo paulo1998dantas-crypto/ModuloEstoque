@@ -31,7 +31,7 @@
   .receipt-lines{display:flex;flex-direction:column;gap:8px}.receipt-line{border:1px solid #dce4ed;border-radius:6px;padding:9px;background:#fff}
   .receipt-line-head{display:grid;grid-template-columns:55px 150px 1fr 120px;gap:9px;align-items:center;margin-bottom:7px}
   .receipt-line-title{font-weight:750;color:#172033}.receipt-line-description{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-  .receipt-bom{margin:0 0 10px;border:1px solid #bae6fd;border-radius:6px;background:#f0f9ff;overflow:hidden}.receipt-bom summary{cursor:pointer;padding:8px 10px;color:#075985;font-size:.78rem;font-weight:750}.receipt-bom table{width:100%;border-collapse:collapse;font-size:.74rem}.receipt-bom th,.receipt-bom td{padding:6px 9px;border-top:1px solid #dbeafe;text-align:left}.receipt-bom th{text-transform:uppercase;font-size:.62rem;letter-spacing:.04em;color:#475569}.receipt-bom .num{text-align:right;font-variant-numeric:tabular-nums}.receipt-bom-warning{margin:0 0 10px;padding:8px 10px;border:1px solid #fdba74;border-radius:6px;background:#fff7ed;color:#9a3412;font-size:.76rem}
+  .receipt-bom{margin:0 0 10px;border:1px solid #bae6fd;border-radius:6px;background:#f0f9ff;overflow:auto}.receipt-bom summary{cursor:pointer;padding:8px 10px;color:#075985;font-size:.78rem;font-weight:750}.receipt-bom table{width:100%;min-width:1100px;border-collapse:collapse;font-size:.74rem}.receipt-bom th,.receipt-bom td{padding:6px 9px;border-top:1px solid #dbeafe;text-align:left;vertical-align:middle}.receipt-bom th{text-transform:uppercase;font-size:.62rem;letter-spacing:.04em;color:#475569}.receipt-bom .num{text-align:right;font-variant-numeric:tabular-nums}.receipt-bom input,.receipt-bom select{width:100%;min-width:76px;padding:6px;border:1px solid #b9c8d8;border-radius:4px;background:#fff}.receipt-bom .component-description{min-width:230px;max-width:350px}.receipt-bom .component-note{min-width:150px}.receipt-bom-warning{margin:0 0 10px;padding:8px 10px;border:1px solid #fdba74;border-radius:6px;background:#fff7ed;color:#9a3412;font-size:.76rem}
   .receipt-grid{display:grid;grid-template-columns:repeat(6,minmax(100px,1fr));gap:7px}
   .receipt-grid .erp-field input,.receipt-grid .erp-field select{width:100%;min-width:0}.receipt-grid .wide{grid-column:span 2}.receipt-grid .checks{display:flex;align-items:center;gap:12px;padding-top:18px}
   .receipt-grid .checks label{font-size:.72rem;white-space:nowrap}.receipt-footer{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:10px 14px;border-top:1px solid #dce4ed;background:#f8fafc}
@@ -194,12 +194,18 @@
       card.querySelector('.receipt-line-description').textContent=line.descricao_original||'Item sem descrição';
       card.querySelector('.receipt-pending').innerHTML=`Pendente: <strong>${qty(pending)} ${escapeHtml(line.unidade||'')}</strong>`;
       const bomSlot=card.querySelector('.receipt-bom-slot');
-      renderBomPreview(bomSlot,line,suggested);
-      card.querySelector('.physical').value=suggested;card.querySelector('.approved').value=line.sku_id?suggested:0;card.querySelector('.value').value=number(line.valor_unitario_pedido);
-      for(const input of card.querySelectorAll('input,select')) input.addEventListener('input',()=>{
-        if(input.classList.contains('physical'))renderBomPreview(bomSlot,line,number(input.value));
-        updateReceiptSummary();
-      });
+      if(line.receipt_mode==='BOM_COMPONENTS'&&!line.bom_error){
+        card.dataset.receiptMode='BOM_COMPONENTS';
+        card.querySelector('.receipt-grid').hidden=true;
+        renderBomComponentInputs(bomSlot,line);
+      }else{
+        renderBomPreview(bomSlot,line,suggested);
+        card.querySelector('.physical').value=suggested;card.querySelector('.approved').value=line.sku_id?suggested:0;card.querySelector('.value').value=number(line.valor_unitario_pedido);
+      }
+      for(const input of card.querySelectorAll('input,select')){
+        input.addEventListener('input',updateReceiptSummary);
+        input.addEventListener('change',updateReceiptSummary);
+      }
       holder.append(node);
     }
     updateReceiptSummary();document.getElementById('receipt-dialog').showModal();
@@ -216,22 +222,36 @@
     const quantity=parentQuantity===undefined?number(line.quantidade_pendente):number(parentQuantity);
     holder.innerHTML=`<details class="receipt-bom" open><summary>Entrada em componentes da B.O.M. — conjunto comercial ${escapeHtml(parent.sku_codigo||line.sku_codigo||'')}</summary><table><thead><tr><th>SKU unitário</th><th>Descrição</th><th>Un.</th><th class="num">Nesta remessa</th></tr></thead><tbody>${components.map(component=>{const componentQuantity=quantity*number(component.quantidade_por_unidade_pai);return `<tr><td><strong>${escapeHtml(component.sku_codigo||'—')}</strong></td><td>${escapeHtml(component.descricao||'—')}</td><td>${escapeHtml(component.unidade||'')}</td><td class="num"><strong>${qty(componentQuantity)} ${escapeHtml(component.unidade||'')}</strong></td></tr>`;}).join('')}</tbody></table></details>`;
   }
+  function renderBomComponentInputs(holder,line){
+    const components=line.bom_components||[],parent=line.bom_parent||{};
+    if(!components.length)return;
+    holder.innerHTML=`<details class="receipt-bom" open><summary>Inspeção por componente da B.O.M. — O.C. comercial: ${escapeHtml(parent.sku_codigo||line.sku_codigo||'')}</summary><table><thead><tr><th>SKU</th><th>Componente</th><th>Un.</th><th class="num">Recebido antes</th><th class="num">Pendente</th><th>Qtd. física</th><th>Aprovada</th><th>Condicional</th><th>Rejeitada</th><th>Inspeção</th><th>Valor un. real</th><th>Observação</th></tr></thead><tbody>${components.map(component=>{
+      const pending=number(component.quantidade_pendente);
+      return `<tr class="bom-component-row" data-sku-id="${escapeHtml(component.sku_id)}" data-pending="${pending}" data-sku-code="${escapeHtml(component.sku_codigo||'')}"><td><strong>${escapeHtml(component.sku_codigo||'—')}</strong></td><td class="component-description">${escapeHtml(component.descricao||'—')}</td><td>${escapeHtml(component.unidade||'')}</td><td class="num">${qty(component.quantidade_recebida_anterior)} ${escapeHtml(component.unidade||'')}</td><td class="num"><strong>${qty(pending)} ${escapeHtml(component.unidade||'')}</strong></td><td><input class="component-physical" type="number" min="0" max="${pending}" step="0.001" value="${pending}"></td><td><input class="component-approved" type="number" min="0" step="0.001" value="${pending}"></td><td><input class="component-conditional" type="number" min="0" step="0.001" value="0"></td><td><input class="component-rejected" type="number" min="0" step="0.001" value="0"></td><td><select class="component-inspection"><option value="A">A — Aprovado</option><option value="AC">AC — Condicional</option><option value="D">D — Devolver</option></select></td><td><input class="component-value" type="number" min="0" step="0.01" value="0"></td><td><input class="component-reason component-note"></td></tr>`;
+    }).join('')}</tbody></table></details>`;
+  }
   function closeReceipt(){document.getElementById('receipt-dialog').close();state.active=null;}
   function linePayload(card){
     const get=selector=>card.querySelector(selector);
+    if(card.dataset.receiptMode==='BOM_COMPONENTS'){
+      return {purchase_order_line_id:card.dataset.lineId,component_receipts:[...card.querySelectorAll('.bom-component-row')].map(row=>({sku_id:row.dataset.skuId,quantidade_fisica:row.querySelector('.component-physical').value,quantidade_aprovada:row.querySelector('.component-approved').value,quantidade_condicional:row.querySelector('.component-conditional').value,quantidade_rejeitada:row.querySelector('.component-rejected').value,resultado_inspecao:row.querySelector('.component-inspection').value,valor_unitario_real:row.querySelector('.component-value').value,justificativa_divergencia:row.querySelector('.component-reason').value}))};
+    }
     return {purchase_order_line_id:card.dataset.lineId,quantidade_fisica:get('.physical').value,quantidade_aprovada:get('.approved').value,quantidade_condicional:get('.conditional').value,quantidade_rejeitada:get('.rejected').value,resultado_inspecao:get('.inspection').value,valor_unitario_real:get('.value').value,certificado_exigido:get('.certificate-required').checked,certificado_apresentado:get('.certificate-presented').checked,validade_certificado:get('.certificate-expiry').value||null,justificativa_divergencia:get('.reason').value};
   }
   function updateReceiptSummary(){
-    const cards=[...document.querySelectorAll('#receipt-lines .receipt-line')],totals=cards.reduce((sum,card)=>{const line=linePayload(card);sum.physical+=number(line.quantidade_fisica);sum.approved+=number(line.quantidade_aprovada);sum.conditional+=number(line.quantidade_condicional);sum.rejected+=number(line.quantidade_rejeitada);return sum;},{physical:0,approved:0,conditional:0,rejected:0});
+    const cards=[...document.querySelectorAll('#receipt-lines .receipt-line')],totals=cards.reduce((sum,card)=>{const line=linePayload(card),rows=line.component_receipts||[line];for(const row of rows){sum.physical+=number(row.quantidade_fisica);sum.approved+=number(row.quantidade_aprovada);sum.conditional+=number(row.quantidade_condicional);sum.rejected+=number(row.quantidade_rejeitada);}return sum;},{physical:0,approved:0,conditional:0,rejected:0});
     document.getElementById('receipt-summary').textContent=`Física ${qty(totals.physical)} · Aprovada ${qty(totals.approved)} · Condicional ${qty(totals.conditional)} · Rejeitada ${qty(totals.rejected)}`;
   }
   function prepareReceipt(){
     const cards=[...document.querySelectorAll('#receipt-lines .receipt-line')],issues=[];
     for(const card of cards){
-      const line=linePayload(card),expected=number(card.dataset.pending),physical=number(line.quantidade_fisica),distributed=number(line.quantidade_aprovada)+number(line.quantidade_condicional)+number(line.quantidade_rejeitada);
-      if(physical>expected)issues.push(`Linha ${card.dataset.lineId.slice(0,8)}: quantidade acima do saldo.`);
-      if(Math.abs(physical-distributed)>.0001)issues.push(`Linha ${card.dataset.lineId.slice(0,8)}: física diferente da soma da inspeção.`);
-      if(number(line.quantidade_aprovada)>0&&!card.dataset.skuId)issues.push(`Linha ${card.dataset.lineId.slice(0,8)}: aprovada sem SKU vinculado.`);
+      const line=linePayload(card),rows=line.component_receipts||[line];
+      for(const row of rows){
+        const expected=line.component_receipts?number(card.querySelector(`.bom-component-row[data-sku-id="${row.sku_id}"]`).dataset.pending):number(card.dataset.pending),physical=number(row.quantidade_fisica),distributed=number(row.quantidade_aprovada)+number(row.quantidade_condicional)+number(row.quantidade_rejeitada),label=line.component_receipts?`SKU ${row.sku_id}`:`Linha ${card.dataset.lineId.slice(0,8)}`;
+        if(physical>expected)issues.push(`${label}: quantidade acima do saldo.`);
+        if(Math.abs(physical-distributed)>.0001)issues.push(`${label}: física diferente da soma da inspeção.`);
+        if(number(row.quantidade_aprovada)>0&&(!line.component_receipts&&!card.dataset.skuId))issues.push(`${label}: aprovada sem SKU vinculado.`);
+      }
     }
     const nf=document.getElementById('receipt-nf').value.trim();if(!nf)issues.push('Número da nota fiscal não informado.');
     if(issues.length&&!confirm(`Divergências encontradas:\n\n• ${issues.join('\n• ')}\n\nDeseja tentar confirmar mesmo assim?`))return;
