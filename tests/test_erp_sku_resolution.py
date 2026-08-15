@@ -55,6 +55,12 @@ ERP_TEST_SCHEMA = (
         technical_closed_by text,
         technical_close_reason text not null default '',
         idempotency_key text unique,
+        allocation_mode text not null default 'ESTOQUE',
+        work_order_id text,
+        vehicle_entry_id text,
+        allocation_reference text not null default '',
+        allocation_updated_at datetime,
+        allocation_updated_by text,
         created_at datetime not null default current_timestamp,
         updated_at datetime not null default current_timestamp
     )
@@ -63,6 +69,24 @@ ERP_TEST_SCHEMA = (
     create table erp_purchase_order_financial_entries (
         id text primary key,
         purchase_order_id text not null
+    )
+    """,
+    """
+    create table erp_purchase_order_allocation_events (
+        id text primary key default (lower(hex(randomblob(16)))),
+        purchase_order_id text not null,
+        from_mode text,
+        to_mode text not null,
+        from_work_order_id text,
+        to_work_order_id text,
+        from_vehicle_entry_id text,
+        to_vehicle_entry_id text,
+        reference_text text not null default '',
+        action text not null,
+        actor text not null,
+        origin text not null default 'ERP',
+        reason text not null default '',
+        created_at datetime not null default current_timestamp
     )
     """,
     """
@@ -249,6 +273,27 @@ class ErpSkuResolutionTest(unittest.TestCase):
         line = self._line(order["id"])
         self.assertEqual(self.active_sku_id, line["sku_id"])
         self.assertEqual("MAT-001", line["sku_codigo"])
+        allocation = self.db.execute(text("""
+            select allocation_mode,allocation_reference
+              from erp_purchase_orders where id=:id
+        """), {"id": order["id"]}).mappings().one()
+        self.assertEqual("ESTOQUE", allocation["allocation_mode"])
+        self.assertEqual("ESTOQUE", allocation["allocation_reference"])
+        event = self.db.execute(text("""
+            select to_mode,action,actor
+              from erp_purchase_order_allocation_events
+             where purchase_order_id=:id
+        """), {"id": order["id"]}).mappings().one()
+        self.assertEqual("ESTOQUE", event["to_mode"])
+        self.assertEqual("CREATED", event["action"])
+        self.assertEqual("comprador-teste", event["actor"])
+
+    def test_ag_chegada_without_reference_is_rejected_by_domain_service(self):
+        payload = self._payload(str(uuid4()), "MAT-001")
+        payload["allocation_mode"] = "AG_CHEGADA"
+
+        with self.assertRaisesRegex(ValueError, "Para AG CHEGADA"):
+            create_purchase_order(self.db, payload, "comprador-teste")
 
     def test_create_purchase_order_keeps_unregistered_or_inactive_item_unlinked(self):
         for code in ("NAO-CADASTRADO", "MAT-002"):
