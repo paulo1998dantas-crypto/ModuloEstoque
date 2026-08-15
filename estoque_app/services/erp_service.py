@@ -156,6 +156,184 @@ def _explode_receipt_bom(db, parent_sku, received_quantity):
     ]
 
 
+def _bom_component_receipt_progress(db, purchase_order_line, parent_sku):
+    """Return receipt progress for the leaf components of one commercial line."""
+    purchase_line_id = purchase_order_line.get("line_id") or purchase_order_line["id"]
+    ordered = to_decimal(purchase_order_line["quantidade_pedida"])
+    requirements = {
+        component_sku.id: {
+            "sku": component_sku,
+            "per_parent": to_decimal(quantity),
+            "ordered": ordered * to_decimal(quantity),
+        }
+        for component_sku, quantity in _explode_receipt_bom(db, parent_sku, 1)
+    }
+    if not requirements:
+        return {
+            "requirements": {},
+            "accepted_by_sku": {},
+            "component_coverage": Decimal("0"),
+            "direct_coverage": to_decimal(purchase_order_line["quantidade_recebida"]),
+        }
+
+    rows = db.execute(
+        text(
+            """
+            select rl.sku_id,
+                   sum(
+                       coalesce(rl.quantidade_aprovada,0)
+                       + coalesce(rl.quantidade_condicional,0)
+                   ) as quantidade_aceita
+              from erp_goods_receipt_lines rl
+              join erp_goods_receipts r on r.id=rl.goods_receipt_id
+             where rl.purchase_order_line_id=:line_id
+               and r.status='CONFIRMADO'
+               and rl.sku_id is not null
+               and rl.sku_id <> :parent_sku_id
+             group by rl.sku_id
+            """
+        ),
+        {
+            "line_id": purchase_line_id,
+            "parent_sku_id": parent_sku.id,
+        },
+    ).mappings()
+    accepted_by_sku = {
+        int(row["sku_id"]): to_decimal(row["quantidade_aceita"])
+        for row in rows
+        if int(row["sku_id"]) in requirements
+    }
+    coverage = min(
+        (
+            accepted_by_sku.get(sku_id, Decimal("0")) / definition["per_parent"]
+            for sku_id, definition in requirements.items()
+        ),
+        default=Decimal("0"),
+    )
+    direct_coverage = max(
+        Decimal("0"),
+        to_decimal(purchase_order_line["quantidade_recebida"]) - coverage,
+    )
+    return {
+        "requirements": requirements,
+        "accepted_by_sku": accepted_by_sku,
+        "component_coverage": coverage,
+        "direct_coverage": direct_coverage,
+    }
+
+
+def _refresh_purchase_order_line_receipt_status(db, purchase_order_line_id):
+    """Recalculate a purchase line after confirmation or reversal."""
+    purchase_line = _row(
+        db.execute(
+            text(
+                "select * from erp_purchase_order_lines where id=:id for update"
+            ),
+            {"id": purchase_order_line_id},
+        ).first()
+    )
+    if not purchase_line:
+        return None
+    parent_sku = (
+        db.get(SKU, int(purchase_line["sku_id"]))
+        if purchase_line.get("sku_id")
+        else None
+    )
+    receipt_rows = list(
+        db.execute(
+            text(
+                """
+                select rl.sku_id,
+                       coalesce(rl.quantidade_aprovada,0)
+                         + coalesce(rl.quantidade_condicional,0) as quantidade_aceita
+                  from erp_goods_receipt_lines rl
+                  join erp_goods_receipts r on r.id=rl.goods_receipt_id
+                 where rl.purchase_order_line_id=:line_id
+                   and r.status='CONFIRMADO'
+                """
+            ),
+            {"line_id": purchase_order_line_id},
+        ).mappings()
+    )
+    accepted_any = any(
+        to_decimal(row["quantidade_aceita"]) > 0 for row in receipt_rows
+    )
+    ordered = to_decimal(purchase_line["quantidade_pedida"])
+    if parent_sku and bom_components_for_sku(db, parent_sku):
+        progress = _bom_component_receipt_progress(db, purchase_line, parent_sku)
+        direct_received = sum(
+            (
+                to_decimal(row["quantidade_aceita"])
+                for row in receipt_rows
+                if row.get("sku_id") and int(row["sku_id"]) == parent_sku.id
+            ),
+            Decimal("0"),
+        )
+        received = min(
+            ordered,
+            direct_received + progress["component_coverage"],
+        )
+    else:
+        received = min(
+            ordered,
+            sum((to_decimal(row["quantidade_aceita"]) for row in receipt_rows), Decimal("0")),
+        )
+    status = (
+        "RECEBIDA"
+        if received >= ordered
+        else ("PARCIALMENTE_RECEBIDA" if received > 0 or accepted_any else "PENDENTE")
+    )
+    db.execute(
+        text(
+            """
+            update erp_purchase_order_lines
+               set quantidade_recebida=:received,status=:status
+             where id=:id
+            """
+        ),
+        {"id": purchase_order_line_id, "received": received, "status": status},
+    )
+    purchase_line["quantidade_recebida"] = received
+    purchase_line["status"] = status
+    return purchase_line
+
+
+def _refresh_purchase_order_receipt_status(db, purchase_order_id):
+    """Refresh the order header from its commercial line statuses."""
+    state = _row(
+        db.execute(
+            text(
+                """
+                select count(*) filter(where status='RECEBIDA') as done,
+                       count(*) filter(
+                           where status in ('RECEBIDA','PARCIALMENTE_RECEBIDA')
+                       ) as with_receipt,
+                       count(*) as total
+                  from erp_purchase_order_lines
+                 where purchase_order_id=:id
+                """
+            ),
+            {"id": purchase_order_id},
+        ).first()
+    )
+    status = (
+        "RECEBIDA"
+        if state["total"] and state["done"] == state["total"]
+        else ("PARCIALMENTE_RECEBIDA" if state["with_receipt"] else "EMITIDA")
+    )
+    db.execute(
+        text(
+            """
+            update erp_purchase_orders
+               set status=:status,version=version+1,updated_at=now()
+             where id=:id
+            """
+        ),
+        {"status": status, "id": purchase_order_id},
+    )
+    return status
+
+
 def _insert_receipt_stock_link(db, receipt_line_id, movement_id, available, quarantine, key):
     db.execute(text("""
         insert into erp_stock_receipt_links(
@@ -197,6 +375,7 @@ def explode_confirmed_receipt_bom(db, receipt_id, actor, user_id, reason=""):
         """), {"id": receipt_id}).all()
     ]
     corrected = []
+    touched_purchase_lines = set()
     for line in lines:
         approved = to_decimal(line["quantidade_aprovada"])
         parent_sku = db.get(SKU, int(line["sku_id"])) if line.get("sku_id") else None
@@ -558,21 +737,26 @@ def pending_receipt_orders(db):
             "unidade": parent_sku.unidade,
         }
         try:
-            components = _explode_receipt_bom(
-                db, parent_sku, row["quantidade_pendente"]
-            )
+            progress = _bom_component_receipt_progress(db, row, parent_sku)
+            components = progress["requirements"]
             row["bom_components"] = [
                 {
-                    "sku_id": component_sku.id,
-                    "sku_codigo": component_sku.sku,
-                    "descricao": component_sku.descricao,
-                    "unidade": component_sku.unidade,
-                    "quantidade_pendente": component_quantity,
-                    "quantidade_por_unidade_pai": (
-                        component_quantity / to_decimal(row["quantidade_pendente"])
+                    "sku_id": sku_id,
+                    "sku_codigo": definition["sku"].sku,
+                    "descricao": definition["sku"].descricao,
+                    "unidade": definition["sku"].unidade,
+                    "quantidade_pendente": max(
+                        Decimal("0"),
+                        definition["ordered"]
+                        - progress["direct_coverage"] * definition["per_parent"]
+                        - progress["accepted_by_sku"].get(sku_id, Decimal("0")),
                     ),
+                    "quantidade_recebida_anterior": progress["accepted_by_sku"].get(
+                        sku_id, Decimal("0")
+                    ),
+                    "quantidade_por_unidade_pai": definition["per_parent"],
                 }
-                for component_sku, component_quantity in components
+                for sku_id, definition in components.items()
             ]
         except ValueError as exc:
             # Never hide an invalid B.O.M. by suggesting a direct parent
@@ -1076,6 +1260,180 @@ def register_purchase_order_financial_entry(db, order_id, actor, data):
     }
 
 
+def _confirm_bom_component_receipt(
+    db,
+    receipt_id,
+    receipt_key,
+    purchase_line,
+    component_inputs,
+    actor,
+    user_id,
+    data,
+    line_index,
+):
+    """Persist one inspection row per B.O.M. leaf, without stocking the kit."""
+    parent_sku = (
+        db.get(SKU, int(purchase_line["sku_id"]))
+        if purchase_line.get("sku_id")
+        else None
+    )
+    if not parent_sku or not bom_components_for_sku(db, parent_sku):
+        raise ValueError(
+            "A linha recebida por componentes precisa possuir uma B.O.M. ativa."
+        )
+    if not isinstance(component_inputs, list) or not component_inputs:
+        raise ValueError("Informe os componentes recebidos da B.O.M.")
+
+    progress = _bom_component_receipt_progress(db, purchase_line, parent_sku)
+    requirements = progress["requirements"]
+    received_by_sku = {}
+    for component_input in component_inputs:
+        try:
+            component_id = int(component_input.get("sku_id"))
+        except (TypeError, ValueError):
+            raise ValueError("Componente da B.O.M. sem SKU válido.")
+        if component_id in received_by_sku:
+            raise ValueError("O mesmo componente da B.O.M. foi informado mais de uma vez.")
+        if component_id not in requirements:
+            raise ValueError("Componente informado não pertence à B.O.M. do conjunto.")
+        received_by_sku[component_id] = component_input
+    if set(received_by_sku) != set(requirements):
+        raise ValueError(
+            "Informe todos os componentes da B.O.M., inclusive os que não chegaram."
+        )
+
+    inserted = 0
+    accepted_total = Decimal("0")
+    for component_index, (component_id, definition) in enumerate(
+        requirements.items(), start=1
+    ):
+        component_input = received_by_sku[component_id]
+        physical = to_decimal(component_input.get("quantidade_fisica"))
+        approved = to_decimal(component_input.get("quantidade_aprovada"))
+        conditional = to_decimal(component_input.get("quantidade_condicional"))
+        rejected = to_decimal(component_input.get("quantidade_rejeitada"))
+        result = str(component_input.get("resultado_inspecao") or "A").upper()
+        if (
+            result not in {"A", "AC", "D"}
+            or min(physical, approved, conditional, rejected) < 0
+            or approved + conditional + rejected != physical
+        ):
+            raise ValueError(
+                f"Quantidades ou resultado de inspeção inválidos para "
+                f"{definition['sku'].sku}."
+            )
+        pending = max(
+            Decimal("0"),
+            definition["ordered"]
+            - progress["direct_coverage"] * definition["per_parent"]
+            - progress["accepted_by_sku"].get(component_id, Decimal("0")),
+        )
+        if physical > pending and not data.get("allow_overreceipt"):
+            raise ValueError(
+                f"Recebimento de {definition['sku'].sku} acima do saldo pendente "
+                f"da B.O.M. ({pending})."
+            )
+        line_id = _id()
+        db.execute(
+            text(
+                """
+                insert into erp_goods_receipt_lines(
+                    id,goods_receipt_id,purchase_order_line_id,sku_id,sku_codigo,
+                    quantidade_esperada,quantidade_recebida_anterior,saldo_pendente,
+                    quantidade_fisica,quantidade_aprovada,quantidade_condicional,
+                    quantidade_rejeitada,valor_unitario_pedido,valor_unitario_real,
+                    certificado_exigido,certificado_apresentado,validade_certificado,
+                    resultado_inspecao,justificativa_divergencia
+                ) values (
+                    :id,:receipt,:po_line,:sku_id,:sku_code,:expected,:previous,
+                    :pending,:physical,:approved,:conditional,:rejected,0,:value,
+                    :cert_required,:cert_presented,:cert_expiry,:result,:reason
+                )
+                """
+            ),
+            {
+                "id": line_id,
+                "receipt": receipt_id,
+                "po_line": purchase_line["id"],
+                "sku_id": component_id,
+                "sku_code": definition["sku"].sku,
+                "expected": definition["ordered"],
+                "previous": progress["accepted_by_sku"].get(component_id, Decimal("0")),
+                "pending": pending,
+                "physical": physical,
+                "approved": approved,
+                "conditional": conditional,
+                "rejected": rejected,
+                "value": to_decimal(component_input.get("valor_unitario_real")),
+                "cert_required": bool(component_input.get("certificado_exigido")),
+                "cert_presented": bool(component_input.get("certificado_apresentado")),
+                "cert_expiry": component_input.get("validade_certificado") or None,
+                "result": result,
+                "reason": str(component_input.get("justificativa_divergencia") or ""),
+            },
+        )
+        component_key = (
+            f"{receipt_key}:line:{purchase_line['id']}:component:{component_id}:"
+            f"{line_index}:{component_index}"
+        )
+        movement = None
+        if approved:
+            movement = register_movement(
+                db,
+                definition["sku"],
+                "ENTRADA",
+                approved,
+                user_id,
+                documento=str(data.get("numero_nf") or ""),
+                observacao=(
+                    f"Recebimento ERP {receipt_id} · componente de "
+                    f"{parent_sku.sku}"
+                ),
+                commit=False,
+                source_type="GOODS_RECEIPT",
+                source_id=receipt_id,
+                source_line_id=line_id,
+                idempotency_key=f"{component_key}:movement",
+            )
+        _insert_receipt_stock_link(
+            db,
+            line_id,
+            movement.id if movement else None,
+            approved,
+            conditional,
+            f"{component_key}:link",
+        )
+        inserted += 1
+        accepted_total += approved + conditional
+
+    db.execute(
+        text(
+            """
+            insert into erp_audit_events(
+                entity_type,entity_id,action,actor,origin,after_data
+            ) values (
+                'GOODS_RECEIPT',:id,'BOM_COMPONENTES_INSPECIONADOS',:actor,
+                'ESTOQUE',
+                jsonb_build_object(
+                    'purchase_order_line_id',cast(:line as text),
+                    'parent_sku',cast(:parent as text),
+                    'componentes',cast(:components as integer),
+                    'quantidade_aceita',cast(:accepted as numeric)
+                )
+            )
+            """
+        ),
+        {
+            "id": receipt_id,
+            "actor": actor,
+            "line": purchase_line["id"],
+            "parent": parent_sku.sku,
+            "components": inserted,
+            "accepted": accepted_total,
+        },
+    )
+
+
 def confirm_receipt(db, data, actor, user_id):
     key=str(data.get("idempotency_key") or "").strip()
     if not key: raise ValueError("idempotency_key e obrigatoria.")
@@ -1117,6 +1475,7 @@ def confirm_receipt(db, data, actor, user_id):
         if order["status"] not in {"EMITIDA", "PARCIALMENTE_RECEBIDA"}:
             raise ValueError("O.C. nao esta ativa para recebimento.")
     db.execute(text("""insert into erp_goods_receipts(id,purchase_order_id,origem,data_recebimento,fornecedor_nome,numero_nf,operador,observacoes,motivo_excecao,idempotency_key) values(:id,:po,:origem,:date,:supplier,:nf,:actor,:obs,:reason,:key)"""),{"id":receipt_id,"po":po_id,"origem":"PURCHASE_ORDER" if po_id else "MANUAL","date":data.get("data_recebimento") or datetime.utcnow(),"supplier":str(data.get("fornecedor_nome") or ""),"nf":str(data.get("numero_nf") or ""),"actor":actor,"obs":str(data.get("observacoes") or ""),"reason":str(data.get("motivo_excecao") or ""),"key":key})
+    touched_purchase_lines = set()
     for line_index, input_line in enumerate(lines, start=1):
         po_line_id=input_line.get("purchase_order_line_id")
         po_line=None
@@ -1129,6 +1488,20 @@ def confirm_receipt(db, data, actor, user_id):
                 str(po_line["quantidade_recebida"])
             ):
                 raise ValueError("Linha da O.C. nao possui saldo pendente.")
+            if "component_receipts" in input_line:
+                _confirm_bom_component_receipt(
+                    db,
+                    receipt_id,
+                    key,
+                    po_line,
+                    input_line.get("component_receipts"),
+                    actor,
+                    user_id,
+                    data,
+                    line_index,
+                )
+                touched_purchase_lines.add(str(po_line_id))
+                continue
         physical=to_decimal(input_line.get("quantidade_fisica")); approved=to_decimal(input_line.get("quantidade_aprovada")); conditional=to_decimal(input_line.get("quantidade_condicional")); rejected=to_decimal(input_line.get("quantidade_rejeitada"))
         result=str(input_line.get("resultado_inspecao") or "A").upper()
         if result not in {'A','AC','D'} or min(physical,approved,conditional,rejected)<0 or approved+conditional+rejected>physical: raise ValueError("Quantidades ou resultado de inspecao invalidos.")
@@ -1213,23 +1586,11 @@ def confirm_receipt(db, data, actor, user_id):
                 conditional, link_key,
             )
         if po_line:
-            # Rejeitado/devolvido foi inspecionado fisicamente, mas não atende
-            # a quantidade do pedido. AC atende o pedido e permanece bloqueado
-            # em quarentena; somente A aumenta o saldo disponível.
-            accepted_for_order = approved + conditional
-            new_received=Decimal(str(po_line['quantidade_recebida']))+accepted_for_order; line_status='RECEBIDA' if new_received>=Decimal(str(po_line['quantidade_pedida'])) else ('PARCIALMENTE_RECEBIDA' if new_received>0 else 'PENDENTE')
-            db.execute(text("update erp_purchase_order_lines set quantidade_recebida=:received,status=:status where id=:id"),{"received":new_received,"status":line_status,"id":po_line_id})
+            touched_purchase_lines.add(str(po_line_id))
+    for purchase_line_id in touched_purchase_lines:
+        _refresh_purchase_order_line_receipt_status(db, purchase_line_id)
     if po_id:
-        state=_row(db.execute(text("""select
-            count(*) filter(where status='RECEBIDA') as done,
-            count(*) filter(where quantidade_recebida > 0) as with_receipt,
-            count(*) as total
-            from erp_purchase_order_lines where purchase_order_id=:id"""),{"id":po_id}).first())
-        status=(
-            'RECEBIDA' if state['done']==state['total']
-            else ('PARCIALMENTE_RECEBIDA' if state['with_receipt'] else 'EMITIDA')
-        )
-        db.execute(text("update erp_purchase_orders set status=:status,version=version+1,updated_at=now() where id=:id"),{"status":status,"id":po_id})
+        _refresh_purchase_order_receipt_status(db, po_id)
     db.execute(text("insert into erp_audit_events(entity_type,entity_id,action,actor,origin,after_data) values ('GOODS_RECEIPT',:id,'CONFIRMADO',:actor,'ESTOQUE',jsonb_build_object('idempotency_key',cast(:key as text)))"),{"id":receipt_id,"actor":actor,"key":key})
     db.commit(); return {"id":receipt_id,"replayed":False}
 
@@ -1421,6 +1782,7 @@ def reverse_receipt(db, receipt_id, actor, user_id, reason):
              for update
         """), {"id": receipt_id}).all()
     ]
+    touched_purchase_lines = set()
     for line in lines:
         links = [
             _row(raw)
@@ -1451,43 +1813,20 @@ def reverse_receipt(db, receipt_id, actor, user_id, reason):
                 idempotency_key=f'reversal:{receipt_id}:{link["id"]}',
             )
         if line['purchase_order_line_id']:
-            db.execute(text("""
-                update erp_purchase_order_lines
-                   set quantidade_recebida=greatest(0,quantidade_recebida-:qty),
-                       status=case
-                           when greatest(0,quantidade_recebida-:qty) >= quantidade_pedida then 'RECEBIDA'
-                           when greatest(0,quantidade_recebida-:qty) > 0 then 'PARCIALMENTE_RECEBIDA'
-                           else 'PENDENTE'
-                       end
-                 where id=:id
-            """),{
-                'qty': (
-                    Decimal(str(line['quantidade_aprovada']))
-                    + Decimal(str(line['quantidade_condicional']))
-                ),
-                'id': line['purchase_order_line_id'],
-            })
+            touched_purchase_lines.add(str(line['purchase_order_line_id']))
     db.execute(text("update erp_goods_receipts set status='ESTORNADO',reversed_at=now(),motivo_excecao=:reason where id=:id"),{'id':receipt_id,'reason':reason or ''})
     if receipt['purchase_order_id']:
+        for purchase_line_id in touched_purchase_lines:
+            _refresh_purchase_order_line_receipt_status(db, purchase_line_id)
         order_before = _row(db.execute(text("""
             select financial_status,technical_status
               from erp_purchase_orders
              where id=:id
              for update
         """), {'id': receipt['purchase_order_id']}).first())
-        state = _row(db.execute(text("""
-            select count(*) filter(where status='RECEBIDA') as recebidas,
-                   count(*) filter(where quantidade_recebida > 0) as com_recebimento,
-                   count(*) as total
-              from erp_purchase_order_lines
-             where purchase_order_id=:id
-        """), {'id': receipt['purchase_order_id']}).first())
-        if state['recebidas'] == state['total']:
-            order_status = 'RECEBIDA'
-        elif state['com_recebimento']:
-            order_status = 'PARCIALMENTE_RECEBIDA'
-        else:
-            order_status = 'EMITIDA'
+        order_status = _refresh_purchase_order_receipt_status(
+            db, receipt['purchase_order_id']
+        )
         canonical_status = (
             'CONCLUIDA'
             if order_before and order_before.get('technical_status') == 'CONCLUIDA'

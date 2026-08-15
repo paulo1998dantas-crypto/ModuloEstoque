@@ -36,8 +36,16 @@ def _days(start, end):
 
 
 def _purchase_status(order_status, ordered_quantity, received_quantity):
-    if str(order_status or "") == "CANCELADA":
+    normalized_status = str(order_status or "").upper()
+    if normalized_status == "CANCELADA":
         return "CANCELADA"
+    # Component-level inspections can make a commercial conjunto partially
+    # received before its parent quantity is fully covered. The operational
+    # order status is therefore the authoritative state for the report.
+    if normalized_status == "PARCIALMENTE_RECEBIDA":
+        return "ENTREGUE PARCIAL"
+    if normalized_status == "RECEBIDA":
+        return "ENTREGUE"
     ordered = float(ordered_quantity or 0)
     received = float(received_quantity or 0)
     if received <= 0:
@@ -80,12 +88,13 @@ def _rows(db):
         dict(row._mapping) for row in db.execute(text("""
             select r.data_recebimento,r.fornecedor_nome,r.numero_nf,r.operador,
                    r.observacoes receipt_notes,o.numero_oc,
-                   coalesce(l.descricao_original,rl.sku_codigo,'ITEM SEM DESCRIÇÃO') descricao,
+                   coalesce(component.descricao,l.descricao_original,rl.sku_codigo,'ITEM SEM DESCRIÇÃO') descricao,
                    rl.quantidade_fisica,rl.valor_unitario_real,
                    l.valor_unitario_pedido,rl.resultado_inspecao,
                    rl.justificativa_divergencia
               from erp_goods_receipts r
               join erp_goods_receipt_lines rl on rl.goods_receipt_id=r.id
+              left join skus component on component.id=rl.sku_id
               left join erp_purchase_order_lines l on l.id=rl.purchase_order_line_id
               left join erp_purchase_orders o on o.id=r.purchase_order_id
              where r.status='CONFIRMADO'
