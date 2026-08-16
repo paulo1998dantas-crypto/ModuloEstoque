@@ -27,7 +27,8 @@
                 }
               },
               "queryRef": "fato_compras_transito.fornecedor",
-              "nativeQueryRef": "fornecedor"
+              "nativeQueryRef": "fornecedor",
+              "active": true
             }
           ]
         }

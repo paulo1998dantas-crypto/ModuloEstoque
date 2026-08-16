@@ -27,7 +27,8 @@
                 }
               },
               "queryRef": "dim_ordem_servico.categoria_servico",
-              "nativeQueryRef": "categoria_servico"
+              "nativeQueryRef": "categoria_servico",
+              "active": true
             }
           ]
         }

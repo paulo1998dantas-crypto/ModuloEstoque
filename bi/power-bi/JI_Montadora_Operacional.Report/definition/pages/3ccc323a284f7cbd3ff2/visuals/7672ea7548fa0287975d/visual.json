@@ -27,7 +27,8 @@
                 }
               },
               "queryRef": "dim_mes_historico.ano_mes",
-              "nativeQueryRef": "ano_mes"
+              "nativeQueryRef": "ano_mes",
+              "active": true
             }
           ]
         }

@@ -27,7 +27,8 @@
                 }
               },
               "queryRef": "dim_ordem_servico.cliente",
-              "nativeQueryRef": "cliente"
+              "nativeQueryRef": "cliente",
+              "active": true
             }
           ]
         }

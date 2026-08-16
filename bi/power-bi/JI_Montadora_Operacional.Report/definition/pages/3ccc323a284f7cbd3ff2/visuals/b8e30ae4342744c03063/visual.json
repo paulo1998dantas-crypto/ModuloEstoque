@@ -27,7 +27,8 @@
                 }
               },
               "queryRef": "fato_historico_conclusao.linha_produto",
-              "nativeQueryRef": "linha_produto"
+              "nativeQueryRef": "linha_produto",
+              "active": true
             }
           ]
         }

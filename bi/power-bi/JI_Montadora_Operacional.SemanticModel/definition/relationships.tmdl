@@ -169,3 +169,43 @@ relationship rel_dim_mes_historico_dCalendario_AnoMes
 	fromColumn: dCalendario.AnoMes
 	toColumn: dim_mes_historico.ano_mes
 
+relationship 53898850-7621-457b-b58d-7d45e1c847c8
+	joinOnDateBehavior: datePartOnly
+	fromColumn: dim_ordem_servico.data_inicio_producao
+	toColumn: LocalDateTable_37969252-39b0-40f6-83c3-b27701d945d7.Date
+
+relationship fa868545-3da7-432f-b892-104cd46823bb
+	joinOnDateBehavior: datePartOnly
+	fromColumn: dim_ordem_servico.data_limite_producao
+	toColumn: LocalDateTable_4282d8bc-f2ea-4fc5-8c81-08df69a08531.Date
+
+relationship a55fde24-39fa-4418-8b83-85fdb1db1fe9
+	joinOnDateBehavior: datePartOnly
+	fromColumn: fato_historico_conclusao.data_aprovacao
+	toColumn: LocalDateTable_69128c2f-30c2-4d97-b73a-b6160bb3cb62.Date
+
+relationship 40b6a511-237a-4467-bc07-c05d37afc7f6
+	joinOnDateBehavior: datePartOnly
+	fromColumn: fato_historico_conclusao.data_inicio_producao
+	toColumn: LocalDateTable_65ec64fc-e0de-45ef-93f1-3bf742fb17d3.Date
+
+relationship acf2443c-8789-42f3-babe-1634e36ec7f7
+	joinOnDateBehavior: datePartOnly
+	fromColumn: fato_historico_conclusao.prazo_finalizacao
+	toColumn: LocalDateTable_cd45fea9-739f-44ac-960d-80278bf8eb0d.Date
+
+relationship 7e917b7a-040a-4710-9a51-d26a99e1d4f3
+	joinOnDateBehavior: datePartOnly
+	fromColumn: fato_historico_conclusao.data_limite_producao
+	toColumn: LocalDateTable_827c2782-a011-4622-8031-2858863eb478.Date
+
+relationship 8a84c1de-db71-43e0-8907-53795f014ac0
+	joinOnDateBehavior: datePartOnly
+	fromColumn: dim_mes_historico.data_mes
+	toColumn: LocalDateTable_27d6b09d-1865-4ac6-b7ae-f613f135c543.Date
+
+relationship 59e0ec13-8ebc-47e4-9ac7-13faacc63c6e
+	joinOnDateBehavior: datePartOnly
+	fromColumn: fato_progresso_producao.semana_inicio
+	toColumn: LocalDateTable_95aa07e0-855d-423e-9f73-198de0cb049b.Date
+

@@ -5,6 +5,45 @@
   "displayOption": "FitToPage",
   "height": 720,
   "width": 1280,
+  "filterConfig": {
+    "filters": [
+      {
+        "name": "Filterd87bff6be5231a3684bb1fd2",
+        "field": {
+          "Column": {
+            "Expression": {
+              "SourceRef": {
+                "Entity": "dim_sku"
+              }
+            },
+            "Property": "codigo"
+          }
+        },
+        "type": "Categorical",
+        "howCreated": "Drillthrough"
+      }
+    ]
+  },
+  "pageBinding": {
+    "name": "Pod_991510591175310e3760",
+    "type": "Drillthrough",
+    "parameters": [
+      {
+        "name": "Param_Filterd87bff6be5231a3684bb1fd2",
+        "boundFilter": "Filterd87bff6be5231a3684bb1fd2",
+        "fieldExpr": {
+          "Column": {
+            "Expression": {
+              "SourceRef": {
+                "Entity": "dim_sku"
+              }
+            },
+            "Property": "codigo"
+          }
+        }
+      }
+    ]
+  },
   "objects": {
     "background": [
       {
@@ -55,44 +94,5 @@
       }
     ]
   },
-  "visibility": "HiddenInViewMode",
-  "filterConfig": {
-    "filters": [
-      {
-        "name": "Filterd87bff6be5231a3684bb1fd2",
-        "field": {
-          "Column": {
-            "Expression": {
-              "SourceRef": {
-                "Entity": "dim_sku"
-              }
-            },
-            "Property": "codigo"
-          }
-        },
-        "type": "Categorical",
-        "howCreated": "Drillthrough"
-      }
-    ]
-  },
-  "pageBinding": {
-    "name": "Pod",
-    "type": "Drillthrough",
-    "parameters": [
-      {
-        "name": "Param_Filterd87bff6be5231a3684bb1fd2",
-        "boundFilter": "Filterd87bff6be5231a3684bb1fd2",
-        "fieldExpr": {
-          "Column": {
-            "Expression": {
-              "SourceRef": {
-                "Entity": "dim_sku"
-              }
-            },
-            "Property": "codigo"
-          }
-        }
-      }
-    ]
-  }
+  "visibility": "HiddenInViewMode"
 }

@@ -27,7 +27,8 @@
                 }
               },
               "queryRef": "dim_ordem_servico.linha_produto",
-              "nativeQueryRef": "linha_produto"
+              "nativeQueryRef": "linha_produto",
+              "active": true
             }
           ]
         }

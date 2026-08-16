@@ -2,10 +2,6 @@
 table fato_mrp
 	lineageTag: a94a37cf-bee0-4788-bea4-b4c84d77e261
 
-	measure 'SKUs Ativos' = CALCULATE(DISTINCTCOUNT(fato_estoque_atual[sku_id]), fato_estoque_atual[sku_ativo] = TRUE())
-		formatString: 0
-		displayFolder: 1. Estoque
-
 	measure 'SKUs com Saldo' = CALCULATE(DISTINCTCOUNT(fato_estoque_atual[sku_id]), fato_estoque_atual[sku_ativo] = TRUE(), fato_estoque_atual[estoque_atual] > 0)
 		formatString: 0
 		displayFolder: 1. Estoque
@@ -14,11 +10,115 @@ table fato_mrp
 		formatString: 0
 		displayFolder: 1. Estoque
 
-	measure 'SKUs com Disponível' = CALCULATE(DISTINCTCOUNT(fato_estoque_atual[sku_id]), fato_estoque_atual[sku_ativo] = TRUE(), fato_estoque_atual[estoque_disponivel] > 0)
+	measure 'SKUs Zerados' = CALCULATE(DISTINCTCOUNT(fato_estoque_atual[sku_id]), fato_estoque_atual[sku_ativo] = TRUE(), fato_estoque_atual[status_estoque] = "ZERADO")
 		formatString: 0
 		displayFolder: 1. Estoque
 
-	measure 'SKUs Zerados' = CALCULATE(DISTINCTCOUNT(fato_estoque_atual[sku_id]), fato_estoque_atual[sku_ativo] = TRUE(), fato_estoque_atual[status_estoque] = "ZERADO")
+	measure Entradas = [Entradas (U.M.)]
+		formatString: #,0.###
+		displayFolder: 9. Compatibilidade\Somente U.M. única
+
+	measure Consumo = [Consumo (U.M.)]
+		formatString: #,0.###
+		displayFolder: 9. Compatibilidade\Somente U.M. única
+
+	measure 'O.S. no WIP' = CALCULATE(DISTINCTCOUNT(dim_ordem_servico[work_order_id]), dim_ordem_servico[em_wip] = TRUE())
+		formatString: 0
+		displayFolder: 2. PCP
+
+	measure 'O.S. em Producao' = [O.S. em Produção]
+		formatString: 0
+		displayFolder: 9. Compatibilidade
+
+	measure 'O.S. Atrasadas' = CALCULATE(DISTINCTCOUNT(dim_ordem_servico[work_order_id]), dim_ordem_servico[producao_atrasada] = TRUE())
+		formatString: 0
+		displayFolder: 2. PCP
+
+	measure 'Avanco Medio %' = [Avanço Médio %]
+		formatString: 0.0%
+		displayFolder: 9. Compatibilidade
+
+	measure 'O.S. com Material Pendente' = CALCULATE(DISTINCTCOUNT(fato_necessidades_os[work_order_id]), fato_necessidades_os[quantidade_pendente] > 0, fato_necessidades_os[sem_estoque_disponivel] = TRUE())
+		formatString: 0
+		displayFolder: 2. PCP
+
+	measure 'Linhas em Transito' = [Linhas em Trânsito]
+		formatString: 0
+		displayFolder: 9. Compatibilidade
+
+	measure 'Valor em Transito' = [Valor em Trânsito]
+		formatString: R$ #,0.00
+		displayFolder: 9. Compatibilidade
+
+	measure 'Linhas Atrasadas' = CALCULATE(COUNTROWS(fato_compras_transito), fato_compras_transito[em_transito] = TRUE(), FILTER(fato_compras_transito, NOT ISBLANK(fato_compras_transito[data_necessidade]) && fato_compras_transito[data_necessidade] >= DATE(2000, 1, 1) && fato_compras_transito[data_necessidade] < TODAY()))
+		formatString: 0
+		displayFolder: 3. Compras
+
+	measure 'O.C. Abertas' = CALCULATE(DISTINCTCOUNT(fato_compras_transito[purchase_order_id]), fato_compras_transito[em_transito] = TRUE())
+		formatString: 0
+		displayFolder: 3. Compras
+
+	measure 'Taxa Aprovacao %' = [Taxa Aprovação Média %]
+		formatString: 0.0%
+		displayFolder: 9. Compatibilidade
+
+	measure 'SKUs com Demanda' = COUNTROWS(FILTER(VALUES(dim_sku[sku_id]), VAR _demandaOS = CALCULATE(SUM(fato_necessidades_os[quantidade_pendente])) VAR _forecast = IF(NOT ISFILTERED(dim_ordem_servico[categoria_servico]), CALCULATE(SUM(fato_mrp[forecast_firme]) + SUM(fato_mrp[forecast_preditivo_ponderado])), 0) RETURN COALESCE(_demandaOS, 0) + COALESCE(_forecast, 0) > 0))
+		formatString: 0
+		displayFolder: 4. MRP
+
+	measure 'SKUs Cobertos' = COUNTROWS(FILTER(VALUES(dim_sku[sku_id]), VAR _demandaOS = CALCULATE(SUM(fato_necessidades_os[quantidade_pendente])) VAR _forecast = IF(NOT ISFILTERED(dim_ordem_servico[categoria_servico]), CALCULATE(SUM(fato_mrp[forecast_firme]) + SUM(fato_mrp[forecast_preditivo_ponderado])), 0) VAR _demanda = COALESCE(_demandaOS, 0) + COALESCE(_forecast, 0) VAR _disponivel = COALESCE(CALCULATE(MAX(fato_mrp[estoque_disponivel])), 0) VAR _transito = COALESCE(CALCULATE(MAX(fato_mrp[quantidade_transito])), 0) RETURN _demanda > 0 && _demanda <= _disponivel + _transito))
+		formatString: 0
+		displayFolder: 4. MRP
+
+	measure 'SKUs a Comprar' = COUNTROWS(FILTER(VALUES(dim_sku[sku_id]), VAR _demandaOS = CALCULATE(SUM(fato_necessidades_os[quantidade_pendente])) VAR _forecast = IF(NOT ISFILTERED(dim_ordem_servico[categoria_servico]), CALCULATE(SUM(fato_mrp[forecast_firme]) + SUM(fato_mrp[forecast_preditivo_ponderado])), 0) VAR _disponivel = COALESCE(CALCULATE(MAX(fato_mrp[estoque_disponivel])), 0) VAR _transito = COALESCE(CALCULATE(MAX(fato_mrp[quantidade_transito])), 0) RETURN COALESCE(_demandaOS, 0) + COALESCE(_forecast, 0) - _disponivel - _transito > 0))
+		formatString: 0
+		displayFolder: 4. MRP
+
+	measure 'Forecasts sem Estrutura' = CALCULATE(DISTINCTCOUNT(fato_forecast[forecast_id]), fato_forecast[status] = "ATIVO", fato_forecast[possui_estrutura_materiais] = FALSE())
+		formatString: 0
+		displayFolder: 4. MRP
+
+	measure 'Necessidade de Compra' = [Necessidade Compra (U.M.)]
+		formatString: #,0.###
+		displayFolder: 9. Compatibilidade\Somente U.M. única
+
+	measure 'Necessidade de Compra c/ Minimo' = IF(HASONEVALUE(dim_sku[unidade]), SUM(fato_mrp[necessidade_compra_com_estoque_minimo]))
+		formatString: #,0.###
+		displayFolder: 9. Compatibilidade\Somente U.M. única
+
+	measure 'Ultima Atualizacao' = [Última Atualização]
+		formatString: dd/MM/yyyy HH:mm
+		displayFolder: 9. Compatibilidade
+
+	measure 'Estoque Atual' = [Estoque Atual (U.M.)]
+		formatString: #,0.###
+		displayFolder: 9. Compatibilidade\Somente U.M. única
+
+	measure 'Empenhado Total' = [Empenhado Total (U.M.)]
+		formatString: #,0.###
+		displayFolder: 9. Compatibilidade\Somente U.M. única
+
+	measure 'Estoque Disponivel' = [Estoque Disponível (U.M.)]
+		formatString: #,0.###
+		displayFolder: 9. Compatibilidade\Somente U.M. única
+
+	measure 'Necessidade Total' = [Necessidade Total (U.M.)]
+		formatString: #,0.###
+		displayFolder: 9. Compatibilidade\Somente U.M. única
+
+	measure 'Em Transito' = [Em Trânsito (U.M.)]
+		formatString: #,0.###
+		displayFolder: 9. Compatibilidade\Somente U.M. única
+
+	measure 'MRP Estoque Disponivel' = [Estoque Disponível MRP (U.M.)]
+		formatString: #,0.###
+		displayFolder: 9. Compatibilidade\Somente U.M. única
+
+	measure 'SKUs Ativos' = CALCULATE(DISTINCTCOUNT(fato_estoque_atual[sku_id]), fato_estoque_atual[sku_ativo] = TRUE())
+		formatString: 0
+		displayFolder: 1. Estoque
+
+	measure 'SKUs com Disponível' = CALCULATE(DISTINCTCOUNT(fato_estoque_atual[sku_id]), fato_estoque_atual[sku_ativo] = TRUE(), fato_estoque_atual[estoque_disponivel] > 0)
 		formatString: 0
 		displayFolder: 1. Estoque
 
@@ -61,15 +161,7 @@ table fato_mrp
 	measure 'Status Estoque Ação' = VAR _ativo = SELECTEDVALUE(fato_estoque_atual[sku_ativo]) VAR _status = SELECTEDVALUE(fato_estoque_atual[status_estoque]) RETURN IF(NOT _ativo || _status = "OK", BLANK(), SWITCH(_status, "ZERADO", "REPOR — ZERADO", "SALDO_COMPROMETIDO", "CRÍTICO — COMPROMETIDO", "BAIXO", "REPOR — ABAIXO DO MÍNIMO", _status))
 		displayFolder: 1. Estoque\Ações
 
-	measure 'O.S. no WIP' = CALCULATE(DISTINCTCOUNT(dim_ordem_servico[work_order_id]), dim_ordem_servico[em_wip] = TRUE())
-		formatString: 0
-		displayFolder: 2. PCP
-
 	measure 'O.S. em Produção' = CALCULATE(DISTINCTCOUNT(dim_ordem_servico[work_order_id]), dim_ordem_servico[fase_wip] = "PRODUCAO")
-		formatString: 0
-		displayFolder: 2. PCP
-
-	measure 'O.S. Atrasadas' = CALCULATE(DISTINCTCOUNT(dim_ordem_servico[work_order_id]), dim_ordem_servico[producao_atrasada] = TRUE())
 		formatString: 0
 		displayFolder: 2. PCP
 
@@ -82,10 +174,6 @@ table fato_mrp
 		displayFolder: 2. PCP
 
 	measure 'Mediana Dias no WIP' = MEDIANX(FILTER(dim_ordem_servico, dim_ordem_servico[em_wip] = TRUE()), dim_ordem_servico[dias_no_wip])
-		formatString: 0
-		displayFolder: 2. PCP
-
-	measure 'O.S. com Material Pendente' = CALCULATE(DISTINCTCOUNT(fato_necessidades_os[work_order_id]), fato_necessidades_os[quantidade_pendente] > 0, fato_necessidades_os[sem_estoque_disponivel] = TRUE())
 		formatString: 0
 		displayFolder: 2. PCP
 
@@ -124,10 +212,6 @@ table fato_mrp
 		formatString: R$ #,0.00
 		displayFolder: 3. Compras
 
-	measure 'Linhas Atrasadas' = CALCULATE(COUNTROWS(fato_compras_transito), fato_compras_transito[em_transito] = TRUE(), FILTER(fato_compras_transito, NOT ISBLANK(fato_compras_transito[data_necessidade]) && fato_compras_transito[data_necessidade] >= DATE(2000, 1, 1) && fato_compras_transito[data_necessidade] < TODAY()))
-		formatString: 0
-		displayFolder: 3. Compras
-
 	measure '% Linhas Atrasadas' = DIVIDE([Linhas Atrasadas], [Linhas em Trânsito])
 		formatString: 0.0%
 		displayFolder: 3. Compras
@@ -137,10 +221,6 @@ table fato_mrp
 		displayFolder: 3. Compras
 
 	measure 'Linhas Data Inválida' = CALCULATE(COUNTROWS(fato_compras_transito), fato_compras_transito[em_transito] = TRUE(), fato_compras_transito[dias_para_remessa] < -3650)
-		formatString: 0
-		displayFolder: 3. Compras
-
-	measure 'O.C. Abertas' = CALCULATE(DISTINCTCOUNT(fato_compras_transito[purchase_order_id]), fato_compras_transito[em_transito] = TRUE())
 		formatString: 0
 		displayFolder: 3. Compras
 
@@ -167,28 +247,12 @@ table fato_mrp
 		formatString: R$ #,0.00
 		displayFolder: 3. Compras\Ações
 
-	measure 'SKUs com Demanda' = COUNTROWS(FILTER(VALUES(dim_sku[sku_id]), VAR _demandaOS = CALCULATE(SUM(fato_necessidades_os[quantidade_pendente])) VAR _forecast = IF(NOT ISFILTERED(dim_ordem_servico[categoria_servico]), CALCULATE(SUM(fato_mrp[forecast_firme]) + SUM(fato_mrp[forecast_preditivo_ponderado])), 0) RETURN COALESCE(_demandaOS, 0) + COALESCE(_forecast, 0) > 0))
-		formatString: 0
-		displayFolder: 4. MRP
-
 	measure 'SKUs MRP em Demanda' = [SKUs com Demanda]
-		formatString: 0
-		displayFolder: 4. MRP
-
-	measure 'SKUs Cobertos' = COUNTROWS(FILTER(VALUES(dim_sku[sku_id]), VAR _demandaOS = CALCULATE(SUM(fato_necessidades_os[quantidade_pendente])) VAR _forecast = IF(NOT ISFILTERED(dim_ordem_servico[categoria_servico]), CALCULATE(SUM(fato_mrp[forecast_firme]) + SUM(fato_mrp[forecast_preditivo_ponderado])), 0) VAR _demanda = COALESCE(_demandaOS, 0) + COALESCE(_forecast, 0) VAR _disponivel = COALESCE(CALCULATE(MAX(fato_mrp[estoque_disponivel])), 0) VAR _transito = COALESCE(CALCULATE(MAX(fato_mrp[quantidade_transito])), 0) RETURN _demanda > 0 && _demanda <= _disponivel + _transito))
-		formatString: 0
-		displayFolder: 4. MRP
-
-	measure 'SKUs a Comprar' = COUNTROWS(FILTER(VALUES(dim_sku[sku_id]), VAR _demandaOS = CALCULATE(SUM(fato_necessidades_os[quantidade_pendente])) VAR _forecast = IF(NOT ISFILTERED(dim_ordem_servico[categoria_servico]), CALCULATE(SUM(fato_mrp[forecast_firme]) + SUM(fato_mrp[forecast_preditivo_ponderado])), 0) VAR _disponivel = COALESCE(CALCULATE(MAX(fato_mrp[estoque_disponivel])), 0) VAR _transito = COALESCE(CALCULATE(MAX(fato_mrp[quantidade_transito])), 0) RETURN COALESCE(_demandaOS, 0) + COALESCE(_forecast, 0) - _disponivel - _transito > 0))
 		formatString: 0
 		displayFolder: 4. MRP
 
 	measure '% SKUs MRP Cobertos' = DIVIDE([SKUs Cobertos], [SKUs com Demanda])
 		formatString: 0.0%
-		displayFolder: 4. MRP
-
-	measure 'Forecasts sem Estrutura' = CALCULATE(DISTINCTCOUNT(fato_forecast[forecast_id]), fato_forecast[status] = "ATIVO", fato_forecast[possui_estrutura_materiais] = FALSE())
-		formatString: 0
 		displayFolder: 4. MRP
 
 	measure 'Próxima Necessidade' = CALCULATE(MIN(fato_necessidades_os[data_entrega_vigente]), fato_necessidades_os[quantidade_pendente] > 0)
@@ -246,10 +310,6 @@ table fato_mrp
 		formatString: 0
 		displayFolder: 5. Histórico de Produção
 
-	measure 'Carros Retirados' = COALESCE(CALCULATE(DISTINCTCOUNT(fato_historico_conclusao[work_order_id]), CROSSFILTER(fato_historico_conclusao[data_finalizacao], dCalendario[Data], NONE), USERELATIONSHIP(fato_historico_conclusao[data_retirada], dCalendario[Data]), fato_historico_conclusao[foi_retirado] = TRUE()), 0)
-		formatString: 0
-		displayFolder: 5. Histórico de Produção
-
 	measure 'Tempo Médio Produção (dias)' = CALCULATE(AVERAGE(fato_historico_conclusao[dias_producao]), fato_historico_conclusao[foi_finalizado] = TRUE())
 		formatString: 0.0
 		displayFolder: 5. Histórico de Produção
@@ -286,6 +346,14 @@ table fato_mrp
 		formatString: dd/MM/yyyy HH:mm
 		displayFolder: 5. Histórico de Produção\Qualidade
 
+	measure 'Última Atualização' = MAX(fato_mrp[atualizado_em])
+		formatString: dd/MM/yyyy HH:mm
+		displayFolder: 5. Auditoria
+
+	measure 'Carros Retirados' = COALESCE(CALCULATE(DISTINCTCOUNT(fato_historico_conclusao[work_order_id]), CROSSFILTER(fato_historico_conclusao[data_finalizacao], dCalendario[Data], NONE), USERELATIONSHIP(fato_historico_conclusao[data_retirada], dCalendario[Data]), fato_historico_conclusao[foi_retirado] = TRUE()), 0)
+		formatString: 0
+		displayFolder: 5. Histórico de Produção
+
 	measure 'Etapas Concluídas' = CALCULATE(DISTINCTCOUNT(fato_progresso_producao[evento_id]), fato_progresso_producao[tipo_evento] = "ETAPA CONCLUÍDA")
 		formatString: 0
 		displayFolder: 6. Fechamento de Produção
@@ -301,74 +369,6 @@ table fato_mrp
 	measure 'Processos com Apontamentos' = COUNTROWS(FILTER(VALUES(fato_progresso_producao[setor]), CALCULATE([Etapas Concluídas]) > 0))
 		formatString: 0
 		displayFolder: 6. Fechamento de Produção
-
-	measure 'Última Atualização' = MAX(fato_mrp[atualizado_em])
-		formatString: dd/MM/yyyy HH:mm
-		displayFolder: 5. Auditoria
-
-	measure 'Estoque Atual' = [Estoque Atual (U.M.)]
-		formatString: #,0.###
-		displayFolder: 9. Compatibilidade\Somente U.M. única
-
-	measure 'Empenhado Total' = [Empenhado Total (U.M.)]
-		formatString: #,0.###
-		displayFolder: 9. Compatibilidade\Somente U.M. única
-
-	measure 'Estoque Disponivel' = [Estoque Disponível (U.M.)]
-		formatString: #,0.###
-		displayFolder: 9. Compatibilidade\Somente U.M. única
-
-	measure 'Entradas' = [Entradas (U.M.)]
-		formatString: #,0.###
-		displayFolder: 9. Compatibilidade\Somente U.M. única
-
-	measure 'Consumo' = [Consumo (U.M.)]
-		formatString: #,0.###
-		displayFolder: 9. Compatibilidade\Somente U.M. única
-
-	measure 'Necessidade Total' = [Necessidade Total (U.M.)]
-		formatString: #,0.###
-		displayFolder: 9. Compatibilidade\Somente U.M. única
-
-	measure 'Em Transito' = [Em Trânsito (U.M.)]
-		formatString: #,0.###
-		displayFolder: 9. Compatibilidade\Somente U.M. única
-
-	measure 'MRP Estoque Disponivel' = [Estoque Disponível MRP (U.M.)]
-		formatString: #,0.###
-		displayFolder: 9. Compatibilidade\Somente U.M. única
-
-	measure 'Necessidade de Compra' = [Necessidade Compra (U.M.)]
-		formatString: #,0.###
-		displayFolder: 9. Compatibilidade\Somente U.M. única
-
-	measure 'Necessidade de Compra c/ Minimo' = IF(HASONEVALUE(dim_sku[unidade]), SUM(fato_mrp[necessidade_compra_com_estoque_minimo]))
-		formatString: #,0.###
-		displayFolder: 9. Compatibilidade\Somente U.M. única
-
-	measure 'Avanco Medio %' = [Avanço Médio %]
-		formatString: 0.0%
-		displayFolder: 9. Compatibilidade
-
-	measure 'O.S. em Producao' = [O.S. em Produção]
-		formatString: 0
-		displayFolder: 9. Compatibilidade
-
-	measure 'Linhas em Transito' = [Linhas em Trânsito]
-		formatString: 0
-		displayFolder: 9. Compatibilidade
-
-	measure 'Valor em Transito' = [Valor em Trânsito]
-		formatString: R$ #,0.00
-		displayFolder: 9. Compatibilidade
-
-	measure 'Taxa Aprovacao %' = [Taxa Aprovação Média %]
-		formatString: 0.0%
-		displayFolder: 9. Compatibilidade
-
-	measure 'Ultima Atualizacao' = [Última Atualização]
-		formatString: dd/MM/yyyy HH:mm
-		displayFolder: 9. Compatibilidade
 
 	column sku_id
 		dataType: int64

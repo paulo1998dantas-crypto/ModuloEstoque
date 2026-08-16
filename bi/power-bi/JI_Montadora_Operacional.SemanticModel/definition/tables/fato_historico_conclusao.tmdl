@@ -29,8 +29,10 @@ table fato_historico_conclusao
 	column item
 		dataType: int64
 		lineageTag: 4f739d60-226b-4a42-8fca-4e7266ca7da0
-		summarizeBy: none
+		summarizeBy: sum
 		sourceColumn: item
+
+		annotation SummarizationSetBy = Automatic
 
 	column chassi
 		dataType: string
@@ -93,6 +95,13 @@ table fato_historico_conclusao
 		summarizeBy: none
 		sourceColumn: data_aprovacao
 
+		variation Variation
+			isDefault
+			relationship: a55fde24-39fa-4418-8b83-85fdb1db1fe9
+			defaultHierarchy: LocalDateTable_69128c2f-30c2-4d97-b73a-b6160bb3cb62.'Hierarquia de datas'
+
+		annotation UnderlyingDateTimeDataType = Date
+
 	column data_chegada
 		dataType: dateTime
 		formatString: dd/MM/yyyy HH:mm
@@ -107,6 +116,13 @@ table fato_historico_conclusao
 		summarizeBy: none
 		sourceColumn: data_inicio_producao
 
+		variation Variation
+			isDefault
+			relationship: 40b6a511-237a-4467-bc07-c05d37afc7f6
+			defaultHierarchy: LocalDateTable_65ec64fc-e0de-45ef-93f1-3bf742fb17d3.'Hierarquia de datas'
+
+		annotation UnderlyingDateTimeDataType = Date
+
 	column origem_inicio_producao
 		dataType: string
 		lineageTag: b1c7c885-d55f-4afa-9d5f-c72c9e727fb2
@@ -119,6 +135,8 @@ table fato_historico_conclusao
 		lineageTag: c94d0f2b-9380-4f31-8ce2-0ac68e56c30a
 		summarizeBy: none
 		sourceColumn: data_finalizacao
+
+		annotation UnderlyingDateTimeDataType = Date
 
 	column data_finalizacao_em
 		dataType: dateTime
@@ -140,6 +158,8 @@ table fato_historico_conclusao
 		summarizeBy: none
 		sourceColumn: data_entrega
 
+		annotation UnderlyingDateTimeDataType = Date
+
 	column data_entrega_em
 		dataType: dateTime
 		formatString: dd/MM/yyyy HH:mm
@@ -154,11 +174,20 @@ table fato_historico_conclusao
 		summarizeBy: none
 		sourceColumn: prazo_finalizacao
 
+		variation Variation
+			isDefault
+			relationship: acf2443c-8789-42f3-babe-1634e36ec7f7
+			defaultHierarchy: LocalDateTable_cd45fea9-739f-44ac-960d-80278bf8eb0d.'Hierarquia de datas'
+
+		annotation UnderlyingDateTimeDataType = Date
+
 	column dias_producao
 		dataType: int64
 		lineageTag: e2e55bf4-e75e-418a-aedc-3eabf3e682f1
-		summarizeBy: none
+		summarizeBy: sum
 		sourceColumn: dias_producao
+
+		annotation SummarizationSetBy = Automatic
 
 	column duracao_invalida
 		dataType: boolean
@@ -193,8 +222,10 @@ table fato_historico_conclusao
 	column dias_atraso_finalizacao
 		dataType: int64
 		lineageTag: 1a1096ec-96dc-49ba-a24b-5b1c99d91b15
-		summarizeBy: none
+		summarizeBy: sum
 		sourceColumn: dias_atraso_finalizacao
+
+		annotation SummarizationSetBy = Automatic
 
 	column updated_at
 		dataType: dateTime
@@ -218,8 +249,10 @@ table fato_historico_conclusao
 	column prazo_producao_dias
 		dataType: int64
 		lineageTag: 815b7674-fca0-451d-8a90-1273c5b13949
-		summarizeBy: none
+		summarizeBy: sum
 		sourceColumn: prazo_producao_dias
+
+		annotation SummarizationSetBy = Automatic
 
 	column data_limite_producao
 		dataType: dateTime
@@ -228,12 +261,21 @@ table fato_historico_conclusao
 		summarizeBy: none
 		sourceColumn: data_limite_producao
 
+		variation Variation
+			isDefault
+			relationship: 7e917b7a-040a-4710-9a51-d26a99e1d4f3
+			defaultHierarchy: LocalDateTable_827c2782-a011-4622-8031-2858863eb478.'Hierarquia de datas'
+
+		annotation UnderlyingDateTimeDataType = Date
+
 	column data_retirada
 		dataType: dateTime
 		formatString: dd/MM/yyyy
 		lineageTag: 55080c3b-3e3e-4b65-8f8a-0809b40d736a
 		summarizeBy: none
 		sourceColumn: data_retirada
+
+		annotation UnderlyingDateTimeDataType = Date
 
 	column foi_retirado
 		dataType: boolean
@@ -249,3 +291,4 @@ table fato_historico_conclusao
 				    Dados = Fonte{[Schema = "bi", Item = "fato_historico_conclusao"]}[Data]
 				in
 				    Dados
+

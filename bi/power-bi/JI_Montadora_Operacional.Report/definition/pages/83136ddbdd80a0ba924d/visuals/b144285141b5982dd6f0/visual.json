@@ -27,7 +27,8 @@
                 }
               },
               "queryRef": "dim_sku.categoria",
-              "nativeQueryRef": "categoria"
+              "nativeQueryRef": "categoria",
+              "active": true
             }
           ]
         }

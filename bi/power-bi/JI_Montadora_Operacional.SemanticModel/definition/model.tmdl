@@ -16,7 +16,6 @@ annotation PBI_ProTooling = ["DevMode"]
 
 ref table dim_ordem_servico
 ref table dim_sku
-ref table dim_mes_historico
 ref table fato_compras_transito
 ref table fato_empenhos_abertos
 ref table fato_estoque_atual
@@ -27,7 +26,6 @@ ref table fato_inventarios
 ref table fato_movimentacoes_estoque
 ref table fato_mrp
 ref table fato_necessidades_os
-ref table fato_progresso_producao
 ref table fato_recebimentos_inspecao
 ref table dCalendario
 ref table DateTableTemplate_4cfa02b6-03d2-4b63-bfc4-da65bf86ec3c
@@ -44,6 +42,16 @@ ref table LocalDateTable_befe74f6-9ba9-43ae-9638-bfdb102cfa99
 ref table LocalDateTable_c4848510-9683-47a3-8337-aaec4d93938e
 ref table LocalDateTable_44ee9f06-a25e-4745-863a-78870fe9fa41
 ref table fato_historico_conclusao
+ref table dim_mes_historico
+ref table fato_progresso_producao
+ref table LocalDateTable_37969252-39b0-40f6-83c3-b27701d945d7
+ref table LocalDateTable_4282d8bc-f2ea-4fc5-8c81-08df69a08531
+ref table LocalDateTable_69128c2f-30c2-4d97-b73a-b6160bb3cb62
+ref table LocalDateTable_65ec64fc-e0de-45ef-93f1-3bf742fb17d3
+ref table LocalDateTable_cd45fea9-739f-44ac-960d-80278bf8eb0d
+ref table LocalDateTable_827c2782-a011-4622-8031-2858863eb478
+ref table LocalDateTable_27d6b09d-1865-4ac6-b7ae-f613f135c543
+ref table LocalDateTable_95aa07e0-855d-423e-9f73-198de0cb049b
 
 ref cultureInfo pt-BR
 

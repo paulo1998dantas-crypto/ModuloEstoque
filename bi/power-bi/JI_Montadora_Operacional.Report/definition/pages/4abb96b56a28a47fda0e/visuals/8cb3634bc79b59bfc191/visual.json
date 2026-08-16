@@ -2,11 +2,11 @@
   "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/visualContainer/2.11.0/schema.json",
   "name": "8cb3634bc79b59bfc191",
   "position": {
-    "x": 948,
-    "y": 68,
+    "x": 948.47130874717084,
+    "y": 67.485021967780582,
     "z": 5,
-    "height": 80,
-    "width": 164,
+    "height": 69.939022766608971,
+    "width": 163.1910531220876,
     "tabOrder": 5
   },
   "visual": {
@@ -23,11 +23,12 @@
                       "Entity": "fato_progresso_producao"
                     }
                   },
-                  "Property": "ano"
+                  "Property": "semana_ano"
                 }
               },
-              "queryRef": "fato_progresso_producao.ano",
-              "nativeQueryRef": "ano"
+              "queryRef": "fato_progresso_producao.semana_ano",
+              "nativeQueryRef": "semana_ano",
+              "active": true
             }
           ]
         }
@@ -62,6 +63,53 @@
                 "Literal": {
                   "Value": "'Ano'"
                 }
+              }
+            }
+          }
+        }
+      ],
+      "general": [
+        {
+          "properties": {
+            "filter": {
+              "filter": {
+                "Version": 2,
+                "From": [
+                  {
+                    "Name": "f",
+                    "Entity": "fato_progresso_producao",
+                    "Type": 0
+                  }
+                ],
+                "Where": [
+                  {
+                    "Condition": {
+                      "In": {
+                        "Expressions": [
+                          {
+                            "Column": {
+                              "Expression": {
+                                "SourceRef": {
+                                  "Source": "f"
+                                }
+                              },
+                              "Property": "semana_ano"
+                            }
+                          }
+                        ],
+                        "Values": [
+                          [
+                            {
+                              "Literal": {
+                                "Value": "'2026-S32'"
+                              }
+                            }
+                          ]
+                        ]
+                      }
+                    }
+                  }
+                ]
               }
             }
           }
@@ -200,23 +248,5 @@
       ]
     },
     "drillFilterOtherVisuals": true
-  },
-  "filterConfig": {
-    "filters": [
-      {
-        "name": "Filter8cb3634bc79b59bfc1919cbc",
-        "field": {
-          "Column": {
-            "Expression": {
-              "SourceRef": {
-                "Entity": "fato_progresso_producao"
-              }
-            },
-            "Property": "ano"
-          }
-        },
-        "type": "Categorical"
-      }
-    ]
   }
 }

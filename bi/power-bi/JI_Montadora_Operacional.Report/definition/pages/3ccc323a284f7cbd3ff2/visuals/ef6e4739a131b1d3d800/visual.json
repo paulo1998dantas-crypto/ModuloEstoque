@@ -27,7 +27,8 @@
                 }
               },
               "queryRef": "fato_historico_conclusao.mercado",
-              "nativeQueryRef": "mercado"
+              "nativeQueryRef": "mercado",
+              "active": true
             }
           ]
         }

@@ -27,7 +27,8 @@
                 }
               },
               "queryRef": "fato_compras_transito.situacao_transito",
-              "nativeQueryRef": "situacao_transito"
+              "nativeQueryRef": "situacao_transito",
+              "active": true
             }
           ]
         }

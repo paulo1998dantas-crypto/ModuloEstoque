@@ -2,11 +2,11 @@
   "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/visualContainer/2.11.0/schema.json",
   "name": "b63945a43ccda793e83c",
   "position": {
-    "x": 772,
-    "y": 68,
+    "x": 771.78325123152706,
+    "y": 67.485021967780582,
     "z": 4,
-    "height": 80,
-    "width": 164,
+    "height": 69.939022766608971,
+    "width": 164.4180535215018,
     "tabOrder": 4
   },
   "visual": {
@@ -27,7 +27,8 @@
                 }
               },
               "queryRef": "fato_progresso_producao.setor",
-              "nativeQueryRef": "setor"
+              "nativeQueryRef": "setor",
+              "active": true
             }
           ]
         }

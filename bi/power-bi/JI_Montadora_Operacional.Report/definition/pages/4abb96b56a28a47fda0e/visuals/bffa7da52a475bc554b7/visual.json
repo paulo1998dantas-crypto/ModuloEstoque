@@ -2,11 +2,11 @@
   "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/visualContainer/2.11.0/schema.json",
   "name": "bffa7da52a475bc554b7",
   "position": {
-    "x": 420,
-    "y": 68,
+    "x": 419.63413659965386,
+    "y": 67.485021967780582,
     "z": 2,
-    "height": 80,
-    "width": 164,
+    "height": 69.939022766608971,
+    "width": 164.4180535215018,
     "tabOrder": 2
   },
   "visual": {
@@ -27,7 +27,8 @@
                 }
               },
               "queryRef": "dim_ordem_servico.categoria_servico",
-              "nativeQueryRef": "categoria_servico"
+              "nativeQueryRef": "categoria_servico",
+              "active": true
             }
           ]
         }

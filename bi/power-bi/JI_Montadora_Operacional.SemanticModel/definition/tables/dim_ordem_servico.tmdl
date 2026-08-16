@@ -17,7 +17,7 @@ table dim_ordem_servico
 	column item
 		dataType: int64
 		lineageTag: d4dfabcf-c91c-4e39-b2d3-006c1c923bf8
-		summarizeBy: none
+		summarizeBy: sum
 		sourceColumn: item
 
 		annotation SummarizationSetBy = Automatic
@@ -274,7 +274,7 @@ table dim_ordem_servico
 	column sequencia
 		dataType: int64
 		lineageTag: 42241aac-e241-4545-a2ab-fa517c9ab864
-		summarizeBy: none
+		summarizeBy: sum
 		sourceColumn: sequencia
 
 		annotation SummarizationSetBy = Automatic
@@ -282,7 +282,7 @@ table dim_ordem_servico
 	column prioridade_manual
 		dataType: int64
 		lineageTag: 463f6853-40df-44eb-b406-2253834a2fbb
-		summarizeBy: none
+		summarizeBy: sum
 		sourceColumn: prioridade_manual
 
 		annotation SummarizationSetBy = Automatic
@@ -326,7 +326,7 @@ table dim_ordem_servico
 	column etapas_total
 		dataType: int64
 		lineageTag: ef75926b-9abf-446f-9ea3-cc8e76ac5d8a
-		summarizeBy: none
+		summarizeBy: sum
 		sourceColumn: etapas_total
 
 		annotation SummarizationSetBy = Automatic
@@ -334,7 +334,7 @@ table dim_ordem_servico
 	column etapas_aplicaveis
 		dataType: int64
 		lineageTag: 2f34ad5f-710a-4a96-b172-e433849b2cb4
-		summarizeBy: none
+		summarizeBy: sum
 		sourceColumn: etapas_aplicaveis
 
 		annotation SummarizationSetBy = Automatic
@@ -342,7 +342,7 @@ table dim_ordem_servico
 	column etapas_concluidas
 		dataType: int64
 		lineageTag: 05f3326c-1bf1-4138-8518-6f08274e1a7b
-		summarizeBy: none
+		summarizeBy: sum
 		sourceColumn: etapas_concluidas
 
 		annotation SummarizationSetBy = Automatic
@@ -350,7 +350,7 @@ table dim_ordem_servico
 	column etapas_em_andamento
 		dataType: int64
 		lineageTag: 105e2ae5-de1d-4153-8bd8-68336e825cfc
-		summarizeBy: none
+		summarizeBy: sum
 		sourceColumn: etapas_em_andamento
 
 		annotation SummarizationSetBy = Automatic
@@ -358,7 +358,7 @@ table dim_ordem_servico
 	column etapas_pendentes
 		dataType: int64
 		lineageTag: adbe09de-81f9-479b-8b85-1f2c41b12593
-		summarizeBy: none
+		summarizeBy: sum
 		sourceColumn: etapas_pendentes
 
 		annotation SummarizationSetBy = Automatic
@@ -366,7 +366,7 @@ table dim_ordem_servico
 	column percentual_avanco
 		dataType: double
 		lineageTag: c40b6f9c-9221-4a71-9b12-9e6c820196f5
-		summarizeBy: none
+		summarizeBy: sum
 		sourceColumn: percentual_avanco
 
 		annotation SummarizationSetBy = Automatic
@@ -400,7 +400,7 @@ table dim_ordem_servico
 	column dias_no_wip
 		dataType: int64
 		lineageTag: ea5b8d69-92c4-47d1-8e61-4a615e212fe6
-		summarizeBy: none
+		summarizeBy: sum
 		sourceColumn: dias_no_wip
 
 		annotation SummarizationSetBy = Automatic
@@ -424,11 +424,20 @@ table dim_ordem_servico
 		summarizeBy: none
 		sourceColumn: data_inicio_producao
 
+		variation Variation
+			isDefault
+			relationship: 53898850-7621-457b-b58d-7d45e1c847c8
+			defaultHierarchy: LocalDateTable_37969252-39b0-40f6-83c3-b27701d945d7.'Hierarquia de datas'
+
+		annotation UnderlyingDateTimeDataType = Date
+
 	column prazo_producao_dias
 		dataType: int64
 		lineageTag: ce12eb2b-76e4-4ae4-a233-e8978985e4c0
-		summarizeBy: none
+		summarizeBy: sum
 		sourceColumn: prazo_producao_dias
+
+		annotation SummarizationSetBy = Automatic
 
 	column data_limite_producao
 		dataType: dateTime
@@ -436,6 +445,13 @@ table dim_ordem_servico
 		lineageTag: 4b32eb7d-9734-4d99-b162-d6baa7a252e8
 		summarizeBy: none
 		sourceColumn: data_limite_producao
+
+		variation Variation
+			isDefault
+			relationship: fa868545-3da7-432f-b892-104cd46823bb
+			defaultHierarchy: LocalDateTable_4282d8bc-f2ea-4fc5-8c81-08df69a08531.'Hierarquia de datas'
+
+		annotation UnderlyingDateTimeDataType = Date
 
 	column producao_atrasada
 		dataType: boolean
@@ -446,8 +462,10 @@ table dim_ordem_servico
 	column dias_atraso_producao
 		dataType: int64
 		lineageTag: 31b44600-9a4f-4c48-8057-7c90c6a6a42e
-		summarizeBy: none
+		summarizeBy: sum
 		sourceColumn: dias_atraso_producao
+
+		annotation SummarizationSetBy = Automatic
 
 	partition dim_ordem_servico = m
 		mode: import

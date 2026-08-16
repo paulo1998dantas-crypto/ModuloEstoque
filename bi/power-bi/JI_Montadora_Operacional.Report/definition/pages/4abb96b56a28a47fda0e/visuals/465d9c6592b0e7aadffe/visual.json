@@ -2,11 +2,11 @@
   "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/visualContainer/2.11.0/schema.json",
   "name": "465d9c6592b0e7aadffe",
   "position": {
-    "x": 596,
-    "y": 68,
+    "x": 596.32219411529752,
+    "y": 67.485021967780582,
     "z": 3,
-    "height": 80,
-    "width": 164,
+    "height": 69.939022766608971,
+    "width": 163.1910531220876,
     "tabOrder": 3
   },
   "visual": {
@@ -27,7 +27,8 @@
                 }
               },
               "queryRef": "dim_ordem_servico.linha_produto",
-              "nativeQueryRef": "linha_produto"
+              "nativeQueryRef": "linha_produto",
+              "active": true
             }
           ]
         }

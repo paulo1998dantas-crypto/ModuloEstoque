@@ -187,6 +187,32 @@
             "width": 234
           },
           "zIndex": 0
+        },
+        {
+          "location": {
+            "x": 2242.3627532727969,
+            "y": 62
+          },
+          "nodeIndex": "dim_mes_historico",
+          "nodeLineageTag": "5fe02d2d-6ff3-491c-9ddd-81c69a0f151e",
+          "size": {
+            "height": 176,
+            "width": 234
+          },
+          "zIndex": 0
+        },
+        {
+          "location": {
+            "x": 1840.0456517918919,
+            "y": 0
+          },
+          "nodeIndex": "fato_progresso_producao",
+          "nodeLineageTag": "fcf999e1-22ae-43a0-a5a5-d8caaf5e0d43",
+          "size": {
+            "height": 300,
+            "width": 234
+          },
+          "zIndex": 0
         }
       ],
       "name": "Todas as tabelas",

@@ -21,6 +21,8 @@ table fato_progresso_producao
 		summarizeBy: none
 		sourceColumn: data_evento
 
+		annotation UnderlyingDateTimeDataType = Date
+
 	column data_hora
 		dataType: dateTime
 		formatString: dd/MM/yyyy HH:mm
@@ -50,8 +52,10 @@ table fato_progresso_producao
 		dataType: int64
 		formatString: 0
 		lineageTag: 2f420aac-2b40-4640-a22e-27ca4cbd12de
-		summarizeBy: none
+		summarizeBy: sum
 		sourceColumn: ano
+
+		annotation SummarizationSetBy = Automatic
 
 	column ano_mes
 		dataType: string
@@ -65,6 +69,13 @@ table fato_progresso_producao
 		lineageTag: 7574656c-48a2-4aac-ac3f-3fc0c01bc1cc
 		summarizeBy: none
 		sourceColumn: semana_inicio
+
+		variation Variation
+			isDefault
+			relationship: 59e0ec13-8ebc-47e4-9ac7-13faacc63c6e
+			defaultHierarchy: LocalDateTable_95aa07e0-855d-423e-9f73-198de0cb049b.'Hierarquia de datas'
+
+		annotation UnderlyingDateTimeDataType = Date
 
 	column semana_ano
 		dataType: string
@@ -82,3 +93,4 @@ table fato_progresso_producao
 				    Dados
 
 	annotation PBI_ResultType = Table
+
