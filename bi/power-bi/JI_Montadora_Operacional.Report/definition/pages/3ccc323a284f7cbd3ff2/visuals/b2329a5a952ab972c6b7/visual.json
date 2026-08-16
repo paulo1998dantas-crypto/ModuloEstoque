@@ -4,10 +4,10 @@
   "position": {
     "x": 20,
     "y": 300,
-    "z": 8,
+    "z": 8000,
     "height": 188,
     "width": 600,
-    "tabOrder": 8
+    "tabOrder": 8000
   },
   "visual": {
     "visualType": "lineChart",
@@ -20,14 +20,14 @@
                 "Column": {
                   "Expression": {
                     "SourceRef": {
-                      "Entity": "dCalendario"
+                      "Entity": "dim_mes_historico"
                     }
                   },
-                  "Property": "AnoMes"
+                  "Property": "ano_mes"
                 }
               },
-              "queryRef": "dCalendario.AnoMes",
-              "nativeQueryRef": "AnoMes",
+              "queryRef": "dim_mes_historico.ano_mes",
+              "nativeQueryRef": "ano_mes",
               "active": true
             }
           ]
@@ -86,10 +86,10 @@
               "Column": {
                 "Expression": {
                   "SourceRef": {
-                    "Entity": "dCalendario"
+                  "Entity": "dim_mes_historico"
                   }
                 },
-                "Property": "AnoMes"
+                "Property": "ano_mes"
               }
             },
             "direction": "Ascending"

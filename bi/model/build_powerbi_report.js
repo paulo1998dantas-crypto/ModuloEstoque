@@ -367,7 +367,7 @@ function lineChart(pageKey, key, title, category, measures, x, y, width, height,
   };
 }
 
-function stackedColumnChart(pageKey, key, title, category, legend, measureName, x, y, width, height, tabOrder) {
+function stackedColumnChart(pageKey, key, title, category, legend, measureName, x, y, width, height, tabOrder, axisType = null) {
   const name = id(`${pageKey}:stacked:${key}`);
   return {
     name,
@@ -391,7 +391,11 @@ function stackedColumnChart(pageKey, key, title, category, legend, measureName, 
             : {}),
           labels: [{ properties: { show: literal('true'), optimizeLabelDisplay: literal('true') } }],
           legend: [{ properties: { show: literal('true'), position: stringLiteral('Top') } }],
-          categoryAxis: [{ properties: { labelColor: colorLiteral(COLORS.muted), titleText: stringLiteral('') } }],
+          categoryAxis: [{ properties: {
+            ...(axisType ? { axisType: stringLiteral(axisType) } : {}),
+            labelColor: colorLiteral(COLORS.muted),
+            titleText: stringLiteral(''),
+          } }],
           valueAxis: [{ properties: { start: literal('0D'), labelColor: colorLiteral(COLORS.muted), gridlineColor: colorLiteral('#E7EBF1'), gridlineStyle: stringLiteral('solid'), gridlineThickness: literal('1D') } }],
         },
         visualContainerObjects: containerObjects(title, { padding: 8 }),
@@ -677,14 +681,14 @@ function writePage(pageSpec, isDrill = false) {
     if (pageSpec.layout === 'history') {
       pageSpec.slicers.forEach((spec, index) => visuals.push(slicer(pageSpec.key, spec, 300 + index * 192, 2 + index, 188)));
       visuals.push(kpiStrip(pageSpec.key, pageSpec.measures, 156, 7));
-      visuals.push(lineChart(pageSpec.key, 'mensal', 'Finalizados, entregues e retirados por mês', col('dCalendario', 'AnoMes'), ['Carros Finalizados', 'Carros Entregues', 'Carros Retirados'], 20, 300, 600, 188, 8));
+      visuals.push(lineChart(pageSpec.key, 'mensal', 'Finalizados, entregues e retirados por mês', col('dim_mes_historico', 'ano_mes'), ['Carros Finalizados', 'Carros Entregues', 'Carros Retirados'], 20, 300, 600, 188, 8));
       visuals.push(barChart(pageSpec.key, 'mercado', 'Carros finalizados por mercado', col('fato_historico_conclusao', 'mercado'), 'Carros Finalizados', 632, 300, 300, 188, COLORS.green, 9));
       visuals.push(barChart(pageSpec.key, 'linha_tempo', 'Tempo médio por linha (dias)', col('fato_historico_conclusao', 'linha_produto'), 'Tempo Médio Produção (dias)', 944, 300, 316, 188, COLORS.blue, 10));
       visuals.push(table(pageSpec.key, 'history', pageSpec.table.title, pageSpec.table.columns, 20, 500, 1240, 204, 11, pageSpec.table.sort, pageSpec.table.filters || []));
     } else if (pageSpec.layout === 'production') {
       pageSpec.slicers.forEach((spec, index) => visuals.push(slicer(pageSpec.key, spec, 420 + index * 176, 2 + index, 164)));
       visuals.push(kpiStrip(pageSpec.key, pageSpec.measures, 92, 7));
-      visuals.push(stackedColumnChart(pageSpec.key, 'diario_setor', 'Conclusões diárias por processo', col('fato_progresso_producao', 'data_evento'), col('fato_progresso_producao', 'setor'), 'Etapas Concluídas', 20, 248, 1240, 218, 8));
+      visuals.push(stackedColumnChart(pageSpec.key, 'diario_setor', 'Conclusões diárias por processo', col('fato_progresso_producao', 'data_evento'), col('fato_progresso_producao', 'setor'), 'Etapas Concluídas', 20, 248, 1240, 218, 8, 'Categorical'));
       visuals.push(lineChart(pageSpec.key, 'finalizacao_entrega', 'O.S. finalizadas na fábrica × veículos entregues ao cliente — diário', col('fato_progresso_producao', 'data_evento'), ['O.S. Finalizadas na Fábrica', 'Veículos Entregues ao Cliente'], 20, 486, 400, 218, 9));
       visuals.push(stackedColumnChart(pageSpec.key, 'mensal_setor', 'Conclusões por processo — mensal', col('fato_progresso_producao', 'ano_mes'), col('fato_progresso_producao', 'setor'), 'Etapas Concluídas', 440, 486, 400, 218, 10));
       visuals.push(stackedColumnChart(pageSpec.key, 'anual_setor', 'Conclusões por processo — anual', col('fato_progresso_producao', 'ano'), col('fato_progresso_producao', 'setor'), 'Etapas Concluídas', 860, 486, 400, 218, 11));

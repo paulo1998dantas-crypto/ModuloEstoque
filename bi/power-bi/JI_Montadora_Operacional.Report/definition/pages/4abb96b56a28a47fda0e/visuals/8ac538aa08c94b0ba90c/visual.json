@@ -4,10 +4,10 @@
   "position": {
     "x": 20,
     "y": 248,
-    "z": 8,
+    "z": 7000,
     "height": 218,
     "width": 1240,
-    "tabOrder": 8
+    "tabOrder": 7000
   },
   "visual": {
     "visualType": "clusteredColumnChart",
@@ -133,6 +133,13 @@
       "categoryAxis": [
         {
           "properties": {
+            "axisType": {
+              "expr": {
+                "Literal": {
+                  "Value": "'Categorical'"
+                }
+              }
+            },
             "labelColor": {
               "solid": {
                 "color": {
@@ -869,5 +876,51 @@
       ]
     },
     "drillFilterOtherVisuals": true
+  },
+  "filterConfig": {
+    "filters": [
+      {
+        "name": "ff516bdad5b699268349",
+        "field": {
+          "Column": {
+            "Expression": {
+              "SourceRef": {
+                "Entity": "fato_progresso_producao"
+              }
+            },
+            "Property": "data_evento"
+          }
+        },
+        "type": "Categorical"
+      },
+      {
+        "name": "8e260a33535aa4daf7dd",
+        "field": {
+          "Column": {
+            "Expression": {
+              "SourceRef": {
+                "Entity": "fato_progresso_producao"
+              }
+            },
+            "Property": "setor"
+          }
+        },
+        "type": "Categorical"
+      },
+      {
+        "name": "38e5c198df651108c4e1",
+        "field": {
+          "Measure": {
+            "Expression": {
+              "SourceRef": {
+                "Entity": "fato_mrp"
+              }
+            },
+            "Property": "Etapas Concluídas"
+          }
+        },
+        "type": "Advanced"
+      }
+    ]
   }
 }
