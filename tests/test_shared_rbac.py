@@ -13,6 +13,7 @@ sys.path.insert(0, str(APP_DIR))
 
 from auth import (  # noqa: E402
     PERMISSION_DEFINITIONS,
+    ROLE_DEFINITIONS,
     ROLE_PERMISSION_MAP,
     can,
     effective_permissions,
@@ -103,6 +104,13 @@ class SharedRbacTest(unittest.TestCase):
         )
         self.assertTrue(can(self.user, "estoque.entry.create", self.db))
         self.assertTrue(can(self.user, "suprimentos.purchase.create", self.db))
+
+    def test_production_role_is_available_with_only_shop_floor_permissions(self):
+        self.assertEqual("Produção", ROLE_DEFINITIONS["PRODUCAO"])
+        self.assertEqual(
+            {"mes.dashboard.read", "mes.stage.write"},
+            ROLE_PERMISSION_MAP["PRODUCAO"],
+        )
 
     def test_commitment_reconciliation_permission_is_mapped_only_to_admin(self):
         permission = "estoque.commitment.reconcile_admin"

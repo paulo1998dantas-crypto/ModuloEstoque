@@ -46,6 +46,7 @@ ROLE_DEFINITIONS = {
     "FINANCEIRO": "Financeiro",
     "PCP": "PCP",
     "ENGENHARIA": "Engenharia",
+    "PRODUCAO": "Produção",
 }
 
 PERMISSION_DEFINITIONS = {
@@ -114,6 +115,10 @@ _MES_OPERATOR = {
     "mes.exports.read",
 }
 ROLE_PERMISSION_MAP = {
+    "PRODUCAO": {
+        "mes.dashboard.read",
+        "mes.stage.write",
+    },
     "OPERADOR": _STOCK_READ
     | {
         "estoque.entry.create",
