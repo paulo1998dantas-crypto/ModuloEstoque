@@ -35,10 +35,21 @@ def _days(start, end):
     return (end_date - start_date).days if start_date and end_date else None
 
 
-def _purchase_status(order_status, ordered_quantity, received_quantity):
+def _purchase_status(
+    order_status,
+    ordered_quantity,
+    received_quantity,
+    technical_status=None,
+):
     normalized_status = str(order_status or "").upper()
+    normalized_technical_status = str(technical_status or "").upper()
     if normalized_status == "CANCELADA":
         return "CANCELADA"
+    if (
+        normalized_technical_status == "CONCLUIDA"
+        or normalized_status in {"CONCLUIDA", "CONCLUIDO"}
+    ):
+        return "CONCLUÍDO"
     # Component-level inspections can make a commercial conjunto partially
     # received before its parent quantity is fully covered. The operational
     # order status is therefore the authoritative state for the report.
@@ -59,6 +70,7 @@ def _rows(db):
     purchases = [
         dict(row._mapping) for row in db.execute(text("""
             select o.numero_oc,o.categoria,o.status as order_status,
+                   o.technical_status,
                    o.fornecedor_nome,o.data_emissao,o.destino,o.frete,
                    o.data_necessidade,o.observacoes,
                    l.numero_linha,l.sku_codigo,l.descricao_original,l.cliente_id,
@@ -153,6 +165,7 @@ def build_purchase_inspection_report(db):
                 row.get("order_status"),
                 row.get("quantidade_pedido"),
                 row.get("quantidade_recebida"),
+                row.get("technical_status"),
             ),
             row.get("categoria") or "GERAL",
             _as_date(row.get("data_emissao")),
