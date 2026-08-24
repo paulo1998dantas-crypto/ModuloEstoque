@@ -2,6 +2,7 @@ import hmac
 import json
 import logging
 import os
+import re
 import sys
 from datetime import datetime
 from functools import wraps
@@ -21,7 +22,7 @@ from flask import (
     session,
     url_for,
 )
-from sqlalchemy import func, or_
+from sqlalchemy import func, or_, text
 from werkzeug.exceptions import NotFound
 
 from auth import (
@@ -1568,13 +1569,35 @@ def api_label_zpl():
         return jsonify({"ok": False, "error": str(exc)}), 400
 
 
+def movement_filter_redirect_args(source, default_type=""):
+    values = {
+        "tipo": str(source.get("tipo", default_type) or default_type).strip(),
+        "movement_id": str(source.get("movement_id", "") or "").strip(),
+        "sku": str(source.get("sku", "") or "").strip(),
+        "vinculo": str(source.get("vinculo", "") or "").strip(),
+        "status": str(source.get("status", "") or "").strip(),
+    }
+    return {key: value for key, value in values.items() if value}
+
+
 @app.route("/movimentacoes")
 @login_required
 @permission_required("estoque.movement.view")
 def movements():
     database = db()
     user = current_user()
-    tipo = request.args.get("tipo", "")
+    tipo = str(request.args.get("tipo", "") or "").strip().upper()
+    movement_id_filter = str(request.args.get("movement_id", "") or "").strip()
+    sku_filter = str(request.args.get("sku", "") or "").strip()
+    link_filter = str(request.args.get("vinculo", "") or "").strip()
+    status_filter = str(request.args.get("status", "") or "").strip().upper()
+    movement_filters = {
+        "tipo": tipo,
+        "movement_id": movement_id_filter,
+        "sku": sku_filter,
+        "vinculo": link_filter,
+        "status": status_filter,
+    }
     query = database.query(Movement)
     if not can(user, "estoque.movement.cancel_any"):
         query = query.filter(Movement.tipo.in_(["ENTRADA", "EMPENHO", "BAIXA", "SAIDA"]))
@@ -1583,6 +1606,71 @@ def movements():
             query = query.filter(Movement.tipo.in_(["EMPENHO", "SAIDA"]))
         else:
             query = query.filter(Movement.tipo == tipo)
+
+    if movement_id_filter:
+        movement_ids = {
+            int(value)
+            for value in re.findall(r"\d+", movement_id_filter)
+        }
+        query = query.filter(
+            Movement.id.in_(movement_ids) if movement_ids else Movement.id == -1
+        )
+
+    if sku_filter:
+        normalized_sku = sku_filter.upper()
+        query = query.join(Movement.sku).filter(
+            or_(
+                func.upper(SKU.sku).contains(normalized_sku, autoescape=True),
+                func.upper(SKU.descricao).contains(normalized_sku, autoescape=True),
+            )
+        )
+
+    if status_filter:
+        if status_filter == "ATIVA":
+            query = query.filter(
+                or_(Movement.movement_status == "ATIVA", Movement.movement_status.is_(None))
+            )
+        else:
+            query = query.filter(Movement.movement_status == status_filter)
+
+    if link_filter:
+        normalized_link = link_filter.upper()
+        work_order_ids = [
+            str(value)
+            for value in database.execute(
+                text(
+                    """
+                    select w.id
+                      from erp_work_orders w
+                      join erp_vehicle_entries e on e.id=w.vehicle_entry_id
+                      join erp_vehicles v on v.id=e.vehicle_id
+                     where upper(coalesce(w.numero_os,'')) like :pattern
+                        or upper(cast(e.item_number as text)) like :pattern
+                        or upper(coalesce(v.chassi,'')) like :pattern
+                    """
+                ),
+                {"pattern": f"%{normalized_link}%"},
+            ).scalars()
+        ]
+        link_clauses = [
+            func.upper(func.coalesce(Movement.setor, "")).contains(
+                normalized_link,
+                autoescape=True,
+            ),
+            func.upper(func.coalesce(Movement.reference_text, "")).contains(
+                normalized_link,
+                autoescape=True,
+            ),
+            func.upper(func.coalesce(Movement.documento, "")).contains(
+                normalized_link,
+                autoescape=True,
+            ),
+        ]
+        if work_order_ids:
+            link_clauses.append(Movement.work_order_id.in_(work_order_ids))
+        query = query.filter(or_(*link_clauses))
+
+    result_count = query.order_by(None).count()
     rows = query.order_by(Movement.created_at.desc()).limit(500).all()
     operation_ids = {
         str(movement.operation_id)
@@ -1639,6 +1727,8 @@ def movements():
         "movements.html",
         movements=rows,
         tipo=tipo,
+        movement_filters=movement_filters,
+        result_count=result_count,
         can_export=user_can_export(database, user),
         can_cancel_any=can(user, "estoque.movement.cancel_any"),
         can_cancel_own=can(user, "estoque.movement.cancel_own"),
@@ -1676,7 +1766,7 @@ def consume_commitment_route(movement_id):
     except Exception as exc:
         database.rollback()
         flash(f"Falha ao baixar empenho: {exc}", "danger")
-    return redirect(url_for("movements", tipo=request.form.get("tipo", "EMPENHO")))
+    return redirect(url_for("movements", **movement_filter_redirect_args(request.form, "EMPENHO")))
 
 
 @app.route("/movimentacoes/<int:movement_id>/cancelar", methods=["POST"])
@@ -1688,7 +1778,7 @@ def cancel_movement_route(movement_id):
     allow_any = can(user, "estoque.movement.cancel_any")
     if not allow_any and not can(user, "estoque.movement.cancel_own"):
         flash("Seu perfil nao pode cancelar movimentacoes.", "danger")
-        return redirect(url_for("movements", tipo=request.form.get("tipo", "")))
+        return redirect(url_for("movements", **movement_filter_redirect_args(request.form)))
     movement = database.get(Movement, movement_id)
     try:
         canceled, reversal, replayed = cancel_movement(
@@ -1728,7 +1818,7 @@ def cancel_movement_route(movement_id):
     except Exception as exc:
         database.rollback()
         flash(f"Falha ao cancelar movimentacao: {exc}", "danger")
-    return redirect(url_for("movements", tipo=request.form.get("tipo", "")))
+    return redirect(url_for("movements", **movement_filter_redirect_args(request.form)))
 
 
 @app.route("/movimentacoes/<int:movement_id>/excluir", methods=["POST"])
