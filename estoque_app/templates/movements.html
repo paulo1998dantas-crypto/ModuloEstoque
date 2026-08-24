@@ -1,6 +1,11 @@
 {% extends "base.html" %}
 {% block title %}Movimentacoes - Estoque{% endblock %}
 {% block content %}
+{% macro preserve_movement_filters() -%}
+    {% for name, value in movement_filters.items() %}
+        {% if value %}<input type="hidden" name="{{ name }}" value="{{ value }}">{% endif %}
+    {% endfor %}
+{%- endmacro %}
 <section class="page-head">
     <div>
         <h1>Movimentacoes</h1>
@@ -11,7 +16,23 @@
     {% endif %}
 </section>
 
-<form class="filter-bar" method="get">
+<form class="filter-bar multi" method="get">
+    <input
+        name="movement_id"
+        value="{{ movement_filters.movement_id }}"
+        placeholder="ID: 3061, 3062"
+        aria-label="IDs das movimentações"
+        title="Aceita um ou vários IDs separados por vírgula ou espaço">
+    <input
+        name="sku"
+        value="{{ movement_filters.sku }}"
+        placeholder="Código ou descrição"
+        aria-label="Código ou descrição do produto">
+    <input
+        name="vinculo"
+        value="{{ movement_filters.vinculo }}"
+        placeholder="O.S., ITEM, chassi, setor ou referência"
+        aria-label="Vínculo do empenho">
     <select name="tipo">
         <option value="" {% if not tipo %}selected{% endif %}>Todos os tipos</option>
         <option value="ENTRADA" {% if tipo == 'ENTRADA' %}selected{% endif %}>Entrada</option>
@@ -22,10 +43,20 @@
         <option value="AJUSTE" {% if tipo == 'AJUSTE' %}selected{% endif %}>Ajuste</option>
         {% endif %}
     </select>
+    <select name="status" aria-label="Status da movimentação">
+        <option value="" {% if not movement_filters.status %}selected{% endif %}>Todos os status</option>
+        <option value="ATIVA" {% if movement_filters.status == 'ATIVA' %}selected{% endif %}>Ativa</option>
+        <option value="CANCELADA" {% if movement_filters.status == 'CANCELADA' %}selected{% endif %}>Cancelada</option>
+    </select>
     <button class="btn" type="submit">Filtrar</button>
+    <a class="btn secondary" href="{{ url_for('movements') }}">Limpar</a>
 </form>
 
 <section class="panel">
+    <div class="panel-head">
+        <strong>{{ result_count }} movimentação(ões) encontrada(s)</strong>
+        {% if result_count > 500 %}<span class="muted">Exibindo as 500 mais recentes.</span>{% endif %}
+    </div>
     <div class="table-wrap">
         <table>
             <thead>
@@ -93,7 +124,7 @@
                                 data-commitment-date="{{ mv.created_at|dt }}"
                                 data-commitment-context="{{ mv.work_order_label or mv.setor or mv.reference_text or 'Legado sem vínculo' }}"
                                 data-idempotency-key="{{ mv.consumption_idempotency_key }}">
-                                <input type="hidden" name="tipo" value="{{ tipo or 'EMPENHO' }}">
+                                {{ preserve_movement_filters() }}
                                 <input type="hidden" name="idempotency_key" value="{{ mv.consumption_idempotency_key }}">
                                 <input name="quantidade" inputmode="decimal" placeholder="{{ mv.pending_commitment|qty }}">
                                 <button class="btn small" type="submit">Baixar</button>
@@ -105,7 +136,7 @@
                         {% set is_cancellation_movement = mv.source_type == 'MOVEMENT_CANCELLATION' %}
                         {% if (mv.movement_status or 'ATIVA') == 'ATIVA' and not is_receipt_movement and not mv.operation_id and not is_cancellation_movement and (can_cancel_any or (can_cancel_own and mv.usuario_id == current_user.id)) %}
                             <form method="post" action="{{ url_for('cancel_movement_route', movement_id=mv.id) }}" class="form-grid">
-                                <input type="hidden" name="tipo" value="{{ tipo }}">
+                                {{ preserve_movement_filters() }}
                                 <input name="reason" placeholder="Motivo obrigatório" required>
                                 <button class="btn small danger" type="submit">
                                     {{ 'Excluir (estorno)' if can_cancel_any else 'Cancelar' }}
@@ -113,7 +144,7 @@
                             </form>
                         {% elif (mv.movement_status or 'ATIVA') == 'ATIVA' and is_composite_parent and (can_cancel_any or (can_cancel_own and mv.usuario_id == current_user.id)) %}
                             <form method="post" action="{{ url_for('cancel_movement_route', movement_id=mv.id) }}" class="form-grid" data-cancel-composite-operation>
-                                <input type="hidden" name="tipo" value="{{ tipo }}">
+                                {{ preserve_movement_filters() }}
                                 <input name="reason" placeholder="Motivo do estorno integral" required>
                                 <button class="btn small danger" type="submit">
                                     Cancelar conjunto ({{ mv.operation_size }})
@@ -122,7 +153,7 @@
                             </form>
                         {% elif (mv.movement_status or 'ATIVA') == 'ATIVA' and is_receipt_movement and can_cancel_any %}
                             <form method="post" action="{{ url_for('cancel_movement_route', movement_id=mv.id) }}" class="form-grid">
-                                <input type="hidden" name="tipo" value="{{ tipo }}">
+                                {{ preserve_movement_filters() }}
                                 <input name="reason" placeholder="Motivo obrigatório" required>
                                 <button
                                     class="btn small danger"
@@ -170,7 +201,7 @@
             <span>Observacao</span><strong data-modal-commitment-note></strong>
         </div>
         <form method="post" data-commitment-modal-form class="form-grid">
-            <input type="hidden" name="tipo" data-modal-commitment-type>
+            {{ preserve_movement_filters() }}
             <input type="hidden" name="idempotency_key" data-modal-idempotency-key>
             <label>Quantidade para baixa
                 <input name="quantidade" inputmode="decimal" data-modal-commitment-qty>
