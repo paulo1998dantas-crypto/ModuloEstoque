@@ -1118,7 +1118,12 @@ def work_order_materials(db, work_order_id):
                  where m.work_order_id=:id
                     and coalesce(m.movement_status,'ATIVA')='ATIVA'
                     and m.tipo in ('EMPENHO','SAIDA','BAIXA')
-                  group by m.sku_id,s.sku,s.descricao,s.unidade
+                    and not exists (
+                        select 1
+                          from bom_components phantom_bom
+                         where phantom_bom.item_sku_id=m.sku_id
+                    )
+                 group by m.sku_id,s.sku,s.descricao,s.unidade
                  order by s.sku
                 """
             ).bindparams(bindparam("id", type_=Uuid(as_uuid=False))),

@@ -127,6 +127,123 @@ def _explode_coverage(code, quantity, children):
     return result
 
 
+def _explode_leaf_requirements(code, quantity, children):
+    """Explode a BOM for demand purposes, returning only material leaves.
+
+    A set/PP with a BOM is a phantom item in the O.S. material view.  It is
+    useful as coverage (an empenho of the parent can cover its children), but
+    it is not itself a material to pick, ship or debit at technical close.
+    """
+    result = defaultdict(lambda: Decimal("0"))
+
+    def visit(current_code, current_quantity, ancestry):
+        normalized = _normalize_code(current_code)
+        current_quantity = _decimal(current_quantity)
+        if not normalized or current_quantity <= 0:
+            return
+        if normalized in ancestry:
+            # Keep a corrupt/cyclic node visible as a leaf instead of looping
+            # forever.  The existing coverage calculation remains unchanged.
+            result[normalized] += current_quantity
+            return
+        components = children.get(normalized) or []
+        if not components:
+            result[normalized] += current_quantity
+            return
+        next_ancestry = set(ancestry)
+        next_ancestry.add(normalized)
+        for child_code, base_quantity in components:
+            if base_quantity > 0:
+                visit(child_code, current_quantity * base_quantity, next_ancestry)
+
+    visit(code, quantity, set())
+    return result
+
+
+def _normalize_phantom_requirements(lines, children):
+    """Normalize an O.S. composition to leaf demand without double counting.
+
+    The O.S. document can contain both a parent and its already-expanded
+    children.  In that case the children are a rendering/detail of the parent,
+    not additional demand, so descendants of a BOM source line are ignored.
+    Independent leaf lines (not descendants of a BOM line in this document)
+    remain as ordinary demand.
+    """
+    raw = []
+    for line in lines:
+        if not isinstance(line, dict):
+            continue
+        normalized = _normalize_code(line.get("codigo"))
+        amount = _decimal(line.get("qtd", line.get("quantidade")))
+        if normalized and amount > 0:
+            raw.append((normalized, amount, line))
+
+    bom_sources = {code for code, _, _ in raw if children.get(code)}
+    # When the document contains a kit, its rendered child PP may also be
+    # present as a row.  Expand only the highest BOM source; nested sources
+    # are already included in that expansion.
+    root_sources = set(bom_sources)
+    for source in bom_sources:
+        for other in bom_sources - {source}:
+            if source in _explode_coverage(other, Decimal("1"), children):
+                root_sources.discard(source)
+                break
+    rendered_descendants = set()
+    for source in root_sources:
+        rendered_descendants.update(_explode_coverage(source, Decimal("1"), children))
+
+    required = defaultdict(lambda: Decimal("0"))
+    metadata = {}
+
+    def ensure_meta(target):
+        return metadata.setdefault(
+            target,
+            {
+                "descricao": "",
+                "unidade": "",
+                "setores": set(),
+                "levels": set(),
+                "parent_codes": set(),
+            },
+        )
+
+    def merge_line(target, line, source=None, copy_values=True):
+        current = ensure_meta(target)
+        descricao = str(line.get("descricao") or "").strip()
+        unidade = str(line.get("unidade") or "").strip()
+        if copy_values and descricao and not current["descricao"]:
+            current["descricao"] = descricao
+        if copy_values and unidade and not current["unidade"]:
+            current["unidade"] = unidade
+        if line.get("setor"):
+            current["setores"].add(str(line["setor"]).strip())
+        try:
+            current["levels"].add(int(line.get("level", 0) or 0))
+        except (TypeError, ValueError):
+            current["levels"].add(0)
+        if line.get("item"):
+            current["parent_codes"].add(_normalize_code(line["item"]))
+        if source:
+            current["parent_codes"].add(source)
+
+    for normalized, amount, line in raw:
+        if normalized in root_sources:
+            for leaf, factor in _explode_leaf_requirements(normalized, Decimal("1"), children).items():
+                required[leaf] += amount * factor
+                merge_line(leaf, line, normalized, copy_values=False)
+            continue
+        if normalized in rendered_descendants:
+            # This is a child/leaf already rendered by a BOM source above.
+            # Preserve useful metadata when it is itself a leaf; otherwise it
+            # has no independent row to display.
+            if not children.get(normalized):
+                merge_line(normalized, line)
+            continue
+        required[normalized] += amount
+        merge_line(normalized, line)
+    return required, metadata
+
+
 def _shared_commitment_candidates(db, children, needed_codes):
     """Return active, unallocated commitments that can cover each needed SKU.
 
@@ -179,6 +296,11 @@ def _shared_commitment_candidates(db, children, needed_codes):
         if pending <= 0 or not movement.sku:
             continue
         source_code = _normalize_code(movement.sku.sku)
+        # A parent with a BOM is a phantom item.  Its stock/empenho is not a
+        # standalone candidate for expedição or technical close; only leaf
+        # components may be allocated from the shared pool.
+        if children.get(source_code):
+            continue
         coverage_per_unit = _explode_coverage(source_code, Decimal("1"), children)
         for needed_code in needed_codes.intersection(coverage_per_unit):
             factor = coverage_per_unit[needed_code]
@@ -248,32 +370,10 @@ def calculate_work_order_needs(db, work_order_id=None, pending_only=False):
 
     all_lines = []
     for document in documents:
-        required = defaultdict(lambda: Decimal("0"))
-        metadata = {}
-        for line in _json_list(document.get("composicao")):
-            code = _normalize_code(line.get("codigo"))
-            quantity = _decimal(line.get("qtd", line.get("quantidade")))
-            if not code or quantity <= 0:
-                continue
-            required[code] += quantity
-            current = metadata.setdefault(
-                code,
-                {
-                    "descricao": str(line.get("descricao") or "").strip(),
-                    "unidade": str(line.get("unidade") or "").strip(),
-                    "setores": set(),
-                    "levels": set(),
-                    "parent_codes": set(),
-                },
-            )
-            if line.get("setor"):
-                current["setores"].add(str(line["setor"]).strip())
-            try:
-                current["levels"].add(int(line.get("level", 0) or 0))
-            except (TypeError, ValueError):
-                current["levels"].add(0)
-            if line.get("item"):
-                current["parent_codes"].add(_normalize_code(line["item"]))
+        required, metadata = _normalize_phantom_requirements(
+            _json_list(document.get("composicao")),
+            children,
+        )
 
         remaining_coverage = dict(coverage[_uuid_key(document["work_order_id"])])
         for code in sorted(required):

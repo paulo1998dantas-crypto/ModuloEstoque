@@ -19,6 +19,7 @@ from services.estoque_service import (  # noqa: E402
     register_consumption_from_commitment,
     register_movement,
 )
+from services.erp_service import work_order_materials  # noqa: E402
 from services.work_order_needs_service import calculate_work_order_needs  # noqa: E402
 
 
@@ -95,11 +96,10 @@ class WorkOrderNeedsTest(unittest.TestCase):
         result = calculate_work_order_needs(self.db, self.work_order_id)
         rows = self._by_code(result)
 
-        self.assertEqual(Decimal("0"), rows["CJ-001"]["quantidade_pendente"])
-        self.assertEqual(Decimal("0"), rows["PP-001"]["quantidade_pendente"])
         self.assertEqual(Decimal("0"), rows["MP-001"]["quantidade_pendente"])
-        self.assertEqual(3, result["summary"]["covered_items"])
-        self.assertEqual("2026-08-15", rows["CJ-001"]["data_entrega_os"])
+        self.assertEqual(["MP-001"], sorted(rows))
+        self.assertEqual(1, result["summary"]["covered_items"])
+        self.assertEqual("2026-08-15", rows["MP-001"]["data_entrega_os"])
 
     def test_related_consumption_is_not_counted_twice_and_direct_baixa_covers_need(self):
         commitment = register_movement(
@@ -124,25 +124,17 @@ class WorkOrderNeedsTest(unittest.TestCase):
         result = calculate_work_order_needs(self.db, self.work_order_id)
         rows = self._by_code(result)
 
-        self.assertEqual(Decimal("0.5"), rows["CJ-001"]["quantidade_pendente"])
-        self.assertEqual(Decimal("1.0"), rows["PP-001"]["quantidade_pendente"])
         self.assertEqual(Decimal("1.0"), rows["MP-001"]["quantidade_pendente"])
 
     def test_shared_pool_is_visible_but_only_covers_need_after_admin_allocation(self):
         shared = register_movement(
-            self.db,
-            self.parent,
-            "EMPENHO",
-            1,
-            self.user.id,
-            setor="PRODUCAO",
+            self.db, self.leaf, "EMPENHO", 2, self.user.id, setor="PRODUCAO"
         )
         before = calculate_work_order_needs(self.db, self.work_order_id)
         before_rows = self._by_code(before)
 
-        self.assertEqual(Decimal("1"), before_rows["CJ-001"]["quantidade_pendente"])
-        self.assertEqual(Decimal("1"), before_rows["CJ-001"]["saldo_fluxo_compartilhado"])
-        self.assertEqual(Decimal("6"), before_rows["MP-001"]["saldo_fluxo_compartilhado"])
+        self.assertEqual(Decimal("6"), before_rows["MP-001"]["quantidade_pendente"])
+        self.assertEqual(Decimal("2"), before_rows["MP-001"]["saldo_fluxo_compartilhado"])
         self.assertEqual(shared.id, before_rows["MP-001"]["empenhos_compartilhados"][0]["movement_id"])
 
         baixa = allocate_shared_commitment_to_work_order(
@@ -162,10 +154,8 @@ class WorkOrderNeedsTest(unittest.TestCase):
 
         after = calculate_work_order_needs(self.db, self.work_order_id)
         after_rows = self._by_code(after)
-        self.assertEqual(Decimal("0.5"), after_rows["CJ-001"]["quantidade_pendente"])
-        self.assertEqual(Decimal("1.0"), after_rows["PP-001"]["quantidade_pendente"])
-        self.assertEqual(Decimal("3.0"), after_rows["MP-001"]["quantidade_pendente"])
-        self.assertEqual(Decimal("0.5"), after_rows["CJ-001"]["saldo_fluxo_compartilhado"])
+        self.assertEqual(Decimal("5.5"), after_rows["MP-001"]["quantidade_pendente"])
+        self.assertEqual(Decimal("1.5"), after_rows["MP-001"]["saldo_fluxo_compartilhado"])
 
     def test_shared_allocation_is_idempotent_and_rejects_linked_parent(self):
         shared = register_movement(
@@ -214,6 +204,32 @@ class WorkOrderNeedsTest(unittest.TestCase):
                 self.work_order_id,
                 "Nao permitido.",
             )
+
+        phantom_shared = register_movement(
+            self.db, self.parent, "EMPENHO", 1, self.user.id, setor="PRODUCAO"
+        )
+        with self.assertRaisesRegex(ValueError, "item fantasma"):
+            allocate_shared_commitment_to_work_order(
+                self.db,
+                phantom_shared,
+                1,
+                self.user.id,
+                self.work_order_id,
+                "Nao permitido.",
+            )
+
+    def test_materials_view_hides_bom_parent_commitment(self):
+        register_movement(
+            self.db,
+            self.parent,
+            "EMPENHO",
+            1,
+            self.user.id,
+            work_order_id=self.work_order_id,
+        )
+        result = work_order_materials(self.db, self.work_order_id)
+        self.assertEqual([], result["lines"])
+        self.assertEqual([], result["pending_lines"])
 
     def test_technically_closed_work_order_is_excluded(self):
         self.db.execute(

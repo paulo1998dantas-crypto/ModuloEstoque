@@ -905,6 +905,10 @@ def allocate_shared_commitment_to_work_order(
         raise ValueError("Empenho compartilhado nao encontrado.")
     if commitment.work_order_id:
         raise ValueError("O empenho ja esta vinculado a uma O.S. e nao pertence ao fluxo compartilhado.")
+    if bom_components_for_sku(db, commitment.sku):
+        raise ValueError(
+            "O conjunto/PP possui B.O.M. e e item fantasma: aproprie somente os componentes."
+        )
     return register_consumption_from_commitment(
         db,
         commitment,
