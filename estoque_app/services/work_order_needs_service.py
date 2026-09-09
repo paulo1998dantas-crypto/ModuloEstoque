@@ -58,11 +58,34 @@ def _schema_ready(db):
 def _work_order_documents(db, work_order_id=None):
     if not _schema_ready(db):
         return []
+    bind = db.get_bind()
+    schema = None if bind.dialect.name == "sqlite" else "public"
+    has_sequences = inspect(bind).has_table("erp_work_order_sequences", schema=schema)
+    if has_sequences:
+        delivery_date_sql = """
+                   coalesce(
+                       (
+                           select s.data_entrega_vigente
+                             from erp_work_order_sequences s
+                            where s.work_order_id=w.id
+                              and s.ativo = true
+                            order by
+                              case when s.data_entrega_vigente is null then 1 else 0 end,
+                              s.updated_at desc nulls last,
+                              s.sequencia desc nulls last
+                            limit 1
+                       ),
+                       w.data_comercial_prevista
+                   ) as data_entrega_vigente,
+        """
+    else:
+        # Compatibilidade com instalações anteriores à tabela de sequenciamento.
+        delivery_date_sql = "w.data_comercial_prevista as data_entrega_vigente,"
     rows = db.execute(
         text(
-            """
+            f"""
             select w.id as work_order_id,w.numero_os,w.status,w.technical_status,
-                   w.data_comercial_prevista,
+                   {delivery_date_sql}
                    w.cliente_nome,e.item_number,v.chassi,
                    d.id as document_id,d.numero as document_number,d.status as document_status,
                    d.composicao,d.updated_at as document_updated_at,
@@ -388,7 +411,7 @@ def calculate_work_order_needs(db, work_order_id=None, pending_only=False):
                 "item_number": document.get("item_number"),
                 "chassi": document.get("chassi") or "",
                 "cliente_nome": document.get("cliente_nome") or "",
-                "data_entrega_os": document.get("data_comercial_prevista"),
+                "data_entrega_os": document.get("data_entrega_vigente"),
                 "document_id": document.get("document_id"),
                 "codigo": code,
                 "descricao": meta["descricao"] or (sku.descricao if sku else ""),

@@ -27,6 +27,7 @@ ERP_SCHEMA = (
     "create table erp_vehicles (id text primary key,chassi text not null,marca text,modelo text,versao text)",
     "create table erp_vehicle_entries (id text primary key,vehicle_id text not null,item_number integer not null)",
     "create table erp_work_orders (id text primary key,vehicle_entry_id text not null,numero_os text not null,cliente_nome text,status text not null,technical_status text default 'ABERTA',data_comercial_prevista text)",
+    "create table erp_work_order_sequences (work_order_id text primary key,profile_id text,data_entrega_vigente text,semana_planejada text,sequencia integer,prioridade_manual integer,ativo boolean,updated_by text,updated_at text)",
     "create table suprimentos_documentos (id integer primary key,tipo text,erp_work_order_id text,numero text,status text,composicao text,updated_at text)",
 )
 
@@ -73,6 +74,10 @@ class WorkOrderNeedsTest(unittest.TestCase):
                 {"id": self.work_order_id, "entry_id": entry_id},
             )
             connection.execute(text("insert into suprimentos_documentos values (1,'os',:work_id,'3100','emitido',:composition,'2026-08-03')"), {"work_id": self.work_order_id, "composition": composition})
+            connection.execute(
+                text("insert into erp_work_order_sequences(work_order_id,data_entrega_vigente,sequencia,ativo,updated_at) values (:work_id,'2026-09-22',1,1,'2026-08-20')"),
+                {"work_id": self.work_order_id},
+            )
         self.db.commit()
         register_movement(self.db, self.parent, "ENTRADA", 10, self.user.id)
         register_movement(self.db, self.leaf, "ENTRADA", 10, self.user.id)
@@ -99,7 +104,7 @@ class WorkOrderNeedsTest(unittest.TestCase):
         self.assertEqual(Decimal("0"), rows["MP-001"]["quantidade_pendente"])
         self.assertEqual(["MP-001"], sorted(rows))
         self.assertEqual(1, result["summary"]["covered_items"])
-        self.assertEqual("2026-08-15", rows["MP-001"]["data_entrega_os"])
+        self.assertEqual("2026-09-22", rows["MP-001"]["data_entrega_os"])
 
     def test_related_consumption_is_not_counted_twice_and_direct_baixa_covers_need(self):
         commitment = register_movement(
