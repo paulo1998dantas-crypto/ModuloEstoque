@@ -25,6 +25,7 @@ from services.estoque_service import (  # noqa: E402
     cancel_movement,
     pending_commitment_for_movement,
     register_entry_with_backflush,
+    register_commitment_for_work_orders,
     register_consumption_from_commitment,
     register_movement,
 )
@@ -116,6 +117,31 @@ class MovementContextAndCancellationTest(unittest.TestCase):
                 ") values(:id,:entry,'3113','Cliente teste','ATIVA','ABERTA')"
             ),
             {"id": self.work_order_id, "entry": entry_id},
+        )
+        self.second_work_order_id = uuid4().hex
+        second_vehicle_id = str(uuid4())
+        second_entry_id = str(uuid4())
+        self.db.execute(
+            text(
+                "insert into erp_vehicles(id,chassi,marca,modelo,versao) "
+                "values(:id,'9BMTESTECHASSI456','Mercedes-Benz','Sprinter','417')"
+            ),
+            {"id": second_vehicle_id},
+        )
+        self.db.execute(
+            text(
+                "insert into erp_vehicle_entries(id,vehicle_id,item_number) "
+                "values(:id,:vehicle,3114)"
+            ),
+            {"id": second_entry_id, "vehicle": second_vehicle_id},
+        )
+        self.db.execute(
+            text(
+                "insert into erp_work_orders("
+                "id,vehicle_entry_id,numero_os,cliente_nome,status,technical_status"
+                ") values(:id,:entry,'3114','Cliente teste 2','ATIVA','ABERTA')"
+            ),
+            {"id": self.second_work_order_id, "entry": second_entry_id},
         )
         self.db.commit()
 
@@ -451,6 +477,73 @@ class MovementContextAndCancellationTest(unittest.TestCase):
             str(consumption.work_order_id).replace("-", ""),
         )
         self.assertEqual(commitment.id, consumption.related_movement_id)
+
+    def test_multiple_work_order_commitment_distributes_total_and_replays(self):
+        register_movement(self.db, self.sku, "ENTRADA", 10, self.user.id)
+        key = "stock-commitment:multiple-work-orders"
+        movements = register_commitment_for_work_orders(
+            self.db,
+            self.sku,
+            4,
+            self.user.id,
+            [self.second_work_order_id, self.work_order_id],
+            observacao="Lote de teste",
+            link_updated_by=self.user.id,
+            require_context=True,
+            idempotency_key=key,
+        )
+
+        self.assertEqual(2, len(movements))
+        self.assertEqual({"2.000"}, {str(row.quantidade) for row in movements})
+        self.assertEqual(1, len({row.operation_id for row in movements}))
+        parent = next(row for row in movements if row.parent_movement_id is None)
+        child = next(row for row in movements if row.parent_movement_id is not None)
+        self.assertEqual(parent.id, child.parent_movement_id)
+        self.assertEqual(
+            {self.work_order_id, self.second_work_order_id},
+            {str(row.work_order_id).replace("-", "") for row in movements},
+        )
+
+        before_count = self.db.query(Movement).count()
+        replayed = register_commitment_for_work_orders(
+            self.db,
+            self.sku,
+            4,
+            self.user.id,
+            [self.work_order_id, self.second_work_order_id],
+            observacao="Lote de teste",
+            link_updated_by=self.user.id,
+            require_context=True,
+            idempotency_key=key,
+        )
+        self.assertEqual({row.id for row in movements}, {row.id for row in replayed})
+        self.assertEqual(before_count, self.db.query(Movement).count())
+
+        canceled, _, replayed_cancel = cancel_movement(
+            self.db,
+            parent,
+            self.user.id,
+            "Estorno do empenho multiplo.",
+        )
+        self.assertFalse(replayed_cancel)
+        self.assertEqual("CANCELADA", canceled.movement_status)
+        self.assertEqual("CANCELADA", self.db.get(Movement, child.id).movement_status)
+
+    def test_multiple_work_order_commitment_rolls_back_all_movements_on_failure(self):
+        register_movement(self.db, self.sku, "ENTRADA", 10, self.user.id)
+        before_count = self.db.query(Movement).count()
+        with self.assertRaisesRegex(ValueError, "O.S. nao encontrada"):
+            register_commitment_for_work_orders(
+                self.db,
+                self.sku,
+                4,
+                self.user.id,
+                [self.work_order_id, str(uuid4())],
+                require_context=True,
+                idempotency_key="stock-commitment:rollback-test",
+            )
+        self.db.rollback()
+        self.assertEqual(before_count, self.db.query(Movement).count())
 
     def test_consumption_command_is_idempotent(self):
         register_movement(

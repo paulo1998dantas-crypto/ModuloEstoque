@@ -22,7 +22,7 @@ services:
       - key: ERP_PO_SUGGESTION_ENABLED
         value: "false"
       - key: ERP_MOVEMENT_CONTEXT_ENABLED
-        value: "false"
+        value: "true"
       - key: ERP_SHARED_RBAC_ENABLED
         value: "false"
       - key: ERP_PORTAL_SSO_ENABLED

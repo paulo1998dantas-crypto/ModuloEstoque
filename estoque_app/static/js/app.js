@@ -443,6 +443,171 @@ function initWorkOrderPickers() {
     });
 }
 
+function initMultiWorkOrderPickers() {
+    document.querySelectorAll("[data-multi-work-order-picker]").forEach(picker => {
+        const form = picker.closest("form");
+        const quantity = form?.querySelector("input[name='quantidade']");
+        const search = picker.querySelector("[data-work-order-autocomplete]");
+        const results = picker.querySelector("[data-work-order-results]");
+        const selectedContainer = picker.querySelector("[data-selected-work-orders]");
+        const summary = picker.querySelector("[data-work-order-selection-summary]");
+        if (!search || !results || !selectedContainer || !summary) return;
+
+        const selected = new Map();
+        selectedContainer.querySelectorAll("[data-selected-work-order]").forEach(row => {
+            const input = row.querySelector("[data-selected-work-order-input]");
+            const id = row.dataset.workOrderId || input?.value || "";
+            if (id) {
+                const label = input?.dataset.label
+                    || row.querySelector("[data-selected-work-order-label]")?.textContent.trim()
+                    || id;
+                selected.set(id, label);
+            }
+        });
+
+        let timer = null;
+        let controller = null;
+        const close = () => {
+            results.hidden = true;
+        };
+        const formatQuantity = value => String(Math.round(value * 1000) / 1000).replace(".", ",");
+        const updateSummary = () => {
+            summary.classList.remove("error");
+            if (!selected.size) {
+                summary.textContent = "Nenhuma O.S. selecionada.";
+                return;
+            }
+            const countLabel = `${selected.size} O.S. selecionada${selected.size === 1 ? "" : "s"}`;
+            const total = Number(String(quantity?.value || "").replace(",", "."));
+            if (selected.size === 1) {
+                summary.textContent = `${countLabel}.`;
+            } else if (!Number.isFinite(total) || total <= 0) {
+                summary.textContent = `${countLabel}. Informe a quantidade total.`;
+            } else {
+                const perWorkOrder = total / selected.size;
+                const roundedPerWorkOrder = Math.round(perWorkOrder * 1000) / 1000;
+                const divisible = Math.abs(roundedPerWorkOrder * selected.size - total) < 0.000001;
+                summary.textContent = divisible
+                    ? `${countLabel}: ${formatQuantity(perWorkOrder)} por O.S.`
+                    : `${countLabel}. A quantidade total precisa ser divisível igualmente entre as O.S.`;
+                if (!divisible) summary.classList.add("error");
+            }
+        };
+        const renderSelection = () => {
+            selectedContainer.replaceChildren();
+            selected.forEach((label, id) => {
+                const chip = document.createElement("span");
+                chip.className = "selected-work-order";
+                chip.dataset.selectedWorkOrder = "";
+                chip.dataset.workOrderId = id;
+
+                const input = document.createElement("input");
+                input.type = "hidden";
+                input.name = "work_order_id";
+                input.value = id;
+                input.dataset.selectedWorkOrderInput = "";
+                input.dataset.label = label;
+
+                const text = document.createElement("span");
+                text.dataset.selectedWorkOrderLabel = "";
+                text.textContent = label;
+
+                const remove = document.createElement("button");
+                remove.type = "button";
+                remove.className = "selected-work-order-remove";
+                remove.dataset.removeWorkOrder = "";
+                remove.setAttribute("aria-label", `Remover ${label}`);
+                remove.textContent = "×";
+                remove.addEventListener("click", () => {
+                    selected.delete(id);
+                    renderSelection();
+                });
+
+                chip.append(input, text, remove);
+                selectedContainer.append(chip);
+            });
+            updateSummary();
+        };
+        const addWorkOrder = workOrder => {
+            const id = String(workOrder.work_order_id || "").trim();
+            if (!id) return;
+            if (!selected.has(id)) selected.set(id, workOrder.label || id);
+            search.value = "";
+            close();
+            renderSelection();
+        };
+        const renderResults = workOrders => {
+            results.replaceChildren();
+            const available = workOrders.filter(workOrder => {
+                return !selected.has(String(workOrder.work_order_id || "").trim());
+            });
+            if (!available.length) {
+                const empty = document.createElement("div");
+                empty.className = "autocomplete-empty";
+                empty.textContent = "Nenhuma O.S. ativa disponível para adicionar.";
+                results.append(empty);
+            } else {
+                available.forEach(workOrder => {
+                    const button = document.createElement("button");
+                    button.type = "button";
+                    button.className = "autocomplete-option";
+                    button.textContent = workOrder.label;
+                    button.addEventListener("click", () => addWorkOrder(workOrder));
+                    results.append(button);
+                });
+            }
+            results.hidden = false;
+        };
+        const load = async () => {
+            const query = search.value.trim();
+            if (!query) {
+                close();
+                return;
+            }
+            if (controller) controller.abort();
+            controller = new AbortController();
+            try {
+                const response = await fetch(
+                    `/api/erp/work-orders/active?q=${encodeURIComponent(query)}&limit=20`,
+                    {signal: controller.signal}
+                );
+                const payload = await response.json();
+                if (!response.ok || payload.ok === false) {
+                    throw new Error(payload.error || "Falha ao consultar O.S. ativas.");
+                }
+                renderResults(payload.work_orders || []);
+            } catch (error) {
+                if (error.name !== "AbortError") renderResults([]);
+            }
+        };
+
+        search.addEventListener("input", () => {
+            clearTimeout(timer);
+            timer = setTimeout(load, 180);
+        });
+        quantity?.addEventListener("input", updateSummary);
+        form?.addEventListener("submit", event => {
+            if (selected.size < 2) return;
+            const total = Number(String(quantity?.value || "").replace(",", "."));
+            const perWorkOrder = total / selected.size;
+            const roundedPerWorkOrder = Math.round(perWorkOrder * 1000) / 1000;
+            const divisible = Number.isFinite(total)
+                && total > 0
+                && Math.abs(roundedPerWorkOrder * selected.size - total) < 0.000001;
+            if (!divisible) {
+                event.preventDefault();
+                updateSummary();
+                summary.classList.add("error");
+                quantity?.focus();
+            }
+        });
+        document.addEventListener("click", event => {
+            if (!picker.contains(event.target)) close();
+        });
+        renderSelection();
+    });
+}
+
 document.addEventListener("DOMContentLoaded", () => {
     focusScanField();
 
@@ -463,6 +628,7 @@ document.addEventListener("DOMContentLoaded", () => {
     initSingleLocalPrint();
     initInventoryDiff();
     initBackflushBom();
+    initMultiWorkOrderPickers();
     initWorkOrderPickers();
     initCommitmentConsumptionModal();
 });
