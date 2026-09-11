@@ -115,6 +115,7 @@ from services.estoque_service import (
     pending_commitments_by_sku,
     parse_backflush_rows,
     register_consumption_from_commitment,
+    register_commitment_for_work_orders,
     register_movement,
     register_entry_with_backflush,
     resolve_movement_context,
@@ -1132,6 +1133,7 @@ def saida():
     database = db()
     sku = None
     sku_code = request.args.get("sku", "").strip()
+    selected_work_order_ids = []
     # O template também é usado pela entrada e sempre espera um rascunho.
     # Inicializá-lo aqui impede que a tela de empenho falhe antes de registrar
     # qualquer movimentação e preserva os campos quando houver validação.
@@ -1141,26 +1143,58 @@ def saida():
         or f"stock-commitment:{uuid4()}"
     )
     if request.method == "POST":
+        selected_work_order_ids = list(
+            dict.fromkeys(
+                str(value).strip()
+                for value in request.form.getlist("work_order_id")
+                if str(value).strip()
+            )
+        )
         try:
             sku = get_sku_by_code(database, request.form.get("sku"), active_only=True)
             if not sku:
                 raise ValueError("COD nao cadastrado ou inativo. Empenho bloqueado.")
-            register_movement(
-                database,
-                sku,
-                "EMPENHO",
-                request.form.get("quantidade"),
-                session["user_id"],
-                documento=request.form.get("documento", ""),
-                observacao=request.form.get("observacao", ""),
-                work_order_id=request.form.get("work_order_id"),
-                setor=request.form.get("setor", ""),
-                reference_text=request.form.get("reference_text", ""),
-                link_updated_by=session["user_id"],
-                require_context=True,
-                idempotency_key=idempotency_key,
-            )
-            flash("Empenho registrado com sucesso.", "success")
+            movement_kwargs = {
+                "documento": request.form.get("documento", ""),
+                "observacao": request.form.get("observacao", ""),
+                "setor": request.form.get("setor", ""),
+                "reference_text": request.form.get("reference_text", ""),
+                "link_updated_by": session["user_id"],
+                "require_context": True,
+            }
+            if len(selected_work_order_ids) > 1:
+                register_commitment_for_work_orders(
+                    database,
+                    sku,
+                    request.form.get("quantidade"),
+                    session["user_id"],
+                    selected_work_order_ids,
+                    idempotency_key=idempotency_key,
+                    **movement_kwargs,
+                )
+                per_work_order = decimal_to_str(
+                    to_decimal(request.form.get("quantidade"))
+                    / len(selected_work_order_ids)
+                )
+                flash(
+                    f"Empenho registrado em {len(selected_work_order_ids)} O.S. "
+                    f"({per_work_order} por O.S.).",
+                    "success",
+                )
+            else:
+                register_movement(
+                    database,
+                    sku,
+                    "EMPENHO",
+                    request.form.get("quantidade"),
+                    session["user_id"],
+                    work_order_id=selected_work_order_ids[0]
+                    if selected_work_order_ids
+                    else None,
+                    idempotency_key=idempotency_key,
+                    **movement_kwargs,
+                )
+                flash("Empenho registrado com sucesso.", "success")
             return redirect(url_for("saida"))
         except Exception as exc:
             database.rollback()
@@ -1171,6 +1205,9 @@ def saida():
                 "quantidade": request.form.get("quantidade", ""),
                 "documento": request.form.get("documento", ""),
                 "observacao": request.form.get("observacao", ""),
+                "work_order_ids": selected_work_order_ids,
+                "setor": request.form.get("setor", ""),
+                "reference_text": request.form.get("reference_text", ""),
             }
     if sku_code:
         sku = get_sku_by_code(database, sku_code, active_only=True)
@@ -1183,6 +1220,7 @@ def saida():
         sku_code=sku_code,
         idempotency_key=idempotency_key,
         entry_draft=entry_draft,
+        selected_work_order_ids=selected_work_order_ids,
     )
 
 

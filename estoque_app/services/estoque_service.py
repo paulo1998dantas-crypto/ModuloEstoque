@@ -639,6 +639,108 @@ def register_movement(
     return movement
 
 
+def register_commitment_for_work_orders(
+    db,
+    sku,
+    quantidade_total,
+    usuario_id,
+    work_order_ids,
+    documento="",
+    observacao="",
+    setor="",
+    reference_text="",
+    link_updated_by=None,
+    require_context=False,
+    idempotency_key=None,
+):
+    """Register one total commitment distributed equally across several O.S.
+
+    The movements share one operation id. The first movement is the operation
+    parent and the remaining movements are children, so the existing composite
+    cancellation flow can reverse the whole batch atomically.
+    """
+    work_order_by_key = {}
+    for value in work_order_ids or []:
+        raw_id = str(value or "").strip()
+        normalized = _normalized_identifier(raw_id)
+        if normalized and normalized not in work_order_by_key:
+            work_order_by_key[normalized] = raw_id
+    normalized_ids = [
+        work_order_by_key[key] for key in sorted(work_order_by_key)
+    ]
+    if len(normalized_ids) < 2:
+        raise ValueError("Selecione pelo menos duas O.S. para o empenho multiplo.")
+
+    quantidade_total = to_decimal(quantidade_total)
+    if quantidade_total <= 0:
+        raise ValueError("Quantidade deve ser maior que zero.")
+    quantidade_por_os = (quantidade_total / Decimal(len(normalized_ids))).quantize(QTY_SCALE)
+    if quantidade_por_os * len(normalized_ids) != quantidade_total:
+        raise ValueError(
+            "A quantidade total precisa ser divisivel igualmente entre as O.S. selecionadas."
+        )
+
+    command_key = str(idempotency_key or "").strip() or None
+    child_keys = (
+        {
+            work_order_id: f"{command_key}:os:{work_order_id}"
+            for work_order_id in normalized_ids
+        }
+        if command_key
+        else {}
+    )
+    existing = (
+        db.query(Movement)
+        .filter(Movement.idempotency_key.in_(list(child_keys.values())))
+        .all()
+        if child_keys
+        else []
+    )
+    if existing and len(existing) != len(normalized_ids):
+        raise ValueError(
+            "A chave de idempotencia ja foi usada por um empenho multiplo incompleto."
+        )
+    operation_id = str(existing[0].operation_id) if existing else str(uuid4())
+    if existing and any(str(row.operation_id) != operation_id for row in existing):
+        raise ValueError("Operacao de empenho multiplo inconsistente para a chave informada.")
+
+    batch_note = " | ".join(
+        value
+        for value in (
+            str(observacao or "").strip(),
+            f"Empenho multiplo: {decimal_to_str(quantidade_por_os)} por O.S. ({len(normalized_ids)} O.S.).",
+        )
+        if value
+    )
+    movements = []
+    parent_movement_id = None
+    for work_order_id in normalized_ids:
+        movement = register_movement(
+            db,
+            sku,
+            "EMPENHO",
+            quantidade_por_os,
+            usuario_id,
+            documento=documento,
+            observacao=batch_note,
+            work_order_id=work_order_id,
+            setor=setor,
+            reference_text=reference_text,
+            link_updated_by=link_updated_by,
+            require_context=require_context,
+            idempotency_key=child_keys.get(work_order_id),
+            operation_id=operation_id,
+            parent_movement_id=parent_movement_id,
+            commit=False,
+        )
+        movements.append(movement)
+        if parent_movement_id is None:
+            parent_movement_id = movement.id
+
+    db.commit()
+    return movements
+
+
 def pending_commitments_by_sku(db, sku_ids=None):
     commitment_query = db.query(Movement.sku_id, func.coalesce(func.sum(Movement.quantidade), 0)).filter(
         Movement.tipo.in_(COMMITMENT_TYPES),
