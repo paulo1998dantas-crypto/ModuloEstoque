@@ -1163,22 +1163,22 @@ def saida():
                 "require_context": True,
             }
             if len(selected_work_order_ids) > 1:
+                quantidade_total = to_decimal(request.form.get("quantidade"))
                 register_commitment_for_work_orders(
                     database,
                     sku,
-                    request.form.get("quantidade"),
+                    quantidade_total,
                     session["user_id"],
                     selected_work_order_ids,
                     idempotency_key=idempotency_key,
                     **movement_kwargs,
                 )
                 per_work_order = decimal_to_str(
-                    to_decimal(request.form.get("quantidade"))
-                    / len(selected_work_order_ids)
+                    quantidade_total / len(selected_work_order_ids)
                 )
                 flash(
-                    f"Empenho registrado em {len(selected_work_order_ids)} O.S. "
-                    f"({per_work_order} por O.S.).",
+                    f"Rateio confirmado: total {decimal_to_str(quantidade_total)} em "
+                    f"{len(selected_work_order_ids)} O.S. ({per_work_order} por O.S.).",
                     "success",
                 )
             else:

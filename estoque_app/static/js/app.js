@@ -488,7 +488,7 @@ function initMultiWorkOrderPickers() {
                 const roundedPerWorkOrder = Math.round(perWorkOrder * 1000) / 1000;
                 const divisible = Math.abs(roundedPerWorkOrder * selected.size - total) < 0.000001;
                 summary.textContent = divisible
-                    ? `${countLabel}: ${formatQuantity(perWorkOrder)} por O.S.`
+                    ? `${countLabel}: total ${formatQuantity(total)} rateado em ${formatQuantity(perWorkOrder)} por O.S. Cada baixa futura ficará vinculada apenas à sua própria O.S.`
                     : `${countLabel}. A quantidade total precisa ser divisível igualmente entre as O.S.`;
                 if (!divisible) summary.classList.add("error");
             }
@@ -599,7 +599,13 @@ function initMultiWorkOrderPickers() {
                 updateSummary();
                 summary.classList.add("error");
                 quantity?.focus();
+                return;
             }
+            const confirmed = window.confirm(
+                `Confirmar rateio: total ${formatQuantity(total)} em ${selected.size} O.S. `
+                + `(${formatQuantity(perWorkOrder)} para cada O.S.)?`
+            );
+            if (!confirmed) event.preventDefault();
         });
         document.addEventListener("click", event => {
             if (!picker.contains(event.target)) close();

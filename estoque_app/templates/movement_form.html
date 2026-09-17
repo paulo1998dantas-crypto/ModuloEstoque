@@ -47,14 +47,14 @@
             <small>Saldo atual: {{ (sku.balance.saldo_atual if sku.balance else 0)|qty }} {{ sku.unidade or "" }}</small>
         </div>
         <input type="hidden" name="sku" value="{{ sku.sku }}">
-        <label>{{ "Quantidade total" if not is_entry and movement_context_enabled else "Quantidade" }}
+        <label>{{ "Quantidade total do rateio" if not is_entry and movement_context_enabled else "Quantidade" }}
             <input name="quantidade" inputmode="decimal" value="{{ entry_draft.quantidade or '' }}" required autofocus>
         </label>
         {% if not is_entry and movement_context_enabled %}
         {% set selected_ids = entry_draft.work_order_ids or selected_work_order_ids or [] %}
         <fieldset class="context-fields" data-work-order-picker data-multi-work-order-picker>
             <legend>Destino do empenho</legend>
-            <p class="muted">Selecione uma ou mais O.S. ativas. A quantidade informada será distribuída igualmente entre elas; o vínculo também será exibido em Suprimentos.</p>
+            <p class="muted">Selecione uma ou mais O.S. ativas. A quantidade é o total do lote e será distribuída igualmente: total 4 em 2 O.S. gera 2 para cada uma. O vínculo também será exibido em Suprimentos.</p>
             <label>Adicionar O.S. ou chassi ativo
                 <input autocomplete="off" data-work-order-autocomplete placeholder="Digite O.S., ITEM, chassi ou cliente">
                 <div class="autocomplete-results" data-work-order-results hidden></div>

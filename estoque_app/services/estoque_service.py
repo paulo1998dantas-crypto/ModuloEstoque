@@ -683,7 +683,9 @@ def register_commitment_for_work_orders(
     command_key = str(idempotency_key or "").strip() or None
     child_keys = (
         {
-            work_order_id: f"{command_key}:os:{work_order_id}"
+            work_order_id: (
+                f"{command_key}:os:{_normalized_identifier(work_order_id)}"
+            )
             for work_order_id in normalized_ids
         }
         if command_key
@@ -700,8 +702,35 @@ def register_commitment_for_work_orders(
         raise ValueError(
             "A chave de idempotencia ja foi usada por um empenho multiplo incompleto."
         )
-    operation_id = str(existing[0].operation_id) if existing else str(uuid4())
-    if existing and any(str(row.operation_id) != operation_id for row in existing):
+    if existing:
+        existing_by_work_order = {
+            _normalized_identifier(row.work_order_id): row
+            for row in existing
+        }
+        expected_work_orders = set(work_order_by_key)
+        if set(existing_by_work_order) != expected_work_orders:
+            raise ValueError(
+                "A chave de idempotencia ja foi usada por outro conjunto de O.S."
+            )
+        if any(
+            row.sku_id != sku.id
+            or row.tipo != "EMPENHO"
+            or row.movement_status != ACTIVE_MOVEMENT_STATUS
+            or to_decimal(row.quantidade) != quantidade_por_os
+            for row in existing
+        ):
+            raise ValueError(
+                "A chave de idempotencia ja foi usada com quantidade ou item diferente."
+            )
+    operation_id = (
+        str(existing[0].operation_id or "").strip()
+        if existing
+        else str(uuid4())
+    )
+    if existing and (
+        not operation_id
+        or any(str(row.operation_id or "").strip() != operation_id for row in existing)
+    ):
         raise ValueError("Operacao de empenho multiplo inconsistente para a chave informada.")
 
     batch_note = " | ".join(
@@ -731,6 +760,8 @@ def register_commitment_for_work_orders(
             idempotency_key=child_keys.get(work_order_id),
             operation_id=operation_id,
             parent_movement_id=parent_movement_id,
+            source_type="MULTI_WORK_ORDER_COMMITMENT",
+            source_id=operation_id,
             commit=False,
         )
         movements.append(movement)
@@ -1360,6 +1391,22 @@ def _cancel_composite_movement(
     ):
         raise ValueError(
             "Movimento de recebimento deve ser estornado pela Inspecao de Recebimento."
+        )
+    active_consumptions = (
+        db.query(Movement.id)
+        .filter(
+            Movement.related_movement_id.in_([item.id for item in originals]),
+            Movement.tipo == "BAIXA",
+            Movement.movement_status == ACTIVE_MOVEMENT_STATUS,
+        )
+        .order_by(Movement.id)
+        .all()
+    )
+    if active_consumptions:
+        movement_ids = ", ".join(str(row.id) for row in active_consumptions)
+        raise ValueError(
+            "Cancelamento bloqueado: o conjunto possui baixa ativa vinculada "
+            f"({movement_ids}). Estorne primeiro a baixa para preservar o vinculo e o saldo."
         )
 
     sku_ids = sorted({item.sku_id for item in originals})

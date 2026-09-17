@@ -3,7 +3,7 @@ import sys
 import unittest
 from decimal import Decimal
 from pathlib import Path
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 from sqlalchemy import create_engine, text
 from sqlalchemy.orm import sessionmaker
@@ -496,6 +496,10 @@ class MovementContextAndCancellationTest(unittest.TestCase):
         self.assertEqual(2, len(movements))
         self.assertEqual({"2.000"}, {str(row.quantidade) for row in movements})
         self.assertEqual(1, len({row.operation_id for row in movements}))
+        self.assertEqual(
+            {"MULTI_WORK_ORDER_COMMITMENT"},
+            {row.source_type for row in movements},
+        )
         parent = next(row for row in movements if row.parent_movement_id is None)
         child = next(row for row in movements if row.parent_movement_id is not None)
         self.assertEqual(parent.id, child.parent_movement_id)
@@ -510,7 +514,10 @@ class MovementContextAndCancellationTest(unittest.TestCase):
             self.sku,
             4,
             self.user.id,
-            [self.work_order_id, self.second_work_order_id],
+            [
+                str(UUID(self.work_order_id)),
+                str(UUID(self.second_work_order_id)),
+            ],
             observacao="Lote de teste",
             link_updated_by=self.user.id,
             require_context=True,
@@ -528,6 +535,57 @@ class MovementContextAndCancellationTest(unittest.TestCase):
         self.assertFalse(replayed_cancel)
         self.assertEqual("CANCELADA", canceled.movement_status)
         self.assertEqual("CANCELADA", self.db.get(Movement, child.id).movement_status)
+
+    def test_multiple_work_order_commitment_rejects_changed_total_on_retry(self):
+        register_movement(self.db, self.sku, "ENTRADA", 10, self.user.id)
+        key = "stock-commitment:multiple-work-orders:changed-total"
+        register_commitment_for_work_orders(
+            self.db,
+            self.sku,
+            4,
+            self.user.id,
+            [self.work_order_id, self.second_work_order_id],
+            link_updated_by=self.user.id,
+            require_context=True,
+            idempotency_key=key,
+        )
+
+        with self.assertRaisesRegex(ValueError, "quantidade ou item diferente"):
+            register_commitment_for_work_orders(
+                self.db,
+                self.sku,
+                6,
+                self.user.id,
+                [self.work_order_id, self.second_work_order_id],
+                link_updated_by=self.user.id,
+                require_context=True,
+                idempotency_key=key,
+            )
+
+    def test_multiple_work_order_commitment_cannot_be_cancelled_after_baixa(self):
+        register_movement(self.db, self.sku, "ENTRADA", 10, self.user.id)
+        movements = register_commitment_for_work_orders(
+            self.db,
+            self.sku,
+            4,
+            self.user.id,
+            [self.work_order_id, self.second_work_order_id],
+            link_updated_by=self.user.id,
+            require_context=True,
+            idempotency_key="stock-commitment:multiple-work-orders:consumed",
+        )
+        parent = next(row for row in movements if row.parent_movement_id is None)
+        register_consumption_from_commitment(self.db, parent, 2, self.user.id)
+
+        with self.assertRaisesRegex(ValueError, "baixa ativa vinculada"):
+            cancel_movement(
+                self.db,
+                parent,
+                self.user.id,
+                "Tentativa de estornar lote ja consumido.",
+            )
+
+        self.assertEqual("ATIVA", self.db.get(Movement, parent.id).movement_status)
 
     def test_multiple_work_order_commitment_rolls_back_all_movements_on_failure(self):
         register_movement(self.db, self.sku, "ENTRADA", 10, self.user.id)
