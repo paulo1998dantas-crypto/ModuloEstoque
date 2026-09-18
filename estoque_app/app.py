@@ -2562,6 +2562,52 @@ def _erp_internal_allowed():
     return bool(expected) and bool(supplied) and hmac.compare_digest(supplied, expected)
 
 
+def _stock_availability_payload(database, raw_skus):
+    """Return the live physical and available balance for requested SKUs.
+
+    This is intentionally read-only.  The available balance follows the same
+    rule as the Stock screen: physical balance minus active commitments, with
+    active BAIXA movements already deducted from those commitments.
+    """
+    requested = []
+    seen = set()
+    for raw_sku in raw_skus if isinstance(raw_skus, list) else []:
+        sku_code = normalize_sku(raw_sku)
+        if sku_code and sku_code not in seen:
+            requested.append(sku_code)
+            seen.add(sku_code)
+
+    if not requested:
+        return {"items": [], "missing": []}
+
+    rows = (
+        database.query(SKU)
+        .outerjoin(StockBalance)
+        .filter(func.upper(SKU.sku).in_(requested))
+        .all()
+    )
+    pending_by_sku = pending_commitments_by_sku(database, [row.id for row in rows])
+    by_code = {}
+    for row in rows:
+        physical = to_decimal(row.balance.saldo_atual if row.balance else 0)
+        committed = pending_by_sku.get(row.id, to_decimal(0))
+        available = physical - committed
+        by_code[normalize_sku(row.sku)] = {
+            "sku": row.sku,
+            "descricao": row.descricao or "",
+            "unidade": row.unidade or "",
+            "ativo": bool(row.active),
+            "saldo_atual": decimal_to_str(physical),
+            "saldo_empenhado": decimal_to_str(committed),
+            "saldo_disponivel": decimal_to_str(available),
+        }
+
+    return {
+        "items": [by_code[sku_code] for sku_code in requested if sku_code in by_code],
+        "missing": [sku_code for sku_code in requested if sku_code not in by_code],
+    }
+
+
 def _erp_actor_user(database, actor):
     actor = (actor or "ERP").strip()
     supplied_id = str(request.headers.get("X-ERP-Actor-ID") or "").strip()
@@ -2715,6 +2761,16 @@ def erp_internal_pending_receipts():
 def erp_internal_dashboard():
     if not _erp_internal_allowed(): return jsonify({"ok": False, "error": "Servico nao autorizado."}), 401
     return jsonify({"ok": True, **purchase_orders_dashboard(db())})
+
+
+@app.route("/api/erp/internal/stock/availability", methods=["POST"])
+@erp_feature_required
+def erp_internal_stock_availability():
+    """Read live stock availability for the Suprimentos O.S. composition."""
+    if not _erp_internal_allowed():
+        return jsonify({"ok": False, "error": "Servico nao autorizado."}), 401
+    payload = request.get_json(silent=True) or {}
+    return jsonify({"ok": True, **_stock_availability_payload(db(), payload.get("skus"))})
 
 
 @app.route("/api/erp/internal/work-orders/<work_order_id>/materials")
