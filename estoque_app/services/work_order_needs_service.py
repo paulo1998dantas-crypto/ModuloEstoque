@@ -55,6 +55,62 @@ def _schema_ready(db):
     return all(inspector.has_table(table, schema=schema) for table in required)
 
 
+def _equivalence_by_sku(db):
+    """Read only the active Cadastro equivalence catalog, when migrated.
+
+    Coverage and consumption remain strictly by the selected SKU.  This map is
+    used only to make the functional group visible to PCP/Stock reports.
+    """
+    bind = db.get_bind()
+    schema = None if bind.dialect.name == "sqlite" else "public"
+    inspector = inspect(bind)
+    if not (
+        inspector.has_table("cadastro_grupos_equivalencia", schema=schema)
+        and inspector.has_table("cadastro_equivalencia_membros", schema=schema)
+    ):
+        return {}, set()
+    rows = db.execute(
+        text(
+            """
+            select g.id as grupo_id,g.codigo as grupo_codigo,g.nome as grupo_nome,
+                   g.unidade_funcional,m.sku,m.fator_unidade_funcional,m.prioridade
+              from cadastro_grupos_equivalencia g
+              join cadastro_equivalencia_membros m on m.grupo_id=g.id
+             where g.ativo=true and m.ativo=true
+             order by g.codigo,m.prioridade,m.sku
+            """
+        )
+    ).mappings()
+    by_sku = defaultdict(list)
+    members_by_group = defaultdict(list)
+    for row in rows:
+        item = dict(row)
+        code = _normalize_code(item.get("sku"))
+        group_id = str(item.get("grupo_id") or "").strip()
+        factor = _decimal(item.get("fator_unidade_funcional"))
+        if not code or not group_id or factor <= 0:
+            continue
+        normalized = {
+            "grupo_id": group_id,
+            "grupo_codigo": str(item.get("grupo_codigo") or "").strip(),
+            "grupo_nome": str(item.get("grupo_nome") or "").strip(),
+            "unidade_funcional": str(item.get("unidade_funcional") or "").strip() or "UN",
+            "fator_unidade_funcional": factor,
+        }
+        by_sku[code].append(normalized)
+        members_by_group[group_id].append(code)
+    unique = {}
+    ambiguous = set()
+    for code, entries in by_sku.items():
+        if len(entries) != 1:
+            ambiguous.add(code)
+            continue
+        item = dict(entries[0])
+        item["membros"] = sorted(set(members_by_group[item["grupo_id"]]))
+        unique[code] = item
+    return unique, ambiguous
+
+
 def _work_order_documents(db, work_order_id=None):
     if not _schema_ready(db):
         return []
@@ -227,6 +283,11 @@ def _normalize_phantom_requirements(lines, children):
                 "setores": set(),
                 "levels": set(),
                 "parent_codes": set(),
+                "equivalence_group_ids": set(),
+                "equivalence_group_codes": set(),
+                "equivalence_group_names": set(),
+                "equivalence_selected_factors": set(),
+                "equivalence_planned_skus": set(),
             },
         )
 
@@ -248,6 +309,17 @@ def _normalize_phantom_requirements(lines, children):
             current["parent_codes"].add(_normalize_code(line["item"]))
         if source:
             current["parent_codes"].add(source)
+        group_id = str(line.get("equivalence_group_id") or "").strip()
+        if group_id:
+            current["equivalence_group_ids"].add(group_id)
+            current["equivalence_group_codes"].add(str(line.get("equivalence_group_code") or "").strip())
+            current["equivalence_group_names"].add(str(line.get("equivalence_group_name") or "").strip())
+            factor = _decimal(line.get("equivalence_selected_factor"))
+            if factor > 0:
+                current["equivalence_selected_factors"].add(factor)
+            planned = _normalize_code(line.get("sku_planejado"))
+            if planned:
+                current["equivalence_planned_skus"].add(planned)
 
     for normalized, amount, line in raw:
         if normalized in root_sources:
@@ -362,6 +434,7 @@ def calculate_work_order_needs(db, work_order_id=None, pending_only=False):
         }
 
     sku_by_code, children = _bom_catalog(db)
+    equivalent_by_sku, ambiguous_equivalent_skus = _equivalence_by_sku(db)
     work_order_ids = {_uuid_key(row["work_order_id"]) for row in documents}
     movements = (
         db.query(Movement)
@@ -405,6 +478,23 @@ def calculate_work_order_needs(db, work_order_id=None, pending_only=False):
             pending = max(need - covered, Decimal("0"))
             meta = metadata[code]
             sku = sku_by_code.get(code)
+            explicit_groups = {value for value in meta["equivalence_group_ids"] if value}
+            implicit_equivalence = equivalent_by_sku.get(code)
+            if len(explicit_groups) == 1:
+                factor_values = meta["equivalence_selected_factors"]
+                equivalence = {
+                    "grupo_id": next(iter(explicit_groups)),
+                    "grupo_codigo": next((value for value in meta["equivalence_group_codes"] if value), ""),
+                    "grupo_nome": next((value for value in meta["equivalence_group_names"] if value), ""),
+                    "fator_unidade_funcional": next(iter(factor_values), Decimal("1")) if len(factor_values) == 1 else Decimal("1"),
+                    "sku_planejado": next(iter(meta["equivalence_planned_skus"]), ""),
+                    "membros": [],
+                }
+            else:
+                equivalence = dict(implicit_equivalence or {})
+            factor = _decimal(equivalence.get("fator_unidade_funcional")) if equivalence else Decimal("1")
+            if factor <= 0:
+                factor = Decimal("1")
             row = {
                 "work_order_id": str(document["work_order_id"]),
                 "numero_os": document.get("numero_os") or document.get("document_number"),
@@ -423,6 +513,10 @@ def calculate_work_order_needs(db, work_order_id=None, pending_only=False):
                 "nivel_minimo": min(meta["levels"]) if meta["levels"] else 0,
                 "itens_pai": ", ".join(sorted(value for value in meta["parent_codes"] if value)),
                 "status_necessidade": "PENDENTE" if pending > 0 else "COBERTA",
+                "equivalence": equivalence or None,
+                "grupo_equivalencia": equivalence.get("grupo_codigo", "") if equivalence else "",
+                "quantidade_funcional_necessaria": need / factor,
+                "quantidade_funcional_pendente": pending / factor,
             }
             all_lines.append(row)
 
@@ -460,6 +554,8 @@ def calculate_work_order_needs(db, work_order_id=None, pending_only=False):
             (line["quantidade_pendente"] for line in all_lines), Decimal("0")
         ),
         "empenhos_compartilhados": len(shared_movement_ids),
+        "itens_equivalentes": sum(1 for line in all_lines if line.get("equivalence")),
+        "skus_equivalencia_ambigua": len(ambiguous_equivalent_skus),
     }
     lines = (
         [line for line in all_lines if line["quantidade_pendente"] > 0]

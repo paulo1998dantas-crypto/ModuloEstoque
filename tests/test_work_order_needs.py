@@ -246,6 +246,34 @@ class WorkOrderNeedsTest(unittest.TestCase):
         self.assertEqual([], result["lines"])
         self.assertEqual(0, result["summary"]["work_orders"])
 
+    def test_selected_equivalent_version_is_visible_without_changing_exact_coverage(self):
+        with self.engine.begin() as connection:
+            connection.execute(text("create table cadastro_grupos_equivalencia (id text primary key,codigo text,nome text,unidade_funcional text,ativo boolean)"))
+            connection.execute(text("create table cadastro_equivalencia_membros (grupo_id text,sku text,fator_unidade_funcional numeric,prioridade integer,ativo boolean)"))
+            connection.execute(text("insert into cadastro_grupos_equivalencia values ('eq-1','EQ-CAPA','CAPA EQUIVALENTE','PC',1)"))
+            connection.execute(text("insert into cadastro_equivalencia_membros values ('eq-1','MP-001',2,1,1)"))
+            connection.execute(
+                text("update suprimentos_documentos set composicao=:composition where id=1"),
+                {
+                    "composition": json.dumps([
+                        {
+                            "codigo": "MP-001", "descricao": "Materia-prima", "unidade": "PC", "qtd": 6,
+                            "equivalence_group_id": "eq-1", "equivalence_group_code": "EQ-CAPA",
+                            "equivalence_group_name": "CAPA EQUIVALENTE", "equivalence_selected_factor": 2,
+                            "sku_planejado": "MP-001",
+                        }
+                    ])
+                },
+            )
+
+        result = calculate_work_order_needs(self.db, self.work_order_id)
+        row = self._by_code(result)["MP-001"]
+
+        self.assertEqual(Decimal("6"), row["quantidade_pendente"])
+        self.assertEqual(Decimal("3"), row["quantidade_funcional_pendente"])
+        self.assertEqual("EQ-CAPA", row["grupo_equivalencia"])
+        self.assertEqual("eq-1", row["equivalence"]["grupo_id"])
+
 
 if __name__ == "__main__":
     unittest.main()
