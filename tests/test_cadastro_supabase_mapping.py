@@ -18,12 +18,13 @@ class CadastroSupabaseMappingTests(unittest.TestCase):
                 "descricao_primaria": "PP ARO JANELA",
                 "category_label": "18 - REVESTIMENTO",
                 "field_values": {"prefixo": "PP"},
+                "form_values": {"grupo_codigo": ["10"]},
             }
         )
 
         self.assertEqual(data["descricao"], "PP ARO JANELA")
-        self.assertEqual(data["grupo"], "PP")
-        self.assertEqual(data["grupo_informado"], "PP")
+        self.assertEqual(data["grupo"], "10 - INSUMO")
+        self.assertEqual(data["grupo_informado"], "10 - INSUMO")
 
     def test_missing_description_is_not_replaced_by_sku(self):
         data = _row_to_sku_data(
@@ -32,13 +33,14 @@ class CadastroSupabaseMappingTests(unittest.TestCase):
                 "descricao_primaria": "",
                 "descricao_secundaria": "",
                 "category_label": "18 - REVESTIMENTO",
+                "form_values": {"grupo_codigo": ["10"]},
                 "field_values": {},
             }
         )
 
         self.assertEqual(data["descricao"], "")
         self.assertEqual(data["grupo"], "10 - INSUMO")
-        self.assertEqual(data["grupo_informado"], "")
+        self.assertEqual(data["grupo_informado"], "10 - INSUMO")
 
 
 if __name__ == "__main__":

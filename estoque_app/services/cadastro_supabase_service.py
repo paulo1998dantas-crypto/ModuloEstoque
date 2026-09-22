@@ -171,14 +171,33 @@ def _limit_text(value, max_length):
     return text
 
 
+_GROUP_LABELS = {
+    "10": "10 - INSUMO",
+    "20": "20 - PRODUTO PROCESSO",
+    "30": "30 - CONJUNTO / KIT",
+    "40": "40 - TRANSFORMACAO",
+    "50": "50 - MRO (MANUTENCAO, REPARO E OPERACOES)",
+    "60": "60 - EMBALAGEM",
+    "70": "70 - ATIVO FIXO",
+    "80": "80 - VEICULO",
+    "90": "90 - PROTOTIPO",
+}
+
+
+def _group_from_code(value):
+    return _GROUP_LABELS.get(_clean(value), "")
+
+
 def _group_from_sku(sku):
-    return {
-        "10": "10 - INSUMO",
-        "20": "20 - PRODUTO EM PROCESSO",
-        "30": "30 - CONJUNTO / KIT",
-        "40": "40 - TRANSFORMACAO",
-        "50": "50 - MRO",
-    }.get(_clean(sku)[:2], "")
+    return _group_from_code(_clean(sku)[:2])
+
+
+def _group_from_registration(row):
+    form_values = row.get("form_values") if isinstance(row.get("form_values"), dict) else {}
+    value = form_values.get("grupo_codigo") or form_values.get("pn_grupo_codigo")
+    if isinstance(value, list):
+        value = next((_clean(item) for item in value if _clean(item)), "")
+    return _group_from_code(value)
 
 
 def _status_to_active(value):
@@ -226,7 +245,9 @@ def _row_to_sku_data(row):
             "um",
         ],
     )
-    grupo_informado = _first_value(values, ["grupo", "prefixo"])
+    # GRUPO is the structural group selected in Cadastro (form_values), not
+    # the first technical field such as PREFIXO=PP/ABS/CJ.
+    grupo_informado = _group_from_registration(row)
     grupo = grupo_informado or _group_from_sku(sku)
     categoria = _clean(row.get("category_label"))
     status_value = row.get("ativo")
@@ -270,7 +291,7 @@ def sync_skus_from_cadastro(db, force=False):
 
     rows = _all_rows(
         REGISTRATIONS_TABLE,
-        "sku,category_label,descricao_primaria,descricao_secundaria,sufixo,unidade,ativo,field_values,updated_at",
+        "sku,category_label,descricao_primaria,descricao_secundaria,sufixo,unidade,ativo,field_values,form_values,updated_at",
         "sku.asc",
     )
     seen = set()
