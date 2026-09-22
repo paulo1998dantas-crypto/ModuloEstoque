@@ -20,6 +20,7 @@ REGISTRATIONS_TABLE = "cadastro_registros"
 BOM_COMPONENTS_TABLE = "cadastro_bom_componentes"
 PAGE_SIZE = 1000
 DEFAULT_SYNC_INTERVAL_SECONDS = 60
+MISSING_DESCRIPTION_LABEL = "ITEM SEM DESCRICAO CADASTRADA"
 SKU_SYNC_KEY = "cadastro_supabase_skus_synced_at"
 BOM_SYNC_KEY = "cadastro_supabase_bom_synced_at"
 
@@ -208,7 +209,10 @@ def _status_to_active(value):
 def _row_to_sku_data(row):
     sku = normalize_sku(row.get("sku"))
     values = row.get("field_values") if isinstance(row.get("field_values"), dict) else {}
-    descricao = _clean(row.get("descricao_primaria")) or _clean(row.get("descricao_secundaria")) or sku
+    # The SKU is an identifier, never a valid product description.  Returning
+    # it as a fallback made a bad Cadastro row look valid in Estoque/BI and
+    # also overwrote a previously correct local description on each sync.
+    descricao = _clean(row.get("descricao_primaria")) or _clean(row.get("descricao_secundaria"))
     unidade = _clean(row.get("unidade")) or _first_value(
         values,
         [
@@ -222,7 +226,8 @@ def _row_to_sku_data(row):
             "um",
         ],
     )
-    grupo = _first_value(values, ["grupo", "prefixo"]) or _group_from_sku(sku)
+    grupo_informado = _first_value(values, ["grupo", "prefixo"])
+    grupo = grupo_informado or _group_from_sku(sku)
     categoria = _clean(row.get("category_label"))
     status_value = row.get("ativo")
     active = bool(status_value) if isinstance(status_value, bool) else _status_to_active(
@@ -230,9 +235,10 @@ def _row_to_sku_data(row):
     )
     return {
         "sku": sku,
-        "descricao": _limit_text(descricao or sku, 255),
+        "descricao": _limit_text(descricao, 255),
         "unidade": _limit_text(unidade, 20),
         "grupo": _limit_text(grupo, 120),
+        "grupo_informado": _limit_text(grupo_informado, 120),
         "categoria": _limit_text(categoria, 120),
         "active": active,
     }
@@ -251,6 +257,7 @@ def sync_skus_from_cadastro(db, force=False):
         "duplicates_skipped": 0,
         "not_in_source": 0,
         "errors": [],
+        "warnings": [],
     }
     if not enabled():
         result["skipped"] = True
@@ -289,16 +296,33 @@ def sync_skus_from_cadastro(db, force=False):
             sku = existing.get(data["sku"])
             created = sku is None
             if created:
-                sku = SKU(sku=data["sku"], descricao=data["descricao"], active=data["active"])
+                sku = SKU(
+                    sku=data["sku"],
+                    descricao=data["descricao"] or MISSING_DESCRIPTION_LABEL,
+                    active=data["active"],
+                )
                 db.add(sku)
                 existing[data["sku"]] = sku
             else:
                 if sku.active != data["active"]:
                     result["status_updated"] += 1
-                sku.descricao = data["descricao"]
+                source_description = data["descricao"]
+                if source_description:
+                    sku.descricao = source_description
+                elif not _clean(sku.descricao) or _clean(sku.descricao) == data["sku"]:
+                    sku.descricao = MISSING_DESCRIPTION_LABEL
+                else:
+                    result["warnings"].append(
+                        f"{data['sku']}: Cadastro sem descricao; descricao local preservada."
+                    )
                 sku.active = data["active"]
+            if not data["descricao"]:
+                result["warnings"].append(
+                    f"{data['sku']}: Cadastro sem descricao primaria/secundaria."
+                )
             sku.unidade = data["unidade"] or None
-            sku.grupo = data["grupo"] or None
+            if data["grupo_informado"] or not _clean(sku.grupo):
+                sku.grupo = data["grupo"] or None
             sku.categoria = data["categoria"] or None
             db.flush()
             if created:
