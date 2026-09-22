@@ -10,6 +10,7 @@ from models import Movement, SKU
 from services.estoque_service import (
     bom_components_for_sku,
     get_sku_by_code,
+    is_bom_manufacturing_sku,
     register_movement,
     to_decimal,
 )
@@ -269,7 +270,13 @@ def _explode_receipt_bom(db, parent_sku, received_quantity):
         if current_sku.id in ancestry:
             chain = " -> ".join(str(item) for item in (*ancestry, current_sku.id))
             raise ValueError(f"B.O.M. ciclica detectada ({chain}).")
-        components = bom_components_for_sku(db, current_sku)
+        # Only manufactured PP/kit nodes are exploded recursively. Insumos
+        # remain stocked under their own SKU even if a legacy BOM exists.
+        components = (
+            bom_components_for_sku(db, current_sku)
+            if is_bom_manufacturing_sku(current_sku)
+            else []
+        )
         if not components:
             total_by_sku[current_sku.id] = total_by_sku.get(
                 current_sku.id, Decimal("0")
@@ -404,7 +411,11 @@ def _refresh_purchase_order_line_receipt_status(db, purchase_order_line_id):
         to_decimal(row["quantidade_aceita"]) > 0 for row in receipt_rows
     )
     ordered = to_decimal(purchase_line["quantidade_pedida"])
-    if parent_sku and bom_components_for_sku(db, parent_sku):
+    if (
+        parent_sku
+        and is_bom_manufacturing_sku(parent_sku)
+        and bom_components_for_sku(db, parent_sku)
+    ):
         progress = _bom_component_receipt_progress(db, purchase_line, parent_sku)
         direct_received = sum(
             (
@@ -524,7 +535,12 @@ def explode_confirmed_receipt_bom(db, receipt_id, actor, user_id, reason=""):
     for line in lines:
         approved = to_decimal(line["quantidade_aprovada"])
         parent_sku = db.get(SKU, int(line["sku_id"])) if line.get("sku_id") else None
-        if approved <= 0 or not parent_sku or not bom_components_for_sku(db, parent_sku):
+        if (
+            approved <= 0
+            or not parent_sku
+            or not is_bom_manufacturing_sku(parent_sku)
+            or not bom_components_for_sku(db, parent_sku)
+        ):
             continue
 
         correction_prefix = f"bom-explosion:{receipt_id}:{line['id']}"
@@ -956,7 +972,11 @@ def pending_receipt_orders(db):
         if sku_id not in sku_cache:
             sku_cache[sku_id] = db.get(SKU, sku_id)
         parent_sku = sku_cache[sku_id]
-        if not parent_sku or not bom_components_for_sku(db, parent_sku):
+        if (
+            not parent_sku
+            or not is_bom_manufacturing_sku(parent_sku)
+            or not bom_components_for_sku(db, parent_sku)
+        ):
             continue
 
         row["receipt_mode"] = "BOM_COMPONENTS"
@@ -1512,7 +1532,11 @@ def _confirm_bom_component_receipt(
         if purchase_line.get("sku_id")
         else None
     )
-    if not parent_sku or not bom_components_for_sku(db, parent_sku):
+    if (
+        not parent_sku
+        or not is_bom_manufacturing_sku(parent_sku)
+        or not bom_components_for_sku(db, parent_sku)
+    ):
         raise ValueError(
             "A linha recebida por componentes precisa possuir uma B.O.M. ativa."
         )
@@ -1782,7 +1806,13 @@ def confirm_receipt(db, data, actor, user_id):
         parent_sku = db.get(SKU, int(sku_id)) if sku_id else None
         bom_components = (
             _explode_receipt_bom(db, parent_sku, approved)
-            if approved and po_line and parent_sku and bom_components_for_sku(db, parent_sku)
+            if (
+                approved
+                and po_line
+                and parent_sku
+                and is_bom_manufacturing_sku(parent_sku)
+                and bom_components_for_sku(db, parent_sku)
+            )
             else []
         )
         if bom_components:

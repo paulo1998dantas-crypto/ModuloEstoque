@@ -1068,10 +1068,25 @@ def bom_components_for_sku(db, sku):
     )
 
 
+def sku_group_code(sku):
+    """Return the structural Cadastro group code stored on an SKU."""
+    group = str(getattr(sku, "grupo", "") or "").strip()
+    code = group.split("-", 1)[0].strip()
+    return code if code.isdigit() else ""
+
+
+def is_bom_manufacturing_sku(sku):
+    """Only manufactured PP (20) and kit/set (30) SKUs use BOM backflush."""
+    return sku_group_code(sku) in {"20", "30"}
+
+
 def build_backflush_preview(db, sku, entry_qty):
     entry_qty = to_decimal(entry_qty)
     if entry_qty <= 0:
         raise ValueError("Quantidade deve ser maior que zero.")
+
+    if not is_bom_manufacturing_sku(sku):
+        return []
 
     rows = []
     for component in bom_components_for_sku(db, sku):
@@ -1126,6 +1141,11 @@ def register_entry_with_backflush(
     allow_negative=False,
     idempotency_key=None,
 ):
+    if not is_bom_manufacturing_sku(sku):
+        raise ValueError(
+            "Backflush de entrada permitido somente para itens dos grupos "
+            "20 - PRODUTO PROCESSO e 30 - CONJUNTO / KIT."
+        )
     command_key = str(idempotency_key or "").strip() or None
     quantidade = to_decimal(quantidade)
     requested_components = {}
