@@ -112,6 +112,25 @@ class SharedRbacTest(unittest.TestCase):
             ROLE_PERMISSION_MAP["PRODUCAO"],
         )
 
+    def test_comercial_role_has_only_cadastro_access(self):
+        self.assertEqual("Comercial", ROLE_DEFINITIONS["COMERCIAL"])
+        self.assertIn("cadastro.access", PERMISSION_DEFINITIONS)
+        self.assertEqual({"cadastro.access"}, ROLE_PERMISSION_MAP["COMERCIAL"])
+
+    def test_startup_seeds_comercial_role_and_cadastro_permission(self):
+        with patch("auth.SessionLocal", self.Session):
+            ensure_initial_data()
+
+        self.db.expire_all()
+        self.assertIsNotNone(self.db.get(ErpRole, "COMERCIAL"))
+        self.assertIsNotNone(self.db.get(ErpPermission, "cadastro.access"))
+        self.assertIsNotNone(
+            self.db.get(
+                ErpRolePermission,
+                {"role_code": "COMERCIAL", "permission_code": "cadastro.access"},
+            )
+        )
+
     def test_commitment_reconciliation_permission_is_mapped_only_to_admin(self):
         permission = "estoque.commitment.reconcile_admin"
         self.assertIn(permission, PERMISSION_DEFINITIONS)

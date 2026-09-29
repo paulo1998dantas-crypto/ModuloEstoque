@@ -95,6 +95,15 @@ fallback para `users.role`. Com a flag desligada, o comportamento legado é
 preservado. A tela central de usuários já grava `erp_user_roles` sempre que o
 schema existe, inclusive durante a janela anterior à ativação da flag.
 
+### Perfil COMERCIAL no Cadastro
+
+Depois que o schema RBAC compartilhado estiver instalado, aplique
+`supabase/migrations/202609291200_comercial_cadastro_role.sql` para disponibilizar
+o perfil COMERCIAL com somente `cadastro.access`. O backend do Cadastro limita
+esse perfil à consulta de SKUs e à gestão de pessoas; processos, regras e outras
+tabelas de Suprimentos continuam restritos. O perfil pode ser atribuído pela
+tela central de usuários sem ativar globalmente o RBAC durante o corte.
+
 As migrations de RBAC abortam a transação se houver usuário ativo sem perfil
 ativo ou se não existir ao menos um `ADMIN` ativo. Não corrija isso atribuindo
 perfil por inferência: trate os casos ambíguos individualmente antes do corte.

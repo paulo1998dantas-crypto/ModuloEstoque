@@ -47,6 +47,7 @@ ROLE_DEFINITIONS = {
     "PCP": "PCP",
     "ENGENHARIA": "Engenharia",
     "PRODUCAO": "Produção",
+    "COMERCIAL": "Comercial",
 }
 
 PERMISSION_DEFINITIONS = {
@@ -178,6 +179,7 @@ ROLE_PERMISSION_MAP = {
         }
     )
     | {"cadastro.access"},
+    "COMERCIAL": {"cadastro.access"},
     "ADMIN": set(PERMISSION_DEFINITIONS),
 }
 LEGACY_ADMIN_ONLY_PERMISSIONS = {
