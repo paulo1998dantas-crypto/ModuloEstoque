@@ -47,6 +47,7 @@ ROLE_DEFINITIONS = {
     "PCP": "PCP",
     "ENGENHARIA": "Engenharia",
     "PRODUCAO": "Produção",
+    "APONTAMENTO": "Apontamento",
     "COMERCIAL": "Comercial",
 }
 
@@ -116,6 +117,7 @@ _MES_OPERATOR = {
     "mes.exports.read",
 }
 ROLE_PERMISSION_MAP = {
+    "APONTAMENTO": {"mes.dashboard.read", "mes.stage.write"},
     "PRODUCAO": {
         "mes.dashboard.read",
         "mes.stage.write",
