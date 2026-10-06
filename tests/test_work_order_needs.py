@@ -236,6 +236,44 @@ class WorkOrderNeedsTest(unittest.TestCase):
         self.assertEqual([], result["lines"])
         self.assertEqual([], result["pending_lines"])
 
+    def test_materials_cockpit_explodes_parent_purchase_transit_to_inventory_leaf(self):
+        order_id = uuid4().hex
+        with self.engine.begin() as connection:
+            connection.execute(text("""
+                create table erp_purchase_orders (
+                    id text primary key,numero_oc text,fornecedor_nome text,status text,
+                    technical_status text,data_necessidade date,work_order_id text
+                )
+            """))
+            connection.execute(text("""
+                create table erp_purchase_order_lines (
+                    id text primary key,purchase_order_id text,numero_linha integer,
+                    sku_codigo text,descricao_original text,unidade text,
+                    quantidade_pedida numeric,quantidade_recebida numeric,status text,
+                    data_necessidade date,work_order_id text
+                )
+            """))
+            connection.execute(text("""
+                insert into erp_purchase_orders
+                    (id,numero_oc,fornecedor_nome,status,technical_status,data_necessidade,work_order_id)
+                values (:id,'OC-TRANSITO-1','FORNECEDOR CJ','EMITIDA','ABERTA','2026-10-30',:work_id)
+            """), {"id": order_id, "work_id": self.work_order_id})
+            connection.execute(text("""
+                insert into erp_purchase_order_lines
+                    (id,purchase_order_id,numero_linha,sku_codigo,descricao_original,unidade,
+                     quantidade_pedida,quantidade_recebida,status,data_necessidade,work_order_id)
+                values ('line-1',:order_id,1,'CJ-001','Conjunto','CJ',1,0,'PENDENTE',null,:work_id)
+            """), {"order_id": order_id, "work_id": self.work_order_id})
+
+        result = work_order_materials(self.db, self.work_order_id)
+        self.assertEqual(["MP-001"], [line["codigo"] for line in result["pending_lines"]])
+        material = result["pending_lines"][0]
+        self.assertEqual(Decimal("6"), Decimal(str(material["quantidade_em_transito"])))
+        self.assertEqual("2026-10-30", str(material["data_previsao_transito"]))
+        self.assertEqual("OC-TRANSITO-1", material["pedidos_em_transito"][0]["numero_oc"])
+        self.assertEqual("CJ-001", material["pedidos_em_transito"][0]["sku_origem"])
+        self.assertTrue(material["pedidos_em_transito"][0]["vinculada_a_esta_os"])
+
     def test_technically_closed_work_order_is_excluded(self):
         self.db.execute(
             text("update erp_work_orders set technical_status='CONCLUIDA' where id=:id"),
