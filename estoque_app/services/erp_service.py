@@ -642,11 +642,14 @@ def explode_confirmed_receipt_bom(db, receipt_id, actor, user_id, reason=""):
 
 
 def create_purchase_order(db, data, actor):
+    from services.purchase_requests import confirm_order
     key = str(data.get("idempotency_key") or "").strip()
     if not key:
         raise ValueError("idempotency_key e obrigatoria.")
     found = _row(db.execute(text("select id from erp_purchase_orders where idempotency_key=:key"), {"key": key}).first())
     if found:
+        confirm_order(db, str(found["id"]), data.get("purchase_request_ids") or [], actor)
+        db.commit()
         return {"id": str(found["id"]), "replayed": True}
     lines = data.get("lines") or []
     if not lines:
@@ -712,6 +715,7 @@ def create_purchase_order(db, data, actor):
             "id": order_id, "actor": actor,
         })
     db.execute(text("insert into erp_audit_events(entity_type,entity_id,action,actor,after_data) values ('PURCHASE_ORDER',:id,'EMITIDA',:actor,jsonb_build_object('numero_oc',cast(:numero as text)))"), {"id":order_id,"actor":actor,"numero":str(data.get("numero_oc") or "")})
+    confirm_order(db, order_id, data.get("purchase_request_ids") or [], actor)
     db.commit(); return {"id":order_id,"replayed":False}
 
 
@@ -811,6 +815,8 @@ def sync_legacy_purchase_order(db, data, actor):
     db.execute(text("""insert into erp_audit_events(entity_type,entity_id,action,actor,origin,after_data)
         values ('PURCHASE_ORDER',:id,'ATUALIZADA_ORIGEM_SUPRIMENTOS',:actor,'SUPRIMENTOS',jsonb_build_object('idempotency_key',cast(:key as text)))"""),
         {"id": order_id, "actor": actor, "key": key})
+    from services.purchase_requests import confirm_order
+    confirm_order(db, order_id, data.get("purchase_request_ids") or [], actor, updated=True)
     db.commit()
     return {"id": order_id, "replayed": False, "updated": True}
 
@@ -1893,6 +1899,8 @@ def cancel_purchase_order(db, order_id, actor, reason):
     db.execute(text("update erp_purchase_orders set status='CANCELADA',updated_at=now(),version=version+1 where id=:id"),{'id':order_id})
     db.execute(text("update erp_purchase_order_lines set status='CANCELADA' where purchase_order_id=:id"),{'id':order_id})
     db.execute(text("insert into erp_audit_events(entity_type,entity_id,action,actor,reason) values('PURCHASE_ORDER',:id,'CANCELADA',:actor,:reason)"),{'id':order_id,'actor':actor,'reason':reason or ''})
+    from services.purchase_requests import reopen_cancelled_order
+    reopen_cancelled_order(db, order_id, actor, reason)
     db.commit()
 
 

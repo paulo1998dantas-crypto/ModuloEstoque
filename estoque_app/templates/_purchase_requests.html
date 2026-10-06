@@ -1,0 +1,41 @@
+<link rel="stylesheet" href="/static/purchase_requests.css">
+<section class="pr-shell" id="purchase-request-app">
+  <div class="pr-heading"><div><h1>Solicitações de compra</h1><p>Reposição do almoxarifado e planejamento do PCP · conclusão mediante pedido confirmado.</p></div>
+  <div class="pr-actions"><a href="{{ request_config.purchases_url }}">Compras</a><button type="button" id="pr-reload">Atualizar</button></div></div>
+  <p id="pr-message" role="status" aria-live="polite"></p>
+  {% if request_config.can_submit %}
+  <details class="pr-panel" {% if request_config.origin == 'ESTOQUE' %}open{% endif %}>
+    <summary>+ Nova solicitação · {{ 'Reposição / Almoxarifado' if request_config.origin == 'ESTOQUE' else 'Planejamento / PCP' }}</summary>
+    <form id="pr-form" class="pr-form">
+      <label>Buscar SKU ou descrição<input id="pr-sku-search" placeholder="Digite código ou descrição" autocomplete="off"></label>
+      <label>SKU do cadastro<select id="pr-sku" required><option value="">Selecione um SKU ativo</option></select></label>
+      <label>Quantidade<input name="quantity" type="number" min="0.001" step="0.001" required></label>
+      <label>Data de necessidade<input name="needed_at" type="date" required></label>
+      <label>Referência / O.S. / setor<input name="reference" maxlength="255"></label>
+      <label class="pr-wide">Observações / justificativa<textarea name="notes" maxlength="4000" rows="2"></textarea></label>
+      <div class="pr-wide"><button id="pr-submit" type="submit">Enviar solicitação</button><small>Solicitante e horário são registrados automaticamente. Não movimenta estoque.</small></div>
+    </form>
+  </details>
+  {% endif %}
+  <div class="pr-metrics" id="pr-metrics"></div>
+  <section class="pr-panel">
+    <div class="pr-filters">
+      <label>Busca<input id="pr-search" placeholder="SKU, descrição, solicitante, referência ou pedido"></label>
+      <label>Status<select id="pr-status"><option value="">Todos</option><option value="SOLICITADA">Solicitada</option><option value="EM_COMPRAS">Em compras</option><option value="CONCLUIDA">Compra concluída</option><option value="CANCELADA">Cancelada</option></select></label>
+      <label>Origem<select id="pr-origin"><option value="">Todas</option><option value="ESTOQUE">Almoxarifado</option><option value="PCP">PCP</option></select></label>
+      <label>Necessidade de<input id="pr-from" type="date"></label><label>Até<input id="pr-to" type="date"></label>
+      <button type="button" id="pr-filter">Filtrar</button>
+      {% if request_config.can_manage %}<button type="button" id="pr-convert">Preparar pedido das selecionadas</button>{% endif %}
+    </div>
+    <p class="pr-note">“Compra concluída” confirma a emissão do pedido — não a entrega do material. Rascunhos não concluem solicitações.</p>
+    <div class="pr-table-wrap"><table class="pr-table"><thead><tr>
+      {% if request_config.can_manage %}<th>Selecionar</th>{% endif %}
+      <th>Solicitação</th><th>Origem</th><th>SKU</th><th>Descrição</th><th>Unidade</th><th>Quantidade</th><th>Necessidade</th><th>Status</th><th>Referência</th><th>Solicitante</th><th>Solicitada em</th><th>Comprador</th><th>Atualizada em</th><th>Pedido</th><th>Fornecedor</th><th>Status do pedido</th><th>Conclusão compras</th><th>Concluída por</th><th>Observações</th><th>Ações / histórico</th>
+    </tr></thead><tbody id="pr-rows"></tbody></table></div>
+    <div class="pr-pagination"><button id="pr-prev">Anterior</button><span id="pr-page"></span><button id="pr-next">Próxima</button></div>
+  </section>
+  <dialog id="pr-history"><div class="pr-heading"><h2>Rastreabilidade da solicitação</h2><button id="pr-close-history">Fechar</button></div><div id="pr-history-content"></div></dialog>
+</section>
+<script id="pr-config" type="application/json">{{ request_config|tojson }}</script>
+<script src="/static/purchase_requests.js" defer></script>
+

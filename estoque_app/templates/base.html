@@ -21,6 +21,9 @@
 
             <nav class="nav">
                 <span class="nav-section">Operacao</span>
+                {% if erp_feature_enabled %}
+                <a href="{{ url_for('purchase_requests.screen') }}" class="{% if request.endpoint == 'purchase_requests.screen' %}active{% endif %}">Solicitações de compra</a>
+                {% endif %}
                 {% if can('estoque.dashboard.view') %}
                 <a href="{{ url_for('dashboard') }}" class="{% if request.endpoint == 'dashboard' %}active{% endif %}">Dashboard</a>
                 {% endif %}

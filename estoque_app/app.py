@@ -2356,8 +2356,9 @@ def erp_create_purchase_order():
     try:
         result = create_purchase_order(db(), request.get_json(silent=True) or {}, user.username)
         return jsonify({"ok": True, **result}), 201 if not result["replayed"] else 200
-    except ValueError as exc:
-        return jsonify({"ok": False, "error": str(exc)}), 400
+    except (ValueError, PermissionError) as exc:
+        db().rollback()
+        return jsonify({"ok": False, "error": str(exc)}), 403 if isinstance(exc, PermissionError) else 400
 
 
 @app.route("/api/erp/receipts/pending")
@@ -2445,7 +2446,9 @@ def erp_cancel_purchase_order(order_id):
     try:
         cancel_purchase_order(db(), order_id, current_user().username, (request.get_json(silent=True) or {}).get("motivo", ""))
         return jsonify({"ok": True})
-    except ValueError as exc: return jsonify({"ok": False,"error":str(exc)}),400
+    except (ValueError, PermissionError) as exc:
+        db().rollback()
+        return jsonify({"ok": False,"error":str(exc)}),403 if isinstance(exc, PermissionError) else 400
 
 
 @app.route("/api/erp/purchase-orders/<order_id>/technical-close", methods=["POST"])
@@ -2627,14 +2630,23 @@ def _erp_actor_user(database, actor):
     )
 
 
+from purchase_request_routes import register as register_purchase_requests
+register_purchase_requests(app, db, current_user, _erp_internal_allowed,
+                           _erp_actor_user, erp_feature_required, login_required)
+
+
 @app.route("/api/erp/internal/purchase-orders", methods=["POST"])
 @erp_feature_required
 def erp_internal_create_purchase_order():
     if not _erp_internal_allowed(): return jsonify({"ok": False, "error": "Servico nao autorizado."}), 401
     database = db(); actor = request.headers.get("X-ERP-Actor", "ERP")
     try:
+        if (request.get_json(silent=True) or {}).get("purchase_request_ids") and not _erp_actor_user(database, actor):
+            return jsonify({"ok": False, "error": "Solicitante autenticado inválido."}), 403
         return jsonify({"ok": True, **create_purchase_order(database, request.get_json(silent=True) or {}, actor)})
-    except ValueError as exc: return jsonify({"ok": False, "error": str(exc)}), 400
+    except (ValueError, PermissionError) as exc:
+        database.rollback()
+        return jsonify({"ok": False, "error": str(exc)}), 403 if isinstance(exc, PermissionError) else 400
 
 
 @app.route("/api/erp/internal/purchase-orders/legacy-sync", methods=["POST"])
@@ -2643,10 +2655,12 @@ def erp_internal_sync_legacy_purchase_order():
     if not _erp_internal_allowed(): return jsonify({"ok": False, "error": "Servico nao autorizado."}), 401
     database = db(); actor = request.headers.get("X-ERP-Actor", "ERP")
     try:
+        if (request.get_json(silent=True) or {}).get("purchase_request_ids") and not _erp_actor_user(database, actor):
+            return jsonify({"ok": False, "error": "Solicitante autenticado inválido."}), 403
         return jsonify({"ok": True, **sync_legacy_purchase_order(database, request.get_json(silent=True) or {}, actor)})
-    except ValueError as exc:
+    except (ValueError, PermissionError) as exc:
         database.rollback()
-        return jsonify({"ok": False, "error": str(exc)}), 400
+        return jsonify({"ok": False, "error": str(exc)}), 403 if isinstance(exc, PermissionError) else 400
 
 
 @app.route("/api/erp/internal/purchase-orders/legacy-cancel", methods=["POST"])
@@ -2658,8 +2672,9 @@ def erp_internal_cancel_legacy_purchase_order():
         return jsonify({"ok": True, **cancel_purchase_order_by_idempotency_key(
             db(), payload.get("idempotency_key"), request.headers.get("X-ERP-Actor", "ERP"), payload.get("motivo", "")
         )})
-    except ValueError as exc:
-        return jsonify({"ok": False, "error": str(exc)}), 400
+    except (ValueError, PermissionError) as exc:
+        db().rollback()
+        return jsonify({"ok": False, "error": str(exc)}), 403 if isinstance(exc, PermissionError) else 400
 
 
 @app.route("/api/erp/internal/purchase-orders/legacy-close", methods=["POST"])
