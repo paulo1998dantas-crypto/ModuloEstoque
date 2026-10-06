@@ -1,10 +1,9 @@
 """Transactional ERP receipt service. It only uses the new erp_* tables."""
 from datetime import datetime
 from decimal import Decimal
-from collections import defaultdict
 from uuid import uuid4
 
-from sqlalchemy import Uuid, bindparam, inspect, text
+from sqlalchemy import Uuid, bindparam, text
 from sqlalchemy.exc import MultipleResultsFound
 
 from models import Movement, SKU
@@ -15,11 +14,7 @@ from services.estoque_service import (
     register_movement,
     to_decimal,
 )
-from services.work_order_needs_service import (
-    _bom_catalog,
-    _explode_leaf_requirements,
-    calculate_work_order_needs,
-)
+from services.work_order_needs_service import calculate_work_order_needs
 
 
 def _id():
@@ -1185,28 +1180,6 @@ def work_order_materials(db, work_order_id):
         work_order_id=work_order_id,
         pending_only=True,
     )
-    transit_by_component = _purchase_transit_by_component(
-        db,
-        {line["codigo"] for line in needs["lines"]},
-        str(work_order_id),
-    )
-    for line in needs["lines"]:
-        transit = transit_by_component.get(str(line["codigo"]).strip().upper(), [])
-        transit.sort(key=lambda item: (item["data_previsao"] is None, item["data_previsao"] or "", item["numero_oc"]))
-        line["pedidos_em_transito"] = transit
-        line["quantidade_em_transito"] = sum(
-            (item["quantidade_componente"] for item in transit), Decimal("0")
-        )
-        line["quantidade_em_transito_vinculada_os"] = sum(
-            (item["quantidade_componente"] for item in transit if item["vinculada_a_esta_os"]),
-            Decimal("0"),
-        )
-        line["quantidade_em_transito_compartilhada"] = (
-            line["quantidade_em_transito"] - line["quantidade_em_transito_vinculada_os"]
-        )
-        line["data_previsao_transito"] = next(
-            (item["data_previsao"] for item in transit if item["data_previsao"]), None
-        )
     return {
         "work_order": work_order,
         "totals": totals,
@@ -1214,79 +1187,6 @@ def work_order_materials(db, work_order_id):
         "pending_lines": needs["lines"],
         "need_summary": needs["summary"],
     }
-
-
-def _purchase_transit_by_component(db, needed_codes, work_order_id):
-    """Project open PO quantities onto the inventory leaf SKUs used by the cockpit.
-
-    PO quantities remain informational until receipt. A parent set/PP on the PO
-    is recursively expanded with the same current BOM used by the receipt
-    backflush, while direct PO lines continue to map to their own SKU.
-    """
-    normalized_needed = {str(code or "").strip().upper() for code in needed_codes if code}
-    if not normalized_needed:
-        return {}
-    bind = db.get_bind()
-    schema = None if bind.dialect.name == "sqlite" else "public"
-    inspector = inspect(bind)
-    if not all(
-        inspector.has_table(table, schema=schema)
-        for table in ("erp_purchase_orders", "erp_purchase_order_lines")
-    ):
-        return {}
-
-    _, children = _bom_catalog(db)
-    rows = db.execute(text("""
-        select o.id as purchase_order_id,o.numero_oc,o.fornecedor_nome,
-               coalesce(l.data_necessidade,o.data_necessidade) as data_previsao,
-               o.work_order_id as order_work_order_id,l.work_order_id as line_work_order_id,
-               l.sku_codigo,l.descricao_original,l.unidade,
-               l.quantidade_pedida,
-               coalesce(l.quantidade_recebida,0) as quantidade_recebida
-          from erp_purchase_order_lines l
-          join erp_purchase_orders o on o.id=l.purchase_order_id
-         where o.status in ('EMITIDA','PARCIALMENTE_RECEBIDA')
-           and coalesce(o.technical_status,'ABERTA') <> 'CONCLUIDA'
-           and coalesce(l.status,'PENDENTE') not in ('CANCELADA','RECEBIDA')
-           and l.quantidade_pedida > coalesce(l.quantidade_recebida,0)
-         order by coalesce(l.data_necessidade,o.data_necessidade) nulls last,
-                  o.numero_oc,l.numero_linha
-    """)).mappings()
-
-    result = defaultdict(list)
-    for raw in rows:
-        row = dict(raw)
-        source_code = str(row.get("sku_codigo") or "").strip().upper()
-        pending = max(
-            Decimal(str(row.get("quantidade_pedida") or 0))
-            - Decimal(str(row.get("quantidade_recebida") or 0)),
-            Decimal("0"),
-        )
-        if not source_code or pending <= 0:
-            continue
-        leaf_factors = _explode_leaf_requirements(source_code, Decimal("1"), children)
-        for component_code in normalized_needed.intersection(leaf_factors):
-            factor = leaf_factors[component_code]
-            component_quantity = pending * factor
-            if component_quantity <= 0:
-                continue
-            linked_work_order = row.get("line_work_order_id") or row.get("order_work_order_id")
-            linked_key = str(linked_work_order or "").replace("-", "").strip().lower()
-            current_key = str(work_order_id or "").replace("-", "").strip().lower()
-            result[component_code].append({
-                "purchase_order_id": str(row["purchase_order_id"]),
-                "numero_oc": str(row.get("numero_oc") or "").strip(),
-                "fornecedor_nome": str(row.get("fornecedor_nome") or "").strip(),
-                "sku_origem": source_code,
-                "descricao_origem": str(row.get("descricao_original") or "").strip(),
-                "unidade_origem": str(row.get("unidade") or "").strip(),
-                "quantidade_origem_pendente": pending,
-                "fator_bom_componente": factor,
-                "quantidade_componente": component_quantity,
-                "data_previsao": row.get("data_previsao"),
-                "vinculada_a_esta_os": bool(linked_key and linked_key == current_key),
-            })
-    return result
 
 
 def purchase_orders_dashboard(db, limit=1000):
