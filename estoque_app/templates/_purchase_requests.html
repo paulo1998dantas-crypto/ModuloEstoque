@@ -27,14 +27,21 @@
       <button type="button" id="pr-filter">Filtrar</button>
       {% if request_config.can_manage %}<button type="button" id="pr-convert">Preparar pedido das selecionadas</button>{% endif %}
     </div>
-    <p class="pr-note">PCP e Almoxarifado aparecem nesta mesma fila. O sistema identifica O.C. emitidas/parcialmente recebidas com saldo do mesmo SKU e vincula a mais próxima pela data de necessidade. Essas linhas entram como antecipação e não podem ser convertidas em uma nova O.C. pelo botão abaixo; o contato com o fornecedor continua sendo feito pelo comprador e pode ser registrado na observação/histórico. “Compra concluída” confirma a emissão do pedido — não a entrega do material.</p>
+    <p class="pr-note">PCP e Almoxarifado aparecem nesta mesma fila. O sistema identifica O.C. emitidas/parcialmente recebidas com saldo do mesmo SKU e vincula a mais próxima pela data de necessidade. Para encerrar uma antecipação, o comprador registra a nova data negociada e o retorno do fornecedor; a solicitação fica vinculada à O.C. existente. A data original da O.C. não é alterada automaticamente.</p>
     <div class="pr-table-wrap"><table class="pr-table"><thead><tr>
       {% if request_config.can_manage %}<th>Selecionar</th>{% endif %}
-      <th>Solicitação</th><th>Origem</th><th>Classificação</th><th>SKU</th><th>Descrição</th><th>Unidade</th><th>Quantidade</th><th>Necessidade</th><th>Status</th><th>Referência</th><th>Solicitante</th><th>Solicitada em</th><th>Comprador</th><th>Atualizada em</th><th>Pedido existente / criado</th><th>Fornecedor</th><th>Status do pedido</th><th>Saldo pendente no pedido</th><th>Conclusão compras</th><th>Concluída por</th><th>Observações</th><th>Ações / histórico</th>
+      <th>Solicitação</th><th>Origem</th><th>Classificação</th><th>SKU</th><th>Descrição</th><th>Unidade</th><th>Quantidade</th><th>Necessidade</th><th>Status</th><th>Referência</th><th>Solicitante</th><th>Solicitada em</th><th>Comprador</th><th>Atualizada em</th><th>Pedido existente / criado</th><th>Fornecedor</th><th>Status do pedido</th><th>Saldo pendente no pedido</th><th>Nova data negociada</th><th>Conclusão compras</th><th>Concluída por</th><th>Observações</th><th>Ações / histórico</th>
     </tr></thead><tbody id="pr-rows"></tbody></table></div>
     <div class="pr-pagination"><button id="pr-prev">Anterior</button><span id="pr-page"></span><button id="pr-next">Próxima</button></div>
   </section>
   <dialog id="pr-history"><div class="pr-heading"><h2>Rastreabilidade da solicitação</h2><button id="pr-close-history">Fechar</button></div><div id="pr-history-content"></div></dialog>
+  <dialog id="pr-confirm-anticipation" class="pr-confirm-dialog">
+    <div class="pr-heading"><div><h2>Confirmar antecipação negociada</h2><p>Preencha os dados acordados com o fornecedor para encerrar a solicitação.</p></div><button type="button" id="pr-confirm-anticipation-cancel">Cancelar</button></div>
+    <p id="pr-confirm-anticipation-order" class="pr-note"></p>
+    <label>Nova data de entrega negociada<input id="pr-confirm-anticipation-date" type="date" required></label>
+    <label>Protocolo / retorno do fornecedor<textarea id="pr-confirm-anticipation-reason" maxlength="4000" rows="4" required placeholder="Registre a confirmação do fornecedor e as condições negociadas"></textarea></label>
+    <div class="pr-actions"><button type="button" id="pr-confirm-anticipation-save">Confirmar e encerrar solicitação</button></div>
+  </dialog>
 </section>
 <script id="pr-config" type="application/json">{{ request_config|tojson }}</script>
 <script src="/static/purchase_requests.js" defer></script>

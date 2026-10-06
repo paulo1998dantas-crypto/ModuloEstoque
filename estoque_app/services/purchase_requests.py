@@ -30,6 +30,7 @@ requests = Table("erp_purchase_requests", metadata,
     Column("buyer_id", Integer), Column("buyer", String(80)),
     Column("purchase_order_id", Uuid(as_uuid=False)),
     Column("anticipation_order_id", Uuid(as_uuid=False)),
+    Column("anticipation_confirmed_delivery_date", Date),
     Column("completed_at", DateTime(timezone=True)),
     Column("completed_by", String(80)),
     Column("version", Integer, nullable=False),
@@ -160,6 +161,7 @@ def create(db, payload, user, origin):
     anticipation = closest_active_order(db, sku.sku, needed)
     row = dict(id=str(uuid4()), origin=origin, request_type=("ANTECIPACAO" if anticipation else "COMPRA_NOVA"),
         anticipation_order_id=(str(anticipation["id"]) if anticipation else None),
+        anticipation_confirmed_delivery_date=None,
         sku_id=sku.id, sku_codigo=sku.sku,
         descricao=sku.descricao, unidade=sku.unidade or "UN", quantity=quantity,
         needed_at=needed, reference=reference, notes=notes, status="SOLICITADA",
@@ -218,7 +220,8 @@ def listing(db, filters):
                        anticipated_order.c.fornecedor_nome.label("anticipation_fornecedor_nome"),
                        anticipated_order.c.status.label("anticipation_purchase_status"),
                        pending_by_order_sku.c.pending_quantity.label("anticipation_pending_quantity"),
-                       pending_by_order_sku.c.delivery_date.label("anticipation_delivery_date")).select_from(
+                       pending_by_order_sku.c.delivery_date.label("anticipation_delivery_date"),
+                       requests.c.anticipation_confirmed_delivery_date).select_from(
         requests.outerjoin(orders, join_condition).outerjoin(anticipated_order, anticipation_join)
         .outerjoin(pending_by_order_sku,
                    order_condition(db, pending_by_order_sku.c.purchase_order_id, anticipated_order.c.id) &
@@ -291,6 +294,27 @@ def transition(db, request_id, payload, user):
         status = "EM_COMPRAS"
     elif action == "SOLICITAR_ANTECIPACAO" and row["status"] == "SOLICITADA" and row["request_type"] == "ANTECIPACAO":
         status = "EM_COMPRAS"
+    elif action == "CONFIRMAR_ANTECIPACAO" and row["status"] == "EM_COMPRAS" and row["request_type"] == "ANTECIPACAO":
+        try:
+            confirmed_date = date.fromisoformat(str(payload.get("confirmed_delivery_date") or ""))
+        except ValueError:
+            raise ValueError("Informe a nova data de entrega negociada.")
+        order = db.execute(select(orders).where(
+            order_condition(db, orders.c.id, row["anticipation_order_id"])
+        ).with_for_update()).mappings().first() if row["anticipation_order_id"] else None
+        if not order or order["status"] not in {"EMITIDA", "PARCIALMENTE_RECEBIDA"} or not str(order["numero_oc"] or "").strip():
+            raise ValueError("A antecipação exige uma O.C. válida e ainda vigente.")
+        pending_statement = select(func.sum(case(
+            (lines.c.quantidade_pedida > lines.c.quantidade_recebida,
+             lines.c.quantidade_pedida - lines.c.quantidade_recebida), else_=0)
+        )).where(
+            order_condition(db, lines.c.purchase_order_id, row["anticipation_order_id"]),
+            lines.c.sku_codigo == row["sku_codigo"],
+            lines.c.status.notin_(["CANCELADA", "RECEBIDA"]))
+        pending_quantity = db.execute(pending_statement).scalar() or Decimal(0)
+        if Decimal(str(pending_quantity)) < Decimal(str(row["quantity"])):
+            raise ValueError("A O.C. vigente não tem saldo pendente suficiente deste SKU para atender a solicitação.")
+        status = "CONCLUIDA"
     elif action == "CONVERTER_NOVA_COMPRA" and row["status"] in {"SOLICITADA", "EM_COMPRAS"} and row["request_type"] == "ANTECIPACAO":
         status = row["status"]
     elif action == "CANCELAR" and row["status"] in {"SOLICITADA", "EM_COMPRAS"}:
@@ -305,13 +329,19 @@ def transition(db, request_id, payload, user):
     row.update(status=status, updated_at=now(), version=row["version"]+1)
     if action in {"ASSUMIR", "SOLICITAR_ANTECIPACAO"}:
         row.update(buyer_id=user.id, buyer=user.username)
+    elif action == "CONFIRMAR_ANTECIPACAO":
+        row.update(status="CONCLUIDA", purchase_order_id=row["anticipation_order_id"],
+                   anticipation_confirmed_delivery_date=confirmed_date,
+                   completed_at=now(), completed_by=user.username,
+                   buyer_id=user.id, buyer=user.username)
     elif action == "CONVERTER_NOVA_COMPRA":
         row.update(request_type="COMPRA_NOVA", anticipation_order_id=None,
                    buyer_id=user.id, buyer=user.username)
     elif action == "REABRIR":
         row.update(buyer_id=None, buyer=None)
     db.execute(requests.update().where(requests.c.id == row["id"]).values(**row))
-    audit(db, row, user, action, before, reason)
+    audit(db, dict(row, purchase_order=encode(dict(order))) if action == "CONFIRMAR_ANTECIPACAO" else row,
+          user, action, before, reason)
     return {"request": encode(row)}
 
 def actor_user(db, actor):
@@ -378,6 +408,9 @@ def reopen_cancelled_order(db, order_id, actor, reason):
         row.update(status="SOLICITADA", purchase_order_id=None, completed_at=None,
                    completed_by=None, buyer_id=None, buyer=None, updated_at=now(),
                    version=row["version"]+1)
+        if row["request_type"] == "ANTECIPACAO" and row["anticipation_order_id"] == str(order_id):
+            row.update(request_type="COMPRA_NOVA", anticipation_order_id=None,
+                       anticipation_confirmed_delivery_date=None)
         db.execute(requests.update().where(requests.c.id == row["id"]).values(**row))
         audit(db, row, user, "PEDIDO_CANCELADO_REABERTURA", before, reason)
 

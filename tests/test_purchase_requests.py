@@ -85,6 +85,26 @@ class PurchaseRequestTests(unittest.TestCase):
         self.assertEqual("COMPRA_NOVA",converted["request_type"])
         self.assertEqual(1,len(pr.prepare(self.db,[row["id"]],self.buyer)["items"]))
 
+    def test_anticipation_closes_only_with_valid_order_date_and_supplier_return(self):
+        order_data=legacy.ErpSkuResolutionTest._payload(str(uuid4()),"MAT-001","8")
+        order_data["data_necessidade"]="2026-10-14"
+        order=create_purchase_order(self.db,order_data,self.buyer.username)
+        row=self.request(quantity="2",needed_at="2026-10-15")
+        self.assertEqual("ANTECIPACAO",row["request_type"])
+        working=pr.transition(self.db,row["id"],{"action":"SOLICITAR_ANTECIPACAO","version":row["version"],"reason":"Fornecedor consultado; protocolo 456"},self.buyer)["request"]
+        self.db.commit()
+        with self.assertRaisesRegex(ValueError,"nova data de entrega"):
+            pr.transition(self.db,row["id"],{"action":"CONFIRMAR_ANTECIPACAO","version":working["version"],"confirmed_delivery_date":"","reason":"Fornecedor confirmou"},self.buyer)
+        closed=pr.transition(self.db,row["id"],{"action":"CONFIRMAR_ANTECIPACAO","version":working["version"],"confirmed_delivery_date":"2026-10-10","reason":"Fornecedor confirmou por telefone; protocolo 789"},self.buyer)["request"]
+        self.db.commit()
+        self.assertEqual("CONCLUIDA",closed["status"])
+        self.assertEqual(order["id"],closed["purchase_order_id"])
+        self.assertEqual("2026-10-10",closed["anticipation_confirmed_delivery_date"])
+        self.assertEqual("2026-10-10",pr.listing(self.db,{})["items"][0]["anticipation_confirmed_delivery_date"])
+        event=pr.history(self.db,row["id"])["events"][-1]
+        self.assertEqual("CONFIRMAR_ANTECIPACAO",event["action"])
+        self.assertIn("protocolo 789",event["reason"])
+
     def test_closed_or_fully_received_order_does_not_trigger_anticipation(self):
         data=legacy.ErpSkuResolutionTest._payload(str(uuid4()),"MAT-001","2")
         order=create_purchase_order(self.db,data,self.buyer.username)
