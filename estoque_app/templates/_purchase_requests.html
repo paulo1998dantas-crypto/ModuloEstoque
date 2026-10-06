@@ -27,10 +27,10 @@
       <button type="button" id="pr-filter">Filtrar</button>
       {% if request_config.can_manage %}<button type="button" id="pr-convert">Preparar pedido das selecionadas</button>{% endif %}
     </div>
-    <p class="pr-note">“Compra concluída” confirma a emissão do pedido — não a entrega do material. Rascunhos não concluem solicitações.</p>
+    <p class="pr-note">PCP e Almoxarifado aparecem nesta mesma fila. O sistema identifica O.C. emitidas/parcialmente recebidas com saldo do mesmo SKU e vincula a mais próxima pela data de necessidade. Essas linhas entram como antecipação e não podem ser convertidas em uma nova O.C. pelo botão abaixo; o contato com o fornecedor continua sendo feito pelo comprador e pode ser registrado na observação/histórico. “Compra concluída” confirma a emissão do pedido — não a entrega do material.</p>
     <div class="pr-table-wrap"><table class="pr-table"><thead><tr>
       {% if request_config.can_manage %}<th>Selecionar</th>{% endif %}
-      <th>Solicitação</th><th>Origem</th><th>SKU</th><th>Descrição</th><th>Unidade</th><th>Quantidade</th><th>Necessidade</th><th>Status</th><th>Referência</th><th>Solicitante</th><th>Solicitada em</th><th>Comprador</th><th>Atualizada em</th><th>Pedido</th><th>Fornecedor</th><th>Status do pedido</th><th>Conclusão compras</th><th>Concluída por</th><th>Observações</th><th>Ações / histórico</th>
+      <th>Solicitação</th><th>Origem</th><th>Classificação</th><th>SKU</th><th>Descrição</th><th>Unidade</th><th>Quantidade</th><th>Necessidade</th><th>Status</th><th>Referência</th><th>Solicitante</th><th>Solicitada em</th><th>Comprador</th><th>Atualizada em</th><th>Pedido existente / criado</th><th>Fornecedor</th><th>Status do pedido</th><th>Saldo pendente no pedido</th><th>Conclusão compras</th><th>Concluída por</th><th>Observações</th><th>Ações / histórico</th>
     </tr></thead><tbody id="pr-rows"></tbody></table></div>
     <div class="pr-pagination"><button id="pr-prev">Anterior</button><span id="pr-page"></span><button id="pr-next">Próxima</button></div>
   </section>

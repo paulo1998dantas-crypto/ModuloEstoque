@@ -23,24 +23,31 @@ function render(){
  const body=$("pr-rows");body.replaceChildren();
  for(const row of rows){
   const tr=node("tr");const pending=["SOLICITADA","EM_COMPRAS"].includes(row.status);
-  if(cfg.can_manage){const cell=node("td"),check=node("input");check.type="checkbox";check.value=row.id;check.className="pr-select";check.disabled=!pending;cell.append(check);tr.append(cell);}
-  const values=["SOL-"+row.id.slice(0,8).toUpperCase(),row.origin==="ESTOQUE"?"Almoxarifado":"PCP",row.sku_codigo,row.descricao,row.unidade,qty(row.quantity),date(row.needed_at),row.status,row.reference,row.requested_by,date(row.created_at),row.buyer||"—",date(row.updated_at),row.numero_oc||"—",row.fornecedor_nome||"—",row.purchase_status||"—",date(row.completed_at),row.completed_by||"—",row.notes];
+  const anticipation=row.request_type==="ANTECIPACAO";
+  if(cfg.can_manage){const cell=node("td"),check=node("input");check.type="checkbox";check.value=row.id;check.className="pr-select";check.disabled=!pending||anticipation;check.title=anticipation?"Esta solicitação deve ser tratada como antecipação do pedido vigente.":"";cell.append(check);tr.append(cell);}
+  const orderNumber=row.numero_oc||row.anticipation_numero_oc;
+  const supplier=row.fornecedor_nome||row.anticipation_fornecedor_nome;
+  const orderStatus=row.purchase_status||row.anticipation_purchase_status;
+  const values=["SOL-"+row.id.slice(0,8).toUpperCase(),row.origin==="ESTOQUE"?"Almoxarifado":"PCP",anticipation?"ANTECIPAÇÃO":"NOVA COMPRA",row.sku_codigo,row.descricao,row.unidade,qty(row.quantity),date(row.needed_at),row.status,row.reference,row.requested_by,date(row.created_at),row.buyer||"—",date(row.updated_at),orderNumber?(anticipation&&!row.numero_oc?"Antecipar · OC "+orderNumber:orderNumber):"—",supplier||"—",orderStatus||"—",anticipation?qty(row.anticipation_pending_quantity||0):"—",date(row.completed_at),row.completed_by||"—",row.notes];
   values.forEach((value,index)=>{
    const cell=node("td",value||"—");
-   if(index===7){cell.replaceChildren(node("span",labels[row.status]||row.status,"pr-badge "+row.status));}
-   if(index===6&&pending&&row.needed_at<today())cell.className="pr-overdue";
+   if(index===2){const badge=node("span",value,"pr-badge "+(anticipation?"ANTECIPACAO":"COMPRA_NOVA"));if(anticipation){badge.style.background="#fff0d1";badge.style.color="#804900";}cell.replaceChildren(badge);}
+   if(index===8){cell.replaceChildren(node("span",labels[row.status]||row.status,"pr-badge "+row.status));}
+   if(index===7&&pending&&row.needed_at<today())cell.className="pr-overdue";
+   if(index===14&&anticipation){cell.title="Pedido mais próximo da data de necessidade: "+date(row.anticipation_delivery_date);}
    tr.append(cell);
   });
   const actions=node("td");actions.append(button("Histórico",()=>showHistory(row.id)));
   if(cfg.can_manage){
-   if(row.status==="SOLICITADA")actions.append(button("Assumir",()=>act(row,"ASSUMIR")));
+   if(row.status==="SOLICITADA")actions.append(button(anticipation?"Registrar solicitação ao fornecedor":"Assumir",()=>act(row,anticipation?"SOLICITAR_ANTECIPACAO":"ASSUMIR")));
+   if(anticipation&&pending)actions.append(button("Converter em nova O.C.",()=>act(row,"CONVERTER_NOVA_COMPRA")));
    if(pending)actions.append(button("Cancelar",()=>act(row,"CANCELAR")));
    if(row.status==="CANCELADA")actions.append(button("Reabrir",()=>act(row,"REABRIR")));
    actions.append(button("Observação",()=>act(row,"OBSERVACAO")));
   }
   tr.append(actions);body.append(tr);
  }
- if(!rows.length){const tr=node("tr"),td=node("td","Nenhuma solicitação para os filtros selecionados.");td.colSpan=21;tr.append(td);body.append(tr);}
+ if(!rows.length){const tr=node("tr"),td=node("td","Nenhuma solicitação para os filtros selecionados.");td.colSpan=cfg.can_manage?23:22;tr.append(td);body.append(tr);}
  $("pr-page").textContent=total+" solicitações · página "+page+" de "+Math.max(1,Math.ceil(total/100));
  $("pr-prev").disabled=page<=1;$("pr-next").disabled=page*100>=total;
 }
@@ -76,7 +83,7 @@ async function showHistory(id){
  }catch(e){message(e.message,true);}
 }
 async function act(row,action){
- const reason=prompt(action==="OBSERVACAO"?"Observação para a linha do tempo:":"Informe o motivo para "+action.toLowerCase()+":");
+ const reason=prompt(action==="OBSERVACAO"?"Observação/retorno do fornecedor para a linha do tempo:":action==="SOLICITAR_ANTECIPACAO"?"Após contatar o fornecedor sobre a antecipação da OC indicada, informe o protocolo ou retorno. O sistema registra o contato, mas não envia mensagem ao fornecedor:":action==="CONVERTER_NOVA_COMPRA"?"Justifique por que a antecipação não atende e esta solicitação precisa virar uma nova O.C.:":"Informe o motivo para "+action.toLowerCase()+":");
  if(!reason||!reason.trim())return;
  try{await api("/"+encodeURIComponent(row.id)+"/action",{action,reason,version:row.version});message("Atualização registrada no histórico.");await load();}catch(e){message(e.message,true);}
 }
@@ -105,7 +112,7 @@ if($("pr-form")){
   event.preventDefault();if(loading)return;
   const payload=Object.fromEntries(new FormData(event.target));payload.sku_codigo=$("pr-sku").value;payload.idempotency_key=key;
   loading=true;$("pr-submit").disabled=true;
-  try{const data=await api("",payload);key=crypto.randomUUID();event.target.reset();message("Solicitação SOL-"+data.request.id.slice(0,8).toUpperCase()+" enviada e registrada no histórico.");page=1;await load();}
+  try{const data=await api("",payload);key=crypto.randomUUID();event.target.reset();message(data.request.request_type==="ANTECIPACAO"?"Solicitação SOL-"+data.request.id.slice(0,8).toUpperCase()+" identificada como ANTECIPAÇÃO do pedido "+(data.anticipation_order?.numero_oc||"já vigente")+" e encaminhada à fila do comprador.":"Solicitação SOL-"+data.request.id.slice(0,8).toUpperCase()+" enviada e registrada no histórico.");page=1;await load();}
   catch(e){message(e.message,true);}
   finally{loading=false;$("pr-submit").disabled=false;}
  };

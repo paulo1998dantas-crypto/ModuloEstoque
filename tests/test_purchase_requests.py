@@ -56,6 +56,44 @@ class PurchaseRequestTests(unittest.TestCase):
         self.assertEqual(a["id"],b["id"])
         self.assertEqual(1,self.db.execute(select(func.count()).select_from(pr.events)).scalar())
 
+    def test_open_po_auto_routes_request_to_nearest_order_for_anticipation(self):
+        earlier_data=legacy.ErpSkuResolutionTest._payload(str(uuid4()),"MAT-001","8")
+        earlier_data["data_necessidade"]="2026-10-12"
+        earlier=create_purchase_order(self.db,earlier_data,self.buyer.username)
+        nearer_data=legacy.ErpSkuResolutionTest._payload(str(uuid4()),"MAT-001","5")
+        nearer_data["data_necessidade"]="2026-10-14"
+        nearer=create_purchase_order(self.db,nearer_data,self.buyer.username)
+        row=self.request(quantity="2",needed_at="2026-10-15")
+        self.assertEqual("ANTECIPACAO",row["request_type"])
+        self.assertEqual(nearer["id"],row["anticipation_order_id"])
+        listed=pr.listing(self.db,{})["items"][0]
+        nearer_number=self.db.execute(text("select numero_oc from erp_purchase_orders where id=:id"),{"id":nearer["id"]}).scalar_one()
+        self.assertEqual(nearer_number,listed["anticipation_numero_oc"])
+        self.assertEqual("5.000",listed["anticipation_pending_quantity"])
+        history=pr.history(self.db,row["id"])["events"][0]
+        self.assertEqual("ANTECIPACAO_IDENTIFICADA",history["action"])
+        self.assertIn(nearer_number,history["reason"])
+        treated=pr.transition(self.db,row["id"],{"action":"SOLICITAR_ANTECIPACAO","version":1,"reason":"Fornecedor consultado; protocolo 123"},self.buyer)["request"]
+        self.db.commit()
+        self.assertEqual("EM_COMPRAS",treated["status"])
+        self.assertEqual("COMPRADOR",treated["buyer"])
+        self.assertEqual("SOLICITAR_ANTECIPACAO",pr.history(self.db,row["id"])["events"][-1]["action"])
+        with self.assertRaisesRegex(ValueError,"antecipação"):
+            pr.prepare(self.db,[row["id"]],self.buyer)
+        converted=pr.transition(self.db,row["id"],{"action":"CONVERTER_NOVA_COMPRA","version":treated["version"],"reason":"Fornecedor não consegue antecipar"},self.buyer)["request"]
+        self.db.commit()
+        self.assertEqual("COMPRA_NOVA",converted["request_type"])
+        self.assertEqual(1,len(pr.prepare(self.db,[row["id"]],self.buyer)["items"]))
+
+    def test_closed_or_fully_received_order_does_not_trigger_anticipation(self):
+        data=legacy.ErpSkuResolutionTest._payload(str(uuid4()),"MAT-001","2")
+        order=create_purchase_order(self.db,data,self.buyer.username)
+        self.db.execute(text("update erp_purchase_order_lines set quantidade_recebida=quantidade_pedida,status='RECEBIDA' where purchase_order_id=:id"),{"id":order["id"]})
+        self.db.commit()
+        row=self.request()
+        self.assertEqual("COMPRA_NOVA",row["request_type"])
+        self.assertIsNone(row["anticipation_order_id"])
+
     def test_quantity_validation(self):
         for qty in ("0","-1","NaN","Infinity","0.0001","9999999999999999"):
             with self.subTest(qty=qty),self.assertRaises(ValueError):
