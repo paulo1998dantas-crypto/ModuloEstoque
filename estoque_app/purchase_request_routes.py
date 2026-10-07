@@ -56,13 +56,15 @@ def register(app, get_db, get_user, internal_allowed, internal_user, feature_req
     @feature_required
     def screen():
         user = get_user()
+        can_submit = False
         try:
             workflow.require_origin(get_db(), user, "ESTOQUE")
             can_submit = True
         except PermissionError: can_submit = False
         return render_template("purchase_requests.html", request_config={
             "api": "/api/erp/purchase-requests", "origin": "ESTOQUE",
-            "can_submit": can_submit, "can_manage": False, "user_id": user.id,
+            "can_submit": can_submit, "can_edit_origin": can_submit,
+            "can_manage": False, "user_id": user.id,
             "csrf": token(),
             "purchases_url": (app.config.get("ERP_SUPRIMENTOS_URL", "") or
                 __import__("config").Config.ERP_SUPRIMENTOS_URL).rstrip("/") + "/erp/solicitacoes"})
@@ -108,6 +110,12 @@ def register(app, get_db, get_user, internal_allowed, internal_user, feature_req
     @bp.route("/api/erp/internal/purchase-requests/<request_id>/action", methods=["POST"])
     @feature_required
     def action(request_id):
+        return execute(lambda db, user: workflow.transition(db, request_id, request.get_json(silent=True) or {}, user), True)
+
+    @bp.route("/api/erp/purchase-requests/<request_id>/action", methods=["POST"])
+    @login_required
+    @feature_required
+    def user_action(request_id):
         return execute(lambda db, user: workflow.transition(db, request_id, request.get_json(silent=True) or {}, user), True)
 
     app.register_blueprint(bp)

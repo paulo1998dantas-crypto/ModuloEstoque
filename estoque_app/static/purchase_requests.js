@@ -40,7 +40,8 @@ function render(){
   });
   const actions=node("td");actions.append(button("Histórico",()=>showHistory(row.id)));
   const isOwner=String(row.requested_by_id)===String(cfg.user_id);
-  const canEditRequest=pending&&(cfg.can_manage||(isOwner&&row.status==="SOLICITADA"));
+  const canEditOrigin=cfg.can_edit_origin&&row.origin===cfg.origin&&row.status==="SOLICITADA";
+  const canEditRequest=pending&&(cfg.can_manage||canEditOrigin||(isOwner&&row.status==="SOLICITADA"));
   if(canEditRequest){actions.append(button("Editar",()=>openEdit(row)));actions.append(button("Excluir",()=>excludeRequest(row)));}
   if(cfg.can_manage){
    if(row.status==="SOLICITADA")actions.append(button(anticipation?"Registrar solicitação ao fornecedor":"Assumir",()=>act(row,anticipation?"SOLICITAR_ANTECIPACAO":"ASSUMIR")));

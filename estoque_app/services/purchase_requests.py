@@ -10,6 +10,7 @@ from models import SKU, User
 from auth import effective_roles, can
 
 metadata = MetaData()
+_UNSET = object()
 requests = Table("erp_purchase_requests", metadata,
     Column("id", String(36), primary_key=True),
     Column("origin", String(20), nullable=False),
@@ -103,10 +104,10 @@ def require_request_editor(db, row, user):
         if row["status"] not in {"SOLICITADA", "EM_COMPRAS"} or row.get("purchase_order_id"):
             raise ValueError("Só é possível editar/excluir solicitações ainda pendentes.")
         return
-    if not user or not user.active or row["requested_by_id"] != user.id:
-        raise PermissionError("Somente o solicitante ou o comprador pode editar/excluir esta solicitação.")
     if row["status"] != "SOLICITADA" or row.get("purchase_order_id"):
-        raise ValueError("O solicitante só pode editar/excluir antes de o comprador assumir a solicitação.")
+        raise ValueError("Usuários não compradores só podem editar/excluir antes de o comprador assumir a solicitação.")
+    if not user or not user.active:
+        raise PermissionError("Usuário ativo obrigatório para editar/excluir a solicitação.")
     require_origin(db, user, row["origin"])
 
 def editable_request_fields(db, payload):
@@ -208,30 +209,137 @@ def create(db, payload, user, origin):
     return {"request": encode(row), "replayed": False,
             "anticipation_order": encode(anticipation) if anticipation else None}
 
-def closest_active_order(db, sku_code, needed_at):
-    """Choose the active PO line for the same SKU whose due date is nearest the need date."""
-    rows = db.execute(select(
-        orders.c.id, orders.c.numero_oc, orders.c.status, orders.c.fornecedor_nome,
+def _as_date(value):
+    if isinstance(value, datetime):
+        return value.date()
+    if isinstance(value, date):
+        return value
+    if isinstance(value, str):
+        try:
+            return date.fromisoformat(value[:10])
+        except ValueError:
+            return None
+    return None
+
+def _bom_leaf_factors(db, sku, cache, ancestry=()):
+    """Return leaf SKU quantities per one purchased SKU, using receipt semantics."""
+    from services.estoque_service import bom_components_for_sku, is_bom_manufacturing_sku
+    if sku.id in ancestry:
+        raise ValueError(f"B.O.M. cíclica detectada para {sku.sku}.")
+    if sku.id in cache:
+        return cache[sku.id]
+    components = bom_components_for_sku(db, sku) if is_bom_manufacturing_sku(sku) else []
+    if not components:
+        result = {sku.sku: Decimal("1")}
+        cache[sku.id] = result
+        return result
+    result = {}
+    next_ancestry = (*ancestry, sku.id)
+    for component in components:
+        child = component.component_sku
+        if not child or not child.active:
+            raise ValueError(f"B.O.M. possui componente inexistente ou inativo para {sku.sku}.")
+        try:
+            quantity = Decimal(str(component.quantidade))
+        except (InvalidOperation, TypeError):
+            raise ValueError(f"B.O.M. possui quantidade inválida para {child.sku}.")
+        if not quantity.is_finite() or quantity <= 0:
+            raise ValueError(f"B.O.M. possui quantidade inválida para {child.sku}.")
+        for leaf_code, factor in _bom_leaf_factors(db, child, cache, next_ancestry).items():
+            result[leaf_code] = result.get(leaf_code, Decimal("0")) + quantity * factor
+    cache[sku.id] = result
+    return result
+
+def _active_order_lines(db, order_id=None, exclude_order_id=None):
+    statement = select(
+        lines.c.purchase_order_id, lines.c.sku_codigo,
+        lines.c.quantidade_pedida, lines.c.quantidade_recebida,
         func.coalesce(lines.c.data_necessidade, orders.c.data_necessidade).label("delivery_date"),
-        (lines.c.quantidade_pedida - lines.c.quantidade_recebida).label("pending_quantity"),
-    ).select_from(lines.join(orders, order_condition(db, lines.c.purchase_order_id, orders.c.id)))
-      .where(lines.c.sku_codigo == sku_code,
-             orders.c.status.in_(["EMITIDA", "PARCIALMENTE_RECEBIDA"]),
+        orders.c.numero_oc, orders.c.status, orders.c.fornecedor_nome,
+    ).select_from(lines.join(orders, order_condition(db, lines.c.purchase_order_id, orders.c.id)))\
+      .where(orders.c.status.in_(["EMITIDA", "PARCIALMENTE_RECEBIDA"]),
              lines.c.status.notin_(["CANCELADA", "RECEBIDA"]),
-             lines.c.quantidade_pedida > lines.c.quantidade_recebida)).mappings().all()
-    if not rows:
+             lines.c.quantidade_pedida > lines.c.quantidade_recebida)
+    if order_id:
+        statement = statement.where(order_condition(db, lines.c.purchase_order_id, order_id))
+    if exclude_order_id:
+        statement = statement.where(~order_condition(db, lines.c.purchase_order_id, exclude_order_id))
+    return db.execute(statement).mappings().all()
+
+def _order_component_balances(db, sku_code, needed_at=None, order_id=None,
+                              rows=None, factor_cache=None, sku_cache=None):
+    """Aggregate open PO coverage for a leaf SKU, including recursively exploded kits."""
+    rows = _active_order_lines(db, order_id) if rows is None else rows
+    balances = {}
+    factor_cache = factor_cache if factor_cache is not None else {}
+    sku_cache = sku_cache if sku_cache is not None else {}
+    for line in rows:
+        if order_id and str(line["purchase_order_id"]) != str(order_id):
+            continue
+        parent_code = str(line["sku_codigo"] or "").strip()
+        if not parent_code:
+            continue
+        parent = sku_cache.get(parent_code)
+        if parent is None:
+            parent = db.query(SKU).filter(SKU.sku == parent_code).one_or_none()
+            sku_cache[parent_code] = parent
+        if not parent:
+            if parent_code == sku_code:
+                factor = Decimal("1")
+            else:
+                continue
+        else:
+            try:
+                # A purchased PP/CJ with a BOM is not itself a stockable receipt:
+                # only its recursively exploded leaf components cover the request.
+                factor = _bom_leaf_factors(db, parent, factor_cache).get(sku_code, Decimal("0"))
+            except ValueError:
+                # An invalid/cyclic BOM cannot safely promise component coverage.
+                continue
+        if factor <= 0:
+            continue
+        remaining_parent = Decimal(str(line["quantidade_pedida"] or 0)) - Decimal(str(line["quantidade_recebida"] or 0))
+        pending = remaining_parent * factor
+        if pending <= 0:
+            continue
+        key = str(line["purchase_order_id"])
+        balance = balances.setdefault(key, {
+            "id": key, "numero_oc": line["numero_oc"], "status": line["status"],
+            "fornecedor_nome": line["fornecedor_nome"],
+            "pending_quantity": Decimal("0"), "delivery_date": None,
+        })
+        balance["pending_quantity"] += pending
+        due = _as_date(line["delivery_date"])
+        current = balance["delivery_date"]
+        if due and (current is None or (needed_at is None and due < current) or
+                    (needed_at is not None and abs((due-needed_at).days) < abs((current-needed_at).days))):
+            balance["delivery_date"] = due
+    return balances
+
+def order_component_pending(db, order_id, sku_code, rows=None,
+                            factor_cache=None, sku_cache=None):
+    balance = _order_component_balances(
+        db, sku_code, order_id=order_id, rows=rows,
+        factor_cache=factor_cache, sku_cache=sku_cache,
+    ).get(str(order_id))
+    return balance or {"pending_quantity": Decimal("0"), "delivery_date": None}
+
+def closest_active_order(db, sku_code, needed_at, rows=None,
+                         factor_cache=None, sku_cache=None):
+    """Choose the nearest active order covering the item directly or via a kit B.O.M."""
+    balances = list(_order_component_balances(
+        db, sku_code, needed_at, rows=rows,
+        factor_cache=factor_cache, sku_cache=sku_cache,
+    ).values())
+    if not balances:
         return None
     def key(row):
-        raw = row["delivery_date"]
-        if isinstance(raw, datetime): raw = raw.date()
-        elif isinstance(raw, str):
-            try: raw = date.fromisoformat(raw[:10])
-            except ValueError: raw = None
-        distance = abs((raw - needed_at).days) if raw else 10**9
-        return (distance, raw or date.max, str(row["numero_oc"] or ""))
-    return dict(min(rows, key=key))
+        due = row["delivery_date"]
+        distance = abs((due - needed_at).days) if due else 10**9
+        return (distance, due or date.max, str(row["numero_oc"] or ""))
+    return min(balances, key=key)
 
-def _anticipation_state(db, row):
+def _anticipation_state(db, row, coverage_lines=None, factor_cache=None, sku_cache=None):
     """Return the linked order and whether it can still receive an anticipation."""
     order_id = row.get("anticipation_order_id")
     if not order_id:
@@ -246,15 +354,10 @@ def _anticipation_state(db, row):
         return dict(order), Decimal(0), (
             f"O.C. {order['numero_oc']} deixou de estar vigente (status {order['status']})."
         )
-    pending = db.execute(select(func.coalesce(func.sum(case(
-        (lines.c.quantidade_pedida > lines.c.quantidade_recebida,
-         lines.c.quantidade_pedida - lines.c.quantidade_recebida), else_=0)
-    ), 0)).where(
-        order_condition(db, lines.c.purchase_order_id, order_id),
-        lines.c.sku_codigo == row["sku_codigo"],
-        lines.c.status.notin_(["CANCELADA", "RECEBIDA"]),
-    )).scalar_one()
-    pending = Decimal(str(pending or 0))
+    pending = order_component_pending(
+        db, order_id, row["sku_codigo"], rows=coverage_lines,
+        factor_cache=factor_cache, sku_cache=sku_cache,
+    )["pending_quantity"]
     if pending <= 0:
         return dict(order), pending, (
             f"A O.C. {order['numero_oc']} não possui mais saldo pendente do SKU {row['sku_codigo']}."
@@ -264,22 +367,50 @@ def _anticipation_state(db, row):
 def _is_pending_request(row):
     return row.get("status") in {"SOLICITADA", "EM_COMPRAS"}
 
-def _reclassify_stale_anticipation(db, row, user, reason_prefix=""):
-    """Persist an automatic change once the linked order can no longer be anticipated."""
-    if row.get("request_type") != "ANTECIPACAO" or not _is_pending_request(row):
+def _reclassify_stale_anticipation(db, row, user, reason_prefix="", coverage_lines=None,
+                                   factor_cache=None, sku_cache=None,
+                                   latest_decision=_UNSET):
+    """Keep pending request classification synchronized with open O.C.s and kit B.O.M.s."""
+    if not _is_pending_request(row):
         return row
-    order, pending, reason = _anticipation_state(db, row)
-    if not reason:
+    if row.get("request_type") == "ANTECIPACAO":
+        order, pending, reason = _anticipation_state(
+            db, row, coverage_lines, factor_cache, sku_cache
+        )
+        if not reason:
+            return row
+        before = dict(row)
+        if order:
+            before["anticipation_order"] = encode(order)
+        row.update(request_type="COMPRA_NOVA", anticipation_order_id=None,
+                   anticipation_confirmed_delivery_date=None, updated_at=now(),
+                   version=row["version"] + 1)
+        db.execute(requests.update().where(requests.c.id == row["id"]).values(**row))
+        audit(db, row, user, "ANTECIPACAO_RECLASSIFICADA", before,
+              f"{reason_prefix} {reason}".strip())
+        return row
+    if row.get("request_type") != "COMPRA_NOVA" or row.get("purchase_order_id"):
+        return row
+    if latest_decision is _UNSET:
+        latest_decision = db.execute(select(events.c.action).where(
+            events.c.request_id == row["id"],
+            events.c.action.in_({"CONVERTER_NOVA_COMPRA", "EDITAR", "ANTECIPACAO_IDENTIFICADA", "ANTECIPACAO_RECLASSIFICADA"}),
+        ).order_by(events.c.created_at.desc(), events.c.id.desc()).limit(1)).scalar_one_or_none()
+    if latest_decision == "CONVERTER_NOVA_COMPRA":
+        return row
+    order = closest_active_order(
+        db, row["sku_codigo"], row["needed_at"], rows=coverage_lines,
+        factor_cache=factor_cache, sku_cache=sku_cache,
+    )
+    if not order:
         return row
     before = dict(row)
-    if order:
-        before["anticipation_order"] = encode(order)
-    row.update(request_type="COMPRA_NOVA", anticipation_order_id=None,
+    row.update(request_type="ANTECIPACAO", anticipation_order_id=order["id"],
                anticipation_confirmed_delivery_date=None, updated_at=now(),
                version=row["version"] + 1)
     db.execute(requests.update().where(requests.c.id == row["id"]).values(**row))
     audit(db, row, user, "ANTECIPACAO_RECLASSIFICADA", before,
-          f"{reason_prefix} {reason}".strip())
+          f"{reason_prefix} Solicitação vinculada à O.C. {order['numero_oc']}: o item está coberto diretamente ou pela explosão da B.O.M. do conjunto; saldo equivalente {encode(order['pending_quantity'])}.".strip())
     return row
 
 def _present_current_request(row):
@@ -312,19 +443,32 @@ def reclassify_closed_order_anticipations(db, order_id, user, reason=""):
     return changed
 
 def synchronize_stale_anticipations(db, user):
-    """Backfill old pending rows when the buyer's request queue is refreshed."""
+    """Reconcile pending requests with current open orders and recursively exploded kits."""
     if not ready(db) or not user:
         return 0
     rows = db.execute(select(requests).where(
-        requests.c.request_type == "ANTECIPACAO",
         requests.c.status.in_(["SOLICITADA", "EM_COMPRAS"]),
     ).order_by(requests.c.id).with_for_update()).mappings().all()
     changed = 0
+    open_lines = _active_order_lines(db)
+    factor_cache, sku_cache = {}, {}
+    request_ids = [row["id"] for row in rows]
+    decisions = db.execute(select(events.c.request_id, events.c.action).where(
+        events.c.request_id.in_(request_ids),
+        events.c.action.in_({"CONVERTER_NOVA_COMPRA", "EDITAR", "ANTECIPACAO_IDENTIFICADA", "ANTECIPACAO_RECLASSIFICADA"}),
+    ).order_by(events.c.created_at.desc(), events.c.id.desc())).all() if request_ids else []
+    latest_decision = {}
+    for request_id, action in decisions:
+        latest_decision.setdefault(request_id, action)
     for item in rows:
+        row = dict(item)
+        original_type = row["request_type"]
         row = _reclassify_stale_anticipation(
-            db, dict(item), user, "Reconciliação automática ao atualizar a fila de solicitações."
+            db, row, user, "Reconciliação automática ao atualizar a fila de solicitações.",
+            coverage_lines=open_lines, factor_cache=factor_cache,
+            sku_cache=sku_cache, latest_decision=latest_decision.get(row["id"], ""),
         )
-        if row["request_type"] == "COMPRA_NOVA":
+        if row["request_type"] != original_type:
             changed += 1
     return changed
 
@@ -337,27 +481,13 @@ def listing(db, filters, user=None):
         join_condition = func.replace(cast(requests.c.purchase_order_id, String), "-", "") == func.replace(cast(orders.c.id, String), "-", "")
     anticipated_order = orders.alias("anticipated_order")
     anticipation_join = order_condition(db, requests.c.anticipation_order_id, anticipated_order.c.id)
-    pending_by_order_sku = select(
-        lines.c.purchase_order_id.label("purchase_order_id"),
-        lines.c.sku_codigo.label("sku_codigo"),
-        func.sum(case((lines.c.quantidade_pedida > lines.c.quantidade_recebida,
-                       lines.c.quantidade_pedida - lines.c.quantidade_recebida), else_=0)).label("pending_quantity"),
-        func.min(func.coalesce(lines.c.data_necessidade, orders.c.data_necessidade)).label("delivery_date"),
-    ).select_from(lines.join(orders, order_condition(db, lines.c.purchase_order_id, orders.c.id)))\
-     .where(lines.c.status.notin_(["CANCELADA", "RECEBIDA"]))\
-     .group_by(lines.c.purchase_order_id, lines.c.sku_codigo).subquery("anticipation_order_lines")
     statement = select(requests, orders.c.numero_oc, orders.c.fornecedor_nome,
                        orders.c.status.label("purchase_status"),
                        anticipated_order.c.numero_oc.label("anticipation_numero_oc"),
                        anticipated_order.c.fornecedor_nome.label("anticipation_fornecedor_nome"),
                        anticipated_order.c.status.label("anticipation_purchase_status"),
-                       pending_by_order_sku.c.pending_quantity.label("anticipation_pending_quantity"),
-                       pending_by_order_sku.c.delivery_date.label("anticipation_delivery_date"),
                        requests.c.anticipation_confirmed_delivery_date).select_from(
-        requests.outerjoin(orders, join_condition).outerjoin(anticipated_order, anticipation_join)
-        .outerjoin(pending_by_order_sku,
-                   order_condition(db, pending_by_order_sku.c.purchase_order_id, anticipated_order.c.id) &
-                   (pending_by_order_sku.c.sku_codigo == requests.c.sku_codigo)))
+        requests.outerjoin(orders, join_condition).outerjoin(anticipated_order, anticipation_join))
     for field in ("status", "origin"):
         if filters.get(field):
             statement = statement.where(requests.c[field] == filters[field])
@@ -381,7 +511,24 @@ def listing(db, filters, user=None):
     counts = db.execute(select(requests.c.status, func.count()).group_by(requests.c.status)).all()
     overdue = db.execute(select(func.count()).select_from(requests).where(
         pending, requests.c.needed_at < datetime.now(ZoneInfo("America/Sao_Paulo")).date())).scalar_one()
-    return {"items": [encode(_present_current_request(dict(r))) for r in rows], "total": count, "page": page,
+    has_anticipations = any(r["anticipation_order_id"] for r in rows)
+    coverage_lines = _active_order_lines(db) if has_anticipations else []
+    factor_cache, sku_cache = {}, {}
+    items = []
+    for raw in rows:
+        item = dict(raw)
+        if item.get("anticipation_order_id"):
+            component_balance = order_component_pending(
+                db, item["anticipation_order_id"], item["sku_codigo"],
+                rows=coverage_lines, factor_cache=factor_cache, sku_cache=sku_cache,
+            )
+            item["anticipation_pending_quantity"] = component_balance["pending_quantity"]
+            item["anticipation_delivery_date"] = component_balance["delivery_date"]
+        else:
+            item["anticipation_pending_quantity"] = None
+            item["anticipation_delivery_date"] = None
+        items.append(encode(_present_current_request(item)))
+    return {"items": items, "total": count, "page": page,
             "counts": dict(counts), "overdue": overdue}
 
 def history(db, request_id):
@@ -454,15 +601,10 @@ def transition(db, request_id, payload, user):
         ).with_for_update()).mappings().first() if row["anticipation_order_id"] else None
         if not order or order["status"] not in {"EMITIDA", "PARCIALMENTE_RECEBIDA"} or not str(order["numero_oc"] or "").strip():
             raise ValueError("A antecipação exige uma O.C. válida e ainda vigente.")
-        pending_statement = select(func.sum(case(
-            (lines.c.quantidade_pedida > lines.c.quantidade_recebida,
-             lines.c.quantidade_pedida - lines.c.quantidade_recebida), else_=0)
-        )).where(
-            order_condition(db, lines.c.purchase_order_id, row["anticipation_order_id"]),
-            lines.c.sku_codigo == row["sku_codigo"],
-            lines.c.status.notin_(["CANCELADA", "RECEBIDA"]))
-        pending_quantity = db.execute(pending_statement).scalar() or Decimal(0)
-        if Decimal(str(pending_quantity)) < Decimal(str(row["quantity"])):
+        pending_quantity = order_component_pending(
+            db, row["anticipation_order_id"], row["sku_codigo"]
+        )["pending_quantity"]
+        if pending_quantity < Decimal(str(row["quantity"])):
             raise ValueError("A O.C. vigente não tem saldo pendente suficiente deste SKU para atender a solicitação.")
         status = "CONCLUIDA"
     elif action == "CONVERTER_NOVA_COMPRA" and row["status"] in {"SOLICITADA", "EM_COMPRAS"} and row["request_type"] == "ANTECIPACAO":
@@ -527,7 +669,12 @@ def confirm_order(db, order_id, request_ids, actor, updated=False):
     if not order or order["status"] in {"CANCELADA", "RASCUNHO"}:
         raise ValueError("A solicitação exige pedido confirmado.")
     rows = [get(db, i, lock=True) for i in ids]
-    rows = [_reclassify_stale_anticipation(db, row, user) for row in rows]
+    coverage_lines = _active_order_lines(db, exclude_order_id=order_id)
+    factor_cache, sku_cache = {}, {}
+    rows = [_reclassify_stale_anticipation(
+        db, row, user, coverage_lines=coverage_lines,
+        factor_cache=factor_cache, sku_cache=sku_cache,
+    ) for row in rows]
     purchased = dict(db.execute(select(lines.c.sku_codigo, func.sum(lines.c.quantidade_pedida))
          .where(order_condition(db, lines.c.purchase_order_id, order_id)).group_by(lines.c.sku_codigo)).all())
     required = {}

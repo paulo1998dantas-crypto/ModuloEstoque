@@ -1,5 +1,7 @@
 import sys
 import unittest
+from datetime import date
+from decimal import Decimal
 from pathlib import Path
 from unittest.mock import patch
 from uuid import uuid4
@@ -10,7 +12,7 @@ from services import purchase_requests as pr
 from services.erp_service import (create_purchase_order, sync_legacy_purchase_order,
                                   cancel_purchase_order, close_purchase_order_technical,
                                   confirm_receipt)
-from models import User, Movement, StockBalance
+from models import BomComponent, User, Movement, SKU, StockBalance
 import test_erp_sku_resolution as legacy
 
 class PurchaseRequestTests(unittest.TestCase):
@@ -86,6 +88,71 @@ class PurchaseRequestTests(unittest.TestCase):
         self.db.commit()
         self.assertEqual("COMPRA_NOVA",converted["request_type"])
         self.assertEqual(1,len(pr.prepare(self.db,[row["id"]],self.buyer)["items"]))
+        self.assertEqual("COMPRA_NOVA",pr.listing(self.db,{},self.buyer)["items"][0]["request_type"])
+
+    def test_open_kit_order_covers_recursively_exploded_component_request(self):
+        kit=SKU(sku="CJ-VIDRO",descricao="CJ VIDRO FIXO",unidade="CJ",
+                grupo="30 - CONJUNTO",active=True)
+        nested=SKU(sku="PP-VIDRO",descricao="PP VIDRO",unidade="CJ",
+                   grupo="20 - PP",active=True)
+        self.db.add_all([kit,nested]);self.db.flush()
+        self.db.add_all([
+            BomComponent(item_sku_id=kit.id,component_sku_id=nested.id,quantidade=2),
+            BomComponent(item_sku_id=nested.id,component_sku_id=self.active_sku.id,quantidade=3),
+        ])
+        self.db.commit()
+
+        order_data=legacy.ErpSkuResolutionTest._payload(str(uuid4()),kit.sku,"4")
+        order_data["data_necessidade"]="2026-10-14"
+        order=create_purchase_order(self.db,order_data,self.buyer.username)
+        self.db.execute(text("""update erp_purchase_order_lines
+            set quantidade_recebida=1,status='PENDENTE' where purchase_order_id=:id"""),
+            {"id":order["id"]})
+        self.db.execute(text("update erp_purchase_orders set status='PARCIALMENTE_RECEBIDA' where id=:id"),
+                        {"id":order["id"]})
+        self.db.commit()
+
+        row=self.request(quantity="10")
+        self.assertEqual("ANTECIPACAO",row["request_type"])
+        self.assertEqual(order["id"],row["anticipation_order_id"])
+        listed=pr.listing(self.db,{})["items"][0]
+        self.assertEqual(Decimal("18"),Decimal(listed["anticipation_pending_quantity"]))
+        order_number=self.db.execute(text(
+            "select numero_oc from erp_purchase_orders where id=:id"
+        ),{"id":order["id"]}).scalar_one()
+        self.assertEqual(order_number,listed["anticipation_numero_oc"])
+        self.assertEqual("2026-10-14",listed["anticipation_delivery_date"])
+        self.assertIsNone(pr.closest_active_order(self.db,kit.sku,date.fromisoformat("2026-10-15")))
+        working=pr.transition(self.db,row["id"],{
+            "action":"SOLICITAR_ANTECIPACAO","version":row["version"],
+            "reason":"Fornecedor consultado sobre os vidros do conjunto",
+        },self.buyer)["request"]
+        closed=pr.transition(self.db,row["id"],{
+            "action":"CONFIRMAR_ANTECIPACAO","version":working["version"],
+            "confirmed_delivery_date":"2026-10-12","reason":"Fornecedor confirmou antecipação dos vidros",
+        },self.buyer)["request"]
+        self.assertEqual("CONCLUIDA",closed["status"])
+
+    def test_existing_new_purchase_is_reconciled_to_kit_anticipation(self):
+        row=self.request(quantity="4")
+        self.assertEqual("COMPRA_NOVA",row["request_type"])
+        kit=SKU(sku="CJ-VIDRO-LEGADO",descricao="CJ VIDRO",unidade="CJ",
+                grupo="30 - CONJUNTO",active=True)
+        self.db.add(kit);self.db.flush()
+        self.db.add(BomComponent(item_sku_id=kit.id,component_sku_id=self.active_sku.id,quantidade=2))
+        self.db.commit()
+        order_data=legacy.ErpSkuResolutionTest._payload(str(uuid4()),kit.sku,"3")
+        order_data["data_necessidade"]="2026-10-16"
+        order=create_purchase_order(self.db,order_data,self.buyer.username)
+
+        current=pr.listing(self.db,{},self.buyer)["items"][0]
+        self.assertEqual("ANTECIPACAO",current["request_type"])
+        self.assertEqual(order["id"],current["anticipation_order_id"])
+        self.assertEqual(Decimal("6"),Decimal(current["anticipation_pending_quantity"]))
+        event=pr.history(self.db,row["id"])["events"][-1]
+        self.assertEqual("ANTECIPACAO_RECLASSIFICADA",event["action"])
+        self.assertIn("B.O.M.",event["reason"])
+
 
     def test_anticipation_closes_only_with_valid_order_date_and_supplier_return(self):
         order_data=legacy.ErpSkuResolutionTest._payload(str(uuid4()),"MAT-001","8")
@@ -252,17 +319,33 @@ class PurchaseRequestTests(unittest.TestCase):
                           for index,event in enumerate(events)])
         self.assertEqual(3,len(events))
 
-    def test_requester_cannot_edit_another_users_request(self):
+    def test_other_authorized_nonbuyer_can_edit_and_exclude_pending_same_origin(self):
         row=self.request()
         other=User(username="OUTRO_OPERADOR",password_hash="hash",role="OPERADOR",active=True)
         self.db.add(other);self.db.commit()
-        with self.assertRaisesRegex(PermissionError,"solicitante"):
+        edited=pr.transition(self.db,row["id"],{
+            "action":"EDITAR","version":row["version"],"sku_codigo":"MAT-001",
+            "quantity":"4","needed_at":"2026-10-20","reason":"Ajuste autorizado pela equipe",
+        },other)["request"]
+        deleted=pr.transition(self.db,row["id"],{
+            "action":"EXCLUIR","version":edited["version"],
+            "reason":"Solicitação duplicada identificada pela equipe",
+        },other)["request"]
+        self.db.commit()
+        self.assertEqual("CANCELADA",deleted["status"])
+        self.assertEqual("OUTRO_OPERADOR",pr.history(self.db,row["id"])["events"][-1]["actor"])
+
+    def test_nonbuyer_cannot_edit_after_buyer_assumes_request(self):
+        row=self.request()
+        row=pr.transition(self.db,row["id"],{
+            "action":"ASSUMIR","version":row["version"],"reason":"Compra iniciada",
+        },self.buyer)["request"]
+        self.db.commit()
+        with self.assertRaisesRegex(ValueError,"não compradores"):
             pr.transition(self.db,row["id"],{
                 "action":"EDITAR","version":row["version"],"sku_codigo":"MAT-001",
-                "quantity":"4","needed_at":"2026-10-20","reason":"Alteração não autorizada",
-            },other)
-        self.db.rollback()
-        self.assertEqual("2.000",str(pr.get(self.db,row["id"])["quantity"]))
+                "quantity":"4","needed_at":"2026-10-20","reason":"Teste",
+            },self.operator)
 
     def test_buyer_can_edit_request_already_in_progress(self):
         row=self.request()
