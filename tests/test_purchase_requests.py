@@ -228,6 +228,57 @@ class PurchaseRequestTests(unittest.TestCase):
         self.assertEqual("SOLICITADA",row["status"])
         self.assertEqual(5,len(pr.history(self.db,row["id"])["events"]))
 
+    def test_requester_can_edit_and_soft_delete_own_pending_request(self):
+        row=self.request()
+        edited=pr.transition(self.db,row["id"],{
+            "action":"EDITAR","version":row["version"],"sku_codigo":"MAT-001",
+            "quantity":"3.5","needed_at":"2026-10-20","reference":"OS 3200",
+            "notes":"Quantidade revisada","reason":"Corrigir a necessidade da área",
+        },self.operator)["request"]
+        self.db.commit()
+        self.assertEqual("3.5",edited["quantity"])
+        self.assertEqual("2026-10-20",edited["needed_at"])
+        self.assertEqual("OS 3200",edited["reference"])
+
+        deleted=pr.transition(self.db,row["id"],{
+            "action":"EXCLUIR","version":edited["version"],
+            "reason":"Solicitação lançada em duplicidade",
+        },self.operator)["request"]
+        self.db.commit()
+        self.assertEqual("CANCELADA",deleted["status"])
+        events=pr.history(self.db,row["id"])["events"]
+        self.assertEqual(["SOLICITADA","EDITAR","EXCLUIR"],
+                         [event["action"] if index else event["after_data"]["status"]
+                          for index,event in enumerate(events)])
+        self.assertEqual(3,len(events))
+
+    def test_requester_cannot_edit_another_users_request(self):
+        row=self.request()
+        other=User(username="OUTRO_OPERADOR",password_hash="hash",role="OPERADOR",active=True)
+        self.db.add(other);self.db.commit()
+        with self.assertRaisesRegex(PermissionError,"solicitante"):
+            pr.transition(self.db,row["id"],{
+                "action":"EDITAR","version":row["version"],"sku_codigo":"MAT-001",
+                "quantity":"4","needed_at":"2026-10-20","reason":"Alteração não autorizada",
+            },other)
+        self.db.rollback()
+        self.assertEqual("2.000",str(pr.get(self.db,row["id"])["quantity"]))
+
+    def test_buyer_can_edit_request_already_in_progress(self):
+        row=self.request()
+        row=pr.transition(self.db,row["id"],{
+            "action":"ASSUMIR","version":row["version"],"reason":"Iniciar compra",
+        },self.buyer)["request"]
+        self.db.commit()
+        edited=pr.transition(self.db,row["id"],{
+            "action":"EDITAR","version":row["version"],"sku_codigo":"MAT-001",
+            "quantity":"5","needed_at":"2026-10-20","reference":"OS 3185",
+            "notes":"Quantidade corrigida","reason":"Solicitante confirmou a correção",
+        },self.buyer)["request"]
+        self.db.commit()
+        self.assertEqual("EM_COMPRAS",edited["status"])
+        self.assertEqual("5",edited["quantity"])
+
     def test_stale_version_rejected(self):
         row=self.request()
         pr.transition(self.db,row["id"],{"action":"ASSUMIR","version":1,"reason":"Teste"},self.buyer)

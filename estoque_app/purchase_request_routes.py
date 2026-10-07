@@ -62,7 +62,8 @@ def register(app, get_db, get_user, internal_allowed, internal_user, feature_req
         except PermissionError: can_submit = False
         return render_template("purchase_requests.html", request_config={
             "api": "/api/erp/purchase-requests", "origin": "ESTOQUE",
-            "can_submit": can_submit, "can_manage": False, "csrf": token(),
+            "can_submit": can_submit, "can_manage": False, "user_id": user.id,
+            "csrf": token(),
             "purchases_url": (app.config.get("ERP_SUPRIMENTOS_URL", "") or
                 __import__("config").Config.ERP_SUPRIMENTOS_URL).rstrip("/") + "/erp/solicitacoes"})
 

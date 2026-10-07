@@ -1,4 +1,5 @@
 <link rel="stylesheet" href="/static/purchase_requests.css">
+<link rel="stylesheet" href="/static/purchase_requests_edit.css">
 <section class="pr-shell" id="purchase-request-app">
   <div class="pr-heading"><div><h1>Solicitações de compra</h1><p>Reposição do almoxarifado e planejamento do PCP · conclusão mediante pedido confirmado.</p></div>
   <div class="pr-actions"><a href="{{ request_config.purchases_url }}">Compras</a><button type="button" id="pr-reload">Atualizar</button></div></div>
@@ -41,6 +42,19 @@
     <label>Nova data de entrega negociada<input id="pr-confirm-anticipation-date" type="date" required></label>
     <label>Protocolo / retorno do fornecedor<textarea id="pr-confirm-anticipation-reason" maxlength="4000" rows="4" required placeholder="Registre a confirmação do fornecedor e as condições negociadas"></textarea></label>
     <div class="pr-actions"><button type="button" id="pr-confirm-anticipation-save">Confirmar e encerrar solicitação</button></div>
+  </dialog>
+  <dialog id="pr-edit-request" class="pr-confirm-dialog">
+    <div class="pr-heading"><div><h2>Editar solicitação</h2><p>A alteração ficará registrada no histórico.</p></div><button type="button" id="pr-edit-cancel">Fechar</button></div>
+    <form id="pr-edit-form" class="pr-form">
+      <label>Buscar SKU ou descrição<input id="pr-edit-sku-search" placeholder="Digite código ou descrição" autocomplete="off"></label>
+      <label>SKU do cadastro<select id="pr-edit-sku" name="sku_codigo" required><option value="">Selecione um SKU ativo</option></select></label>
+      <label>Quantidade<input name="quantity" type="number" min="0.001" step="0.001" required></label>
+      <label>Data de necessidade<input name="needed_at" type="date" required></label>
+      <label>Referência / O.S. / setor<input name="reference" maxlength="255"></label>
+      <label class="pr-wide">Observações / justificativa<textarea name="notes" maxlength="4000" rows="2"></textarea></label>
+      <label class="pr-wide">Motivo da alteração<textarea name="reason" maxlength="4000" rows="2" required placeholder="Explique o que precisa ser corrigido"></textarea></label>
+      <div class="pr-wide pr-actions"><button id="pr-edit-save" type="submit">Salvar alteração</button><small>Solicitações concluídas não podem ser alteradas.</small></div>
+    </form>
   </dialog>
 </section>
 <script id="pr-config" type="application/json">{{ request_config|tojson }}</script>

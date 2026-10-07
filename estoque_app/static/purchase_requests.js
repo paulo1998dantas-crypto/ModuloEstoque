@@ -9,6 +9,7 @@ const date = value => !value ? "—" : /^\d{4}-\d{2}-\d{2}$/.test(value) ? value
 const qty = value => Number(value).toLocaleString("pt-BR",{maximumFractionDigits:3});
 const node = (tag,text,className) => {const n=document.createElement(tag);if(text!=null)n.textContent=text;if(className)n.className=className;return n;};
 let page=1,total=0,rows=[],key=crypto.randomUUID(),loading=false,closingAnticipationRow=null;
+let editingRow=null,editSkuTimer=null;
 let loadSerial=0;
 function message(text,error=false){$("pr-message").textContent=text;$("pr-message").classList.toggle("pr-error",error);}
 async function api(path="",payload){
@@ -38,11 +39,13 @@ function render(){
    tr.append(cell);
   });
   const actions=node("td");actions.append(button("Histórico",()=>showHistory(row.id)));
+  const isOwner=String(row.requested_by_id)===String(cfg.user_id);
+  const canEditRequest=pending&&(cfg.can_manage||(isOwner&&row.status==="SOLICITADA"));
+  if(canEditRequest){actions.append(button("Editar",()=>openEdit(row)));actions.append(button("Excluir",()=>excludeRequest(row)));}
   if(cfg.can_manage){
    if(row.status==="SOLICITADA")actions.append(button(anticipation?"Registrar solicitação ao fornecedor":"Assumir",()=>act(row,anticipation?"SOLICITAR_ANTECIPACAO":"ASSUMIR")));
    if(anticipation&&row.status==="EM_COMPRAS")actions.append(button("Confirmar data negociada",()=>openAnticipationConfirmation(row)));
    if(anticipation&&pending)actions.append(button("Converter em nova O.C.",()=>act(row,"CONVERTER_NOVA_COMPRA")));
-   if(pending)actions.append(button("Cancelar",()=>act(row,"CANCELAR")));
    if(row.status==="CANCELADA")actions.append(button("Reabrir",()=>act(row,"REABRIR")));
    actions.append(button("Observação",()=>act(row,"OBSERVACAO")));
   }
@@ -63,6 +66,27 @@ async function load(){
   const overdue=node("div","Necessidade vencida","pr-metric pr-overdue");overdue.append(node("strong",data.overdue));$("pr-metrics").append(overdue);
  }catch(e){message(e.message,true);}
 }
+async function fillSkuOptions(select,query,selectedCode=""){
+ const data=await api("/options?q="+encodeURIComponent(query||""));
+ select.replaceChildren(node("option","Selecione um SKU ativo"));select.firstChild.value="";
+ const items=data.items||[];
+ if(selectedCode&&!items.some(item=>item.sku_codigo===selectedCode))items.unshift({sku_codigo:selectedCode,descricao:"SKU atual",unidade:""});
+ for(const item of items){const option=node("option",item.sku_codigo+" · "+item.descricao+(item.unidade?" ("+item.unidade+")":""));option.value=item.sku_codigo;select.append(option);}
+}
+async function openEdit(row){
+ editingRow=row;
+ const form=$("pr-edit-form");form.elements.quantity.value=row.quantity;form.elements.needed_at.value=row.needed_at;
+ form.elements.reference.value=row.reference||"";form.elements.notes.value=row.notes||"";form.elements.reason.value="";
+ $("pr-edit-sku-search").value=row.sku_codigo;
+ try{await fillSkuOptions($("pr-edit-sku"),row.sku_codigo,row.sku_codigo);form.elements.sku_codigo.value=row.sku_codigo;$("pr-edit-request").showModal();}
+ catch(e){message(e.message,true);}
+}
+async function excludeRequest(row){
+ if(!confirm("Excluir esta solicitação? Ela será cancelada e mantida no histórico de rastreabilidade."))return;
+ const reason=prompt("Informe o motivo da exclusão/cancelamento:");if(!reason||!reason.trim())return;
+ try{await api("/"+encodeURIComponent(row.id)+"/action",{action:"EXCLUIR",reason:reason.trim(),version:row.version});message("Solicitação excluída e preservada no histórico.");await load();}
+ catch(e){message(e.message,true);}
+}
 async function showHistory(id){
  try{
   const data=await api("/"+encodeURIComponent(id)+"/history"),content=$("pr-history-content");content.replaceChildren();
@@ -73,6 +97,10 @@ async function showHistory(id){
    box.append(node("strong",event.action.replaceAll("_"," ")),node("p",event.actor+" · "+date(event.created_at)));
    const before=event.before_data||{},after=event.after_data||{};
    if(before.status!==after.status)box.append(node("p",(labels[before.status]||"Nova solicitação")+" → "+(labels[after.status]||after.status)));
+   if(event.action==="EDITAR"){
+    const fields={sku_codigo:"SKU",descricao:"Descrição",unidade:"Unidade",quantity:"Quantidade",needed_at:"Data de necessidade",reference:"Referência",notes:"Observações",request_type:"Classificação"};
+    for(const [key,label] of Object.entries(fields))if(String(before[key]??"")!==String(after[key]??""))box.append(node("p",label+": "+(before[key]||"—")+" → "+(after[key]||"—")));
+   }
    if(after.buyer&&before.buyer!==after.buyer)box.append(node("p","Comprador: "+after.buyer));
    if(after.purchase_order)box.append(node("p","Pedido: "+after.purchase_order.numero_oc+" · Fornecedor: "+after.purchase_order.fornecedor_nome+" · "+after.purchase_order.status));
    if(after.purchase_order_id)box.append(node("p","Pedido vinculado (ID): "+after.purchase_order_id));
@@ -111,6 +139,16 @@ async function act(row,action){
 $("pr-close-history").onclick=()=>$("pr-history").close();
 $("pr-confirm-anticipation-cancel").onclick=()=>{$("pr-confirm-anticipation").close();closingAnticipationRow=null;};
 $("pr-confirm-anticipation-save").onclick=confirmAnticipation;
+$("pr-edit-cancel").onclick=()=>{$("pr-edit-request").close();editingRow=null;};
+$("pr-edit-sku-search").oninput=()=>{clearTimeout(editSkuTimer);editSkuTimer=setTimeout(()=>fillSkuOptions($("pr-edit-sku"),$("pr-edit-sku-search").value).catch(e=>message(e.message,true)),250);};
+$("pr-edit-form").onsubmit=async event=>{
+ event.preventDefault();if(!editingRow)return;
+ const payload=Object.fromEntries(new FormData(event.target));payload.action="EDITAR";payload.version=editingRow.version;
+ $("pr-edit-save").disabled=true;
+ try{await api("/"+encodeURIComponent(editingRow.id)+"/action",payload);$("pr-edit-request").close();editingRow=null;message("Solicitação editada e registrada no histórico.");await load();}
+ catch(e){message(e.message,true);}
+ finally{$("pr-edit-save").disabled=false;}
+};
 $("pr-reload").onclick=()=>load();
 $("pr-filter").onclick=()=>{page=1;load();};
 $("pr-prev").onclick=()=>{page--;load();};

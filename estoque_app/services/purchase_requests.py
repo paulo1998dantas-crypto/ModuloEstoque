@@ -98,6 +98,39 @@ def require_buyer(db, user):
     if not buyer_allowed(db, user):
         raise PermissionError("Somente o comprador (ou administrador) pode tratar solicitações.")
 
+def require_request_editor(db, row, user):
+    if buyer_allowed(db, user):
+        if row["status"] not in {"SOLICITADA", "EM_COMPRAS"} or row.get("purchase_order_id"):
+            raise ValueError("Só é possível editar/excluir solicitações ainda pendentes.")
+        return
+    if not user or not user.active or row["requested_by_id"] != user.id:
+        raise PermissionError("Somente o solicitante ou o comprador pode editar/excluir esta solicitação.")
+    if row["status"] != "SOLICITADA" or row.get("purchase_order_id"):
+        raise ValueError("O solicitante só pode editar/excluir antes de o comprador assumir a solicitação.")
+    require_origin(db, user, row["origin"])
+
+def editable_request_fields(db, payload):
+    sku_code = str(payload.get("sku_codigo") or "").strip()
+    sku = db.query(SKU).filter(SKU.sku == sku_code, SKU.active.is_(True)).one_or_none()
+    if not sku:
+        raise ValueError("Selecione um SKU ativo do cadastro.")
+    try:
+        quantity = Decimal(str(payload.get("quantity") or "").replace(",", "."))
+        if (not quantity.is_finite() or quantity <= 0 or
+                quantity > Decimal("99999999999.999") or quantity.as_tuple().exponent < -3):
+            raise InvalidOperation()
+        needed = date.fromisoformat(str(payload.get("needed_at") or ""))
+    except (ValueError, InvalidOperation):
+        raise ValueError("Informe quantidade positiva (até três decimais) e data de necessidade válida.")
+    reference = str(payload.get("reference") or "").strip()
+    notes = str(payload.get("notes") or "").strip()
+    if len(reference) > 255 or len(notes) > 4000:
+        raise ValueError("Referência: até 255 caracteres. Observações: até 4.000.")
+    return {"sku_id": sku.id, "sku_codigo": sku.sku,
+            "descricao": sku.descricao, "unidade": sku.unidade or "UN",
+            "quantity": quantity, "needed_at": needed,
+            "reference": reference, "notes": notes}
+
 def require_origin(db, user, origin):
     roles = effective_roles(user, db) if user and user.active else set()
     required = {"ADMIN", "PCP"} if origin == "PCP" else {"ADMIN", "OPERADOR", "COMPRADOR", "PCP", "PRODUCAO"}
@@ -378,19 +411,35 @@ def prepare(db, ids, user):
 
 def transition(db, request_id, payload, user):
     require_ready(db)
-    require_buyer(db, user)
     if not isinstance(payload, dict):
         raise ValueError("Dados do tratamento inválidos.")
     row = get(db, request_id, lock=True)
+    action = payload.get("action")
+    if action in {"EDITAR", "EXCLUIR"}:
+        require_request_editor(db, row, user)
+    else:
+        require_buyer(db, user)
     try: version = int(payload.get("version"))
     except (ValueError, TypeError): raise ValueError("Atualize a tabela antes de tratar a solicitação.")
     if row["version"] != version:
         raise ValueError("A solicitação foi alterada por outro usuário. Atualize a tabela.")
     row = _reclassify_stale_anticipation(db, row, user)
-    action = payload.get("action")
     reason = str(payload.get("reason") or "").strip()
     if not reason or len(reason) > 4000:
         raise ValueError("Informe o motivo/observação (até 4.000 caracteres).")
+    edit_fields = editable_request_fields(db, payload) if action == "EDITAR" else None
+    anticipated = None
+    if edit_fields:
+        changed = (
+            row["sku_id"] != edit_fields["sku_id"] or
+            Decimal(str(row["quantity"])) != edit_fields["quantity"] or
+            row["needed_at"] != edit_fields["needed_at"] or
+            (row["reference"] or "") != edit_fields["reference"] or
+            (row["notes"] or "") != edit_fields["notes"]
+        )
+        if not changed:
+            raise ValueError("Nenhum dado da solicitação foi alterado.")
+        anticipated = closest_active_order(db, edit_fields["sku_codigo"], edit_fields["needed_at"])
     if action == "ASSUMIR" and row["status"] == "SOLICITADA":
         status = "EM_COMPRAS"
     elif action == "SOLICITAR_ANTECIPACAO" and row["status"] == "SOLICITADA" and row["request_type"] == "ANTECIPACAO":
@@ -418,6 +467,10 @@ def transition(db, request_id, payload, user):
         status = "CONCLUIDA"
     elif action == "CONVERTER_NOVA_COMPRA" and row["status"] in {"SOLICITADA", "EM_COMPRAS"} and row["request_type"] == "ANTECIPACAO":
         status = row["status"]
+    elif action == "EDITAR" and row["status"] in {"SOLICITADA", "EM_COMPRAS"} and not row.get("purchase_order_id"):
+        status = row["status"]
+    elif action == "EXCLUIR" and row["status"] in {"SOLICITADA", "EM_COMPRAS"} and not row.get("purchase_order_id"):
+        status = "CANCELADA"
     elif action == "CANCELAR" and row["status"] in {"SOLICITADA", "EM_COMPRAS"}:
         status = "CANCELADA"
     elif action == "REABRIR" and row["status"] == "CANCELADA":
@@ -430,6 +483,11 @@ def transition(db, request_id, payload, user):
     row.update(status=status, updated_at=now(), version=row["version"]+1)
     if action in {"ASSUMIR", "SOLICITAR_ANTECIPACAO"}:
         row.update(buyer_id=user.id, buyer=user.username)
+    elif action == "EDITAR":
+        row.update(**edit_fields,
+                   request_type="ANTECIPACAO" if anticipated else "COMPRA_NOVA",
+                   anticipation_order_id=str(anticipated["id"]) if anticipated else None,
+                   anticipation_confirmed_delivery_date=None)
     elif action == "CONFIRMAR_ANTECIPACAO":
         row.update(status="CONCLUIDA", purchase_order_id=row["anticipation_order_id"],
                    anticipation_confirmed_delivery_date=confirmed_date,
