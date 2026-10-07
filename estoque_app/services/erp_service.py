@@ -6,7 +6,7 @@ from uuid import uuid4
 from sqlalchemy import Uuid, bindparam, text
 from sqlalchemy.exc import MultipleResultsFound
 
-from models import Movement, SKU
+from models import Movement, SKU, User
 from services.estoque_service import (
     bom_components_for_sku,
     get_sku_by_code,
@@ -1886,7 +1886,14 @@ def confirm_receipt(db, data, actor, user_id):
     for purchase_line_id in touched_purchase_lines:
         _refresh_purchase_order_line_receipt_status(db, purchase_line_id)
     if po_id:
-        _refresh_purchase_order_receipt_status(db, po_id)
+        order_status = _refresh_purchase_order_receipt_status(db, po_id)
+        if order_status in {"RECEBIDA", "CONCLUIDA", "CANCELADA"}:
+            from services.purchase_requests import reclassify_closed_order_anticipations
+            request_actor = db.get(User, user_id)
+            reclassify_closed_order_anticipations(
+                db, po_id, request_actor,
+                f"Recebimento confirmado; a O.C. passou para {order_status}.",
+            )
     db.execute(text("insert into erp_audit_events(entity_type,entity_id,action,actor,origin,after_data) values ('GOODS_RECEIPT',:id,'CONFIRMADO',:actor,'ESTOQUE',jsonb_build_object('idempotency_key',cast(:key as text)))"),{"id":receipt_id,"actor":actor,"key":key})
     db.commit(); return {"id":receipt_id,"replayed":False}
 
@@ -1928,6 +1935,16 @@ def close_purchase_order_technical(db, order_id, actor, reason):
         raise ValueError("O.C. cancelada nao pode receber conclusao tecnica.")
     order_id = str(order["id"])
     if order["technical_status"] == "CONCLUIDA":
+        from services.purchase_requests import reclassify_closed_order_anticipations
+        request_actor = db.query(User).filter(
+            User.username == actor, User.active.is_(True)
+        ).one_or_none()
+        reclassified = reclassify_closed_order_anticipations(
+            db, order_id, request_actor,
+            "Conclusão técnica da O.C.; deixou de ser um pedido vigente para antecipação.",
+        )
+        if reclassified:
+            db.commit()
         return {"id": order_id, "status": order["status"], "technical_status": "CONCLUIDA", "replayed": True}
     db.execute(text("""
         update erp_purchase_orders
@@ -1939,6 +1956,14 @@ def close_purchase_order_technical(db, order_id, actor, reason):
     db.execute(text("""insert into erp_audit_events(entity_type,entity_id,action,actor,reason,origin)
         values ('PURCHASE_ORDER',:id,'CONCLUSAO_TECNICA',:actor,:reason,'SUPRIMENTOS')"""),
         {"id": order_id, "actor": actor, "reason": reason or ""})
+    from services.purchase_requests import reclassify_closed_order_anticipations
+    request_actor = db.query(User).filter(
+        User.username == actor, User.active.is_(True)
+    ).one_or_none()
+    reclassify_closed_order_anticipations(
+        db, order_id, request_actor,
+        "Conclusão técnica da O.C.; deixou de ser um pedido vigente para antecipação.",
+    )
     db.commit()
     return {
         "id": order_id, "status": "CONCLUIDA",

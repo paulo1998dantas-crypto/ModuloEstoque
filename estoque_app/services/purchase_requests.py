@@ -198,8 +198,106 @@ def closest_active_order(db, sku_code, needed_at):
         return (distance, raw or date.max, str(row["numero_oc"] or ""))
     return dict(min(rows, key=key))
 
-def listing(db, filters):
+def _anticipation_state(db, row):
+    """Return the linked order and whether it can still receive an anticipation."""
+    order_id = row.get("anticipation_order_id")
+    if not order_id:
+        return None, Decimal(0), "O pedido vinculado não existe mais."
+    order = db.execute(select(orders.c.id, orders.c.numero_oc, orders.c.status,
+                              orders.c.fornecedor_nome).where(
+        order_condition(db, orders.c.id, order_id)
+    )).mappings().first()
+    if not order:
+        return None, Decimal(0), "O pedido vinculado não foi encontrado."
+    if order["status"] not in {"EMITIDA", "PARCIALMENTE_RECEBIDA"}:
+        return dict(order), Decimal(0), (
+            f"O.C. {order['numero_oc']} deixou de estar vigente (status {order['status']})."
+        )
+    pending = db.execute(select(func.coalesce(func.sum(case(
+        (lines.c.quantidade_pedida > lines.c.quantidade_recebida,
+         lines.c.quantidade_pedida - lines.c.quantidade_recebida), else_=0)
+    ), 0)).where(
+        order_condition(db, lines.c.purchase_order_id, order_id),
+        lines.c.sku_codigo == row["sku_codigo"],
+        lines.c.status.notin_(["CANCELADA", "RECEBIDA"]),
+    )).scalar_one()
+    pending = Decimal(str(pending or 0))
+    if pending <= 0:
+        return dict(order), pending, (
+            f"A O.C. {order['numero_oc']} não possui mais saldo pendente do SKU {row['sku_codigo']}."
+        )
+    return dict(order), pending, ""
+
+def _is_pending_request(row):
+    return row.get("status") in {"SOLICITADA", "EM_COMPRAS"}
+
+def _reclassify_stale_anticipation(db, row, user, reason_prefix=""):
+    """Persist an automatic change once the linked order can no longer be anticipated."""
+    if row.get("request_type") != "ANTECIPACAO" or not _is_pending_request(row):
+        return row
+    order, pending, reason = _anticipation_state(db, row)
+    if not reason:
+        return row
+    before = dict(row)
+    if order:
+        before["anticipation_order"] = encode(order)
+    row.update(request_type="COMPRA_NOVA", anticipation_order_id=None,
+               anticipation_confirmed_delivery_date=None, updated_at=now(),
+               version=row["version"] + 1)
+    db.execute(requests.update().where(requests.c.id == row["id"]).values(**row))
+    audit(db, row, user, "ANTECIPACAO_RECLASSIFICADA", before,
+          f"{reason_prefix} {reason}".strip())
+    return row
+
+def _present_current_request(row):
+    """Show stale pending anticipations as new purchases, including legacy rows."""
+    row = dict(row)
+    if (row.get("request_type") == "ANTECIPACAO" and _is_pending_request(row) and
+            (row.get("anticipation_purchase_status") not in {"EMITIDA", "PARCIALMENTE_RECEBIDA"} or
+             Decimal(str(row.get("anticipation_pending_quantity") or 0)) <= 0)):
+        row.update(request_type="COMPRA_NOVA", anticipation_order_id=None,
+                   anticipation_numero_oc=None, anticipation_fornecedor_nome=None,
+                   anticipation_purchase_status=None, anticipation_pending_quantity=None,
+                   anticipation_delivery_date=None,
+                   anticipation_confirmed_delivery_date=None)
+    return row
+
+def reclassify_closed_order_anticipations(db, order_id, user, reason=""):
+    """Reclassify pending requests in the same transaction that closes/receives an O.C."""
+    if not ready(db) or not user:
+        return 0
+    rows = db.execute(select(requests).where(
+        order_condition(db, requests.c.anticipation_order_id, order_id),
+        requests.c.request_type == "ANTECIPACAO",
+        requests.c.status.in_(["SOLICITADA", "EM_COMPRAS"]),
+    ).order_by(requests.c.id).with_for_update()).mappings().all()
+    changed = 0
+    for item in rows:
+        row = _reclassify_stale_anticipation(db, dict(item), user, reason)
+        if row["request_type"] == "COMPRA_NOVA":
+            changed += 1
+    return changed
+
+def synchronize_stale_anticipations(db, user):
+    """Backfill old pending rows when the buyer's request queue is refreshed."""
+    if not ready(db) or not user:
+        return 0
+    rows = db.execute(select(requests).where(
+        requests.c.request_type == "ANTECIPACAO",
+        requests.c.status.in_(["SOLICITADA", "EM_COMPRAS"]),
+    ).order_by(requests.c.id).with_for_update()).mappings().all()
+    changed = 0
+    for item in rows:
+        row = _reclassify_stale_anticipation(
+            db, dict(item), user, "Reconciliação automática ao atualizar a fila de solicitações."
+        )
+        if row["request_type"] == "COMPRA_NOVA":
+            changed += 1
+    return changed
+
+def listing(db, filters, user=None):
     require_ready(db)
+    synchronize_stale_anticipations(db, user)
     from sqlalchemy import cast
     join_condition = requests.c.purchase_order_id == orders.c.id
     if db.bind.dialect.name == "sqlite":
@@ -213,6 +311,7 @@ def listing(db, filters):
                        lines.c.quantidade_pedida - lines.c.quantidade_recebida), else_=0)).label("pending_quantity"),
         func.min(func.coalesce(lines.c.data_necessidade, orders.c.data_necessidade)).label("delivery_date"),
     ).select_from(lines.join(orders, order_condition(db, lines.c.purchase_order_id, orders.c.id)))\
+     .where(lines.c.status.notin_(["CANCELADA", "RECEBIDA"]))\
      .group_by(lines.c.purchase_order_id, lines.c.sku_codigo).subquery("anticipation_order_lines")
     statement = select(requests, orders.c.numero_oc, orders.c.fornecedor_nome,
                        orders.c.status.label("purchase_status"),
@@ -249,7 +348,7 @@ def listing(db, filters):
     counts = db.execute(select(requests.c.status, func.count()).group_by(requests.c.status)).all()
     overdue = db.execute(select(func.count()).select_from(requests).where(
         pending, requests.c.needed_at < datetime.now(ZoneInfo("America/Sao_Paulo")).date())).scalar_one()
-    return {"items": [encode(dict(r)) for r in rows], "total": count, "page": page,
+    return {"items": [encode(_present_current_request(dict(r))) for r in rows], "total": count, "page": page,
             "counts": dict(counts), "overdue": overdue}
 
 def history(db, request_id):
@@ -270,6 +369,7 @@ def prepare(db, ids, user):
     if not isinstance(ids, list) or not ids or len(ids) > 100:
         raise ValueError("Selecione entre uma e 100 solicitações.")
     rows = [get(db, i) for i in dict.fromkeys(uid(i) for i in ids)]
+    rows = [_reclassify_stale_anticipation(db, row, user) for row in rows]
     if any(r["status"] not in {"SOLICITADA", "EM_COMPRAS"} for r in rows):
         raise ValueError("Há solicitações concluídas/canceladas. Atualize a tabela.")
     if any(r["request_type"] == "ANTECIPACAO" for r in rows):
@@ -286,6 +386,7 @@ def transition(db, request_id, payload, user):
     except (ValueError, TypeError): raise ValueError("Atualize a tabela antes de tratar a solicitação.")
     if row["version"] != version:
         raise ValueError("A solicitação foi alterada por outro usuário. Atualize a tabela.")
+    row = _reclassify_stale_anticipation(db, row, user)
     action = payload.get("action")
     reason = str(payload.get("reason") or "").strip()
     if not reason or len(reason) > 4000:
@@ -368,6 +469,7 @@ def confirm_order(db, order_id, request_ids, actor, updated=False):
     if not order or order["status"] in {"CANCELADA", "RASCUNHO"}:
         raise ValueError("A solicitação exige pedido confirmado.")
     rows = [get(db, i, lock=True) for i in ids]
+    rows = [_reclassify_stale_anticipation(db, row, user) for row in rows]
     purchased = dict(db.execute(select(lines.c.sku_codigo, func.sum(lines.c.quantidade_pedida))
          .where(order_condition(db, lines.c.purchase_order_id, order_id)).group_by(lines.c.sku_codigo)).all())
     required = {}

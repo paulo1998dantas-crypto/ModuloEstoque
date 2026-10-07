@@ -7,7 +7,9 @@ from sqlalchemy import select, func, text
 APP = Path(__file__).resolve().parents[1] / "estoque_app"
 sys.path.insert(0, str(APP))
 from services import purchase_requests as pr
-from services.erp_service import create_purchase_order, sync_legacy_purchase_order, cancel_purchase_order
+from services.erp_service import (create_purchase_order, sync_legacy_purchase_order,
+                                  cancel_purchase_order, close_purchase_order_technical,
+                                  confirm_receipt)
 from models import User, Movement, StockBalance
 import test_erp_sku_resolution as legacy
 
@@ -113,6 +115,92 @@ class PurchaseRequestTests(unittest.TestCase):
         row=self.request()
         self.assertEqual("COMPRA_NOVA",row["request_type"])
         self.assertIsNone(row["anticipation_order_id"])
+
+    def test_technical_close_reclassifies_existing_anticipation(self):
+        data=legacy.ErpSkuResolutionTest._payload(str(uuid4()),"MAT-001","2")
+        order=create_purchase_order(self.db,data,self.buyer.username)
+        row=self.request()
+        self.assertEqual("ANTECIPACAO",row["request_type"])
+
+        closed=close_purchase_order_technical(
+            self.db,order["id"],self.buyer.username,"Recebimento concluído"
+        )
+
+        current=pr.get(self.db,row["id"])
+        self.assertEqual("CONCLUIDA",closed["status"])
+        self.assertEqual("COMPRA_NOVA",current["request_type"])
+        self.assertIsNone(current["anticipation_order_id"])
+        event=pr.history(self.db,row["id"])["events"][-1]
+        self.assertEqual("ANTECIPACAO_RECLASSIFICADA",event["action"])
+        self.assertEqual("ANTECIPACAO",event["before_data"]["request_type"])
+        self.assertEqual("COMPRA_NOVA",event["after_data"]["request_type"])
+        self.assertIn("Conclusão técnica",event["reason"])
+
+    def test_full_receipt_reclassifies_existing_anticipation(self):
+        data=legacy.ErpSkuResolutionTest._payload(str(uuid4()),"MAT-001","2")
+        order=create_purchase_order(self.db,data,self.buyer.username)
+        row=self.request()
+        line_id=self.db.execute(text(
+            "select id from erp_purchase_order_lines where purchase_order_id=:id"
+        ),{"id":order["id"]}).scalar_one()
+
+        confirm_receipt(self.db,{
+            "idempotency_key":str(uuid4()),"purchase_order_id":order["id"],
+            "numero_nf":"NF-REQ-001","lines":[{
+                "purchase_order_line_id":line_id,"quantidade_fisica":2,
+                "quantidade_aprovada":2,"quantidade_condicional":0,
+                "quantidade_rejeitada":0,"resultado_inspecao":"A",
+                "valor_unitario_real":10,
+            }],
+        },self.buyer.username,self.buyer.id)
+
+        current=pr.get(self.db,row["id"])
+        self.assertEqual("COMPRA_NOVA",current["request_type"])
+        self.assertIsNone(current["anticipation_order_id"])
+        self.assertEqual("ANTECIPACAO_RECLASSIFICADA",
+                         pr.history(self.db,row["id"])["events"][-1]["action"])
+
+    def test_legacy_stale_anticipation_displays_and_prepares_as_new_purchase(self):
+        data=legacy.ErpSkuResolutionTest._payload(str(uuid4()),"MAT-001","2")
+        order=create_purchase_order(self.db,data,self.buyer.username)
+        row=self.request()
+        self.db.execute(text("update erp_purchase_orders set status='CONCLUIDA' where id=:id"),
+                        {"id":order["id"]})
+        self.db.commit()
+
+        listed=pr.listing(self.db,{})["items"][0]
+        self.assertEqual("COMPRA_NOVA",listed["request_type"])
+        self.assertIsNone(listed["anticipation_numero_oc"])
+        self.assertEqual("ANTECIPACAO",pr.get(self.db,row["id"])["request_type"])
+
+        pr.listing(self.db,{},self.buyer)
+        self.db.commit()
+        self.assertEqual("COMPRA_NOVA",pr.get(self.db,row["id"])["request_type"])
+        self.assertEqual("ANTECIPACAO_RECLASSIFICADA",
+                         pr.history(self.db,row["id"])["events"][-1]["action"])
+
+        prepared=pr.prepare(self.db,[row["id"]],self.buyer)
+        self.db.commit()
+        self.assertEqual("COMPRA_NOVA",prepared["items"][0]["request_type"])
+        self.assertEqual("COMPRA_NOVA",pr.get(self.db,row["id"])["request_type"])
+
+    def test_legacy_stale_anticipation_can_be_assumed_as_new_purchase(self):
+        data=legacy.ErpSkuResolutionTest._payload(str(uuid4()),"MAT-001","2")
+        order=create_purchase_order(self.db,data,self.buyer.username)
+        row=self.request()
+        self.db.execute(text("update erp_purchase_orders set status='CONCLUIDA' where id=:id"),
+                        {"id":order["id"]})
+        self.db.commit()
+        listed=pr.listing(self.db,{})["items"][0]
+
+        treated=pr.transition(self.db,row["id"],{
+            "action":"ASSUMIR","version":listed["version"],"reason":"Nova compra necessária"
+        },self.buyer)["request"]
+        self.db.commit()
+
+        self.assertEqual("COMPRA_NOVA",treated["request_type"])
+        self.assertEqual("EM_COMPRAS",treated["status"])
+        self.assertEqual(3,len(pr.history(self.db,row["id"])["events"]))
 
     def test_quantity_validation(self):
         for qty in ("0","-1","NaN","Infinity","0.0001","9999999999999999"):
@@ -314,6 +402,22 @@ class PurchaseRequestRouteTests(unittest.TestCase):
         self.assertEqual(1,len(response.json["events"]))
         options=self.client.get("/api/erp/purchase-requests/options?q=MAT")
         self.assertEqual(["MAT-001"],[r["sku_codigo"] for r in options.json["items"]])
+
+    def test_queue_refresh_persists_legacy_anticipation_reclassification(self):
+        data=legacy.ErpSkuResolutionTest._payload(str(uuid4()),"MAT-001","2")
+        order=create_purchase_order(self.db,data,self.buyer.username)
+        row=self.request()
+        self.db.execute(text("update erp_purchase_orders set status='CONCLUIDA' where id=:id"),
+                        {"id":order["id"]})
+        self.db.commit()
+        self.actor=self.buyer
+
+        response=self.client.get("/api/erp/purchase-requests")
+
+        self.assertEqual(200,response.status_code)
+        self.assertEqual("COMPRA_NOVA",response.json["items"][0]["request_type"])
+        self.assertEqual("COMPRA_NOVA",pr.get(self.db,row["id"])["request_type"])
+        self.assertEqual("COMPRADOR",pr.history(self.db,row["id"])["events"][-1]["actor"])
 
     def test_invalid_payload_no_write(self):
         response=self.client.post("/api/erp/purchase-requests",json=["bad"],headers={"X-CSRF-Token":"csrf"})

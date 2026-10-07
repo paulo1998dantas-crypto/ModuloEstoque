@@ -32,13 +32,13 @@ def register(app, get_db, get_user, internal_allowed, internal_user, feature_req
             raise PermissionError("Autenticação obrigatória.")
         return user
 
-    def execute(callback, write=False):
+    def execute(callback, write=False, commit=False):
         database = get_db()
         try:
             user = access()
             if write and not request.path.startswith("/api/erp/internal/"): csrf()
             result = callback(database, user)
-            if write: database.commit()
+            if write or commit: database.commit()
             return jsonify(ok=True, **result)
         except PermissionError as exc:
             database.rollback()
@@ -71,7 +71,7 @@ def register(app, get_db, get_user, internal_allowed, internal_user, feature_req
     @feature_required
     def collection():
         if request.method == "GET":
-            return execute(lambda db, user: workflow.listing(db, request.args))
+            return execute(lambda db, user: workflow.listing(db, request.args, user), commit=True)
         origin = "PCP" if request.path.startswith("/api/erp/internal/") else "ESTOQUE"
         return execute(lambda db, user: workflow.create(db, request.get_json(silent=True) or {}, user, origin), True)
 
@@ -96,7 +96,7 @@ def register(app, get_db, get_user, internal_allowed, internal_user, feature_req
     @bp.route("/api/erp/internal/purchase-requests/prepare", methods=["POST"])
     @feature_required
     def prepare():
-        return execute(lambda db, user: workflow.prepare(db, (request.get_json(silent=True) or {}).get("ids"), user))
+        return execute(lambda db, user: workflow.prepare(db, (request.get_json(silent=True) or {}).get("ids"), user), True)
 
     @bp.route("/api/erp/purchase-requests/<request_id>/history")
     @bp.route("/api/erp/internal/purchase-requests/<request_id>/history")
