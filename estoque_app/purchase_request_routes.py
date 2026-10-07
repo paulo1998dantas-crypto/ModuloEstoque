@@ -107,6 +107,12 @@ def register(app, get_db, get_user, internal_allowed, internal_user, feature_req
     def history(request_id):
         return execute(lambda db, user: workflow.history(db, request_id))
 
+    @bp.route("/api/erp/purchase-requests/<request_id>/orders")
+    @bp.route("/api/erp/internal/purchase-requests/<request_id>/orders")
+    @feature_required
+    def order_options(request_id):
+        return execute(lambda db, user: workflow.existing_order_options(db, request_id, user))
+
     @bp.route("/api/erp/internal/purchase-requests/<request_id>/action", methods=["POST"])
     @feature_required
     def action(request_id):

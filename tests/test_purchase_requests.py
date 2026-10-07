@@ -90,6 +90,34 @@ class PurchaseRequestTests(unittest.TestCase):
         self.assertEqual(1,len(pr.prepare(self.db,[row["id"]],self.buyer)["items"]))
         self.assertEqual("COMPRA_NOVA",pr.listing(self.db,{},self.buyer)["items"][0]["request_type"])
 
+    def test_buyer_can_allocate_existing_order_and_reserved_balance_cannot_be_reused(self):
+        order=self.order([],qty="5")
+        row=self.request(quantity="2")
+        options=pr.existing_order_options(self.db,row["id"],self.buyer)["items"]
+        self.assertEqual([order["id"]],[item["id"] for item in options])
+        self.assertEqual("5.000",options[0]["available_quantity"])
+
+        allocated=pr.transition(self.db,row["id"],{
+            "action":"ALOCAR_PEDIDO","version":row["version"],
+            "purchase_order_id":order["id"],"reason":"Pedido vigente confirmado com compras",
+        },self.buyer)["request"]
+        self.db.commit()
+        self.assertEqual("CONCLUIDA",allocated["status"])
+        self.assertEqual(order["id"],allocated["purchase_order_id"])
+        self.assertEqual(order["id"],allocated["anticipation_order_id"])
+        event=pr.history(self.db,row["id"])["events"][-1]
+        self.assertEqual("ALOCAR_PEDIDO",event["action"])
+        self.assertEqual("Pedido vigente confirmado com compras",event["reason"])
+        self.assertEqual(order["id"],event["after_data"]["purchase_order"]["id"])
+
+        second=self.request(quantity="4")
+        self.assertEqual([],pr.existing_order_options(self.db,second["id"],self.buyer)["items"])
+        with self.assertRaisesRegex(ValueError,"alocações já confirmadas"):
+            pr.transition(self.db,second["id"],{
+                "action":"ALOCAR_PEDIDO","version":second["version"],
+                "purchase_order_id":order["id"],"reason":"Tentativa de alocação excedente",
+            },self.buyer)
+
     def test_open_kit_order_covers_recursively_exploded_component_request(self):
         kit=SKU(sku="CJ-VIDRO",descricao="CJ VIDRO FIXO",unidade="CJ",
                 grupo="30 - CONJUNTO",active=True)
@@ -115,6 +143,9 @@ class PurchaseRequestTests(unittest.TestCase):
         row=self.request(quantity="10")
         self.assertEqual("ANTECIPACAO",row["request_type"])
         self.assertEqual(order["id"],row["anticipation_order_id"])
+        order_options=pr.existing_order_options(self.db,row["id"],self.buyer)["items"]
+        self.assertEqual(order["id"],order_options[0]["id"])
+        self.assertEqual(Decimal("18"),Decimal(order_options[0]["available_quantity"]))
         listed=pr.listing(self.db,{})["items"][0]
         self.assertEqual(Decimal("18"),Decimal(listed["anticipation_pending_quantity"]))
         order_number=self.db.execute(text(
@@ -489,6 +520,7 @@ class PurchaseRequestRouteTests(unittest.TestCase):
     setUpBase = legacy.ErpSkuResolutionTest.setUp
     tearDown = legacy.ErpSkuResolutionTest.tearDown
     request = PurchaseRequestTests.request
+    order = PurchaseRequestTests.order
     def setUp(self):
         PurchaseRequestTests.setUp(self)
         from flask import Flask
@@ -536,6 +568,17 @@ class PurchaseRequestRouteTests(unittest.TestCase):
         self.assertEqual(1,len(response.json["events"]))
         options=self.client.get("/api/erp/purchase-requests/options?q=MAT")
         self.assertEqual(["MAT-001"],[r["sku_codigo"] for r in options.json["items"]])
+
+    def test_existing_order_options_requires_buyer_and_returns_covered_orders(self):
+        order=self.order([],qty="5")
+        row=self.request(quantity="2")
+        path="/api/erp/purchase-requests/"+row["id"]+"/orders"
+        self.actor=self.operator
+        self.assertEqual(403,self.client.get(path).status_code)
+        self.actor=self.buyer
+        response=self.client.get(path)
+        self.assertEqual(200,response.status_code)
+        self.assertEqual(order["id"],response.json["items"][0]["id"])
 
     def test_queue_refresh_persists_legacy_anticipation_reclassification(self):
         data=legacy.ErpSkuResolutionTest._payload(str(uuid4()),"MAT-001","2")

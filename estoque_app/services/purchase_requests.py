@@ -324,6 +324,15 @@ def order_component_pending(db, order_id, sku_code, rows=None,
     ).get(str(order_id))
     return balance or {"pending_quantity": Decimal("0"), "delivery_date": None}
 
+def _order_component_unallocated(db, order_id, sku_code, exclude_request_id=None):
+    pending = order_component_pending(db, order_id, sku_code)["pending_quantity"]
+    conditions = [order_condition(db, requests.c.purchase_order_id, order_id),
+                  requests.c.status == "CONCLUIDA", requests.c.sku_codigo == sku_code]
+    if exclude_request_id:
+        conditions.append(requests.c.id != exclude_request_id)
+    reserved = db.execute(select(func.coalesce(func.sum(requests.c.quantity), 0)).where(*conditions)).scalar_one()
+    return max(Decimal("0"), pending - Decimal(str(reserved or 0)))
+
 def closest_active_order(db, sku_code, needed_at, rows=None,
                          factor_cache=None, sku_cache=None):
     """Choose the nearest active order covering the item directly or via a kit B.O.M."""
@@ -538,6 +547,27 @@ def history(db, request_id):
                       .order_by(events.c.created_at, events.c.id)).mappings()
     return {"request": encode(row), "events": [encode(dict(r)) for r in rows]}
 
+def existing_order_options(db, request_id, user):
+    """List active O.C.s that can cover the request, including component coverage via B.O.M."""
+    require_ready(db)
+    require_buyer(db, user)
+    row = get(db, request_id)
+    if not _is_pending_request(row) or row.get("purchase_order_id"):
+        raise ValueError("Só é possível alocar O.C. em solicitação ainda pendente.")
+    balances = _order_component_balances(db, row["sku_codigo"], row["needed_at"])
+    options = []
+    for order_id, balance in balances.items():
+        available = _order_component_unallocated(db, order_id, row["sku_codigo"])
+        if available < Decimal(str(row["quantity"])):
+            continue
+        options.append({**balance, "available_quantity": available})
+    options.sort(key=lambda item: (
+        abs((item["delivery_date"] - row["needed_at"]).days) if item["delivery_date"] else 10**9,
+        item["delivery_date"] or date.max,
+        str(item["numero_oc"] or ""),
+    ))
+    return {"items": [encode(item) for item in options]}
+
 def notifications(db):
     require_ready(db)
     counts = dict(db.execute(select(requests.c.status, func.count()).group_by(requests.c.status)).all())
@@ -589,6 +619,20 @@ def transition(db, request_id, payload, user):
         anticipated = closest_active_order(db, edit_fields["sku_codigo"], edit_fields["needed_at"])
     if action == "ASSUMIR" and row["status"] == "SOLICITADA":
         status = "EM_COMPRAS"
+    elif action == "ALOCAR_PEDIDO" and row["status"] in {"SOLICITADA", "EM_COMPRAS"} and not row.get("purchase_order_id"):
+        try:
+            selected_order_id = uid(payload.get("purchase_order_id"))
+        except ValueError:
+            raise ValueError("Selecione um pedido de compra válido.")
+        order = db.execute(select(orders).where(
+            order_condition(db, orders.c.id, selected_order_id)
+        ).with_for_update()).mappings().first()
+        if not order or order["status"] not in {"EMITIDA", "PARCIALMENTE_RECEBIDA"} or not str(order["numero_oc"] or "").strip():
+            raise ValueError("Selecione uma O.C. emitida e ainda vigente.")
+        available = _order_component_unallocated(db, selected_order_id, row["sku_codigo"], row["id"])
+        if available < Decimal(str(row["quantity"])):
+            raise ValueError("A O.C. não tem saldo pendente suficiente deste SKU, considerando alocações já confirmadas.")
+        status = "CONCLUIDA"
     elif action == "SOLICITAR_ANTECIPACAO" and row["status"] == "SOLICITADA" and row["request_type"] == "ANTECIPACAO":
         status = "EM_COMPRAS"
     elif action == "CONFIRMAR_ANTECIPACAO" and row["status"] == "EM_COMPRAS" and row["request_type"] == "ANTECIPACAO":
@@ -601,10 +645,10 @@ def transition(db, request_id, payload, user):
         ).with_for_update()).mappings().first() if row["anticipation_order_id"] else None
         if not order or order["status"] not in {"EMITIDA", "PARCIALMENTE_RECEBIDA"} or not str(order["numero_oc"] or "").strip():
             raise ValueError("A antecipação exige uma O.C. válida e ainda vigente.")
-        pending_quantity = order_component_pending(
-            db, row["anticipation_order_id"], row["sku_codigo"]
-        )["pending_quantity"]
-        if pending_quantity < Decimal(str(row["quantity"])):
+        available_quantity = _order_component_unallocated(
+            db, row["anticipation_order_id"], row["sku_codigo"], row["id"]
+        )
+        if available_quantity < Decimal(str(row["quantity"])):
             raise ValueError("A O.C. vigente não tem saldo pendente suficiente deste SKU para atender a solicitação.")
         status = "CONCLUIDA"
     elif action == "CONVERTER_NOVA_COMPRA" and row["status"] in {"SOLICITADA", "EM_COMPRAS"} and row["request_type"] == "ANTECIPACAO":
@@ -635,13 +679,19 @@ def transition(db, request_id, payload, user):
                    anticipation_confirmed_delivery_date=confirmed_date,
                    completed_at=now(), completed_by=user.username,
                    buyer_id=user.id, buyer=user.username)
+    elif action == "ALOCAR_PEDIDO":
+        row.update(status="CONCLUIDA", request_type="ANTECIPACAO",
+                   purchase_order_id=selected_order_id, anticipation_order_id=selected_order_id,
+                   anticipation_confirmed_delivery_date=None,
+                   completed_at=now(), completed_by=user.username,
+                   buyer_id=user.id, buyer=user.username)
     elif action == "CONVERTER_NOVA_COMPRA":
         row.update(request_type="COMPRA_NOVA", anticipation_order_id=None,
                    buyer_id=user.id, buyer=user.username)
     elif action == "REABRIR":
         row.update(buyer_id=None, buyer=None)
     db.execute(requests.update().where(requests.c.id == row["id"]).values(**row))
-    audit(db, dict(row, purchase_order=encode(dict(order))) if action == "CONFIRMAR_ANTECIPACAO" else row,
+    audit(db, dict(row, purchase_order=encode(dict(order))) if action in {"CONFIRMAR_ANTECIPACAO", "ALOCAR_PEDIDO"} else row,
           user, action, before, reason)
     return {"request": encode(row)}
 
