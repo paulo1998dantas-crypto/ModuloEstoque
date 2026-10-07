@@ -4,12 +4,12 @@ const configNode = document.getElementById("pr-config");
 if (!configNode) return;
 const cfg = JSON.parse(configNode.textContent);
 const $ = id => document.getElementById(id);
-const labels = {SOLICITADA:"Solicitada",EM_COMPRAS:"Em compras",CONCLUIDA:"Compra concluída",CANCELADA:"Cancelada"};
+const labels = {SOLICITADA:"Solicitada",EM_COMPRAS:"Em compras",CONCLUIDA:"Concluído",CANCELADA:"Cancelada"};
 const date = value => !value ? "—" : /^\d{4}-\d{2}-\d{2}$/.test(value) ? value.split("-").reverse().join("/") : new Date(value).toLocaleString("pt-BR",{timeZone:"America/Sao_Paulo"});
 const qty = value => Number(value).toLocaleString("pt-BR",{maximumFractionDigits:3});
 const node = (tag,text,className) => {const n=document.createElement(tag);if(text!=null)n.textContent=text;if(className)n.className=className;return n;};
 let page=1,total=0,rows=[],key=crypto.randomUUID(),loading=false,closingAnticipationRow=null;
-let editingRow=null,editSkuTimer=null;
+let editingRow=null,editSkuTimer=null,allocatingRow=null,allocationOptions=[];
 let loadSerial=0;
 function message(text,error=false){$("pr-message").textContent=text;$("pr-message").classList.toggle("pr-error",error);}
 async function api(path="",payload){
@@ -45,6 +45,7 @@ function render(){
   if(canEditRequest){actions.append(button("Editar",()=>openEdit(row)));actions.append(button("Excluir",()=>excludeRequest(row)));}
   if(cfg.can_manage){
    if(row.status==="SOLICITADA")actions.append(button(anticipation?"Registrar solicitação ao fornecedor":"Assumir",()=>act(row,anticipation?"SOLICITAR_ANTECIPACAO":"ASSUMIR")));
+   if(pending)actions.append(button("Alocar O.C. existente",()=>openAllocateOrder(row)));
    if(anticipation&&row.status==="EM_COMPRAS")actions.append(button("Confirmar data negociada",()=>openAnticipationConfirmation(row)));
    if(anticipation&&pending)actions.append(button("Converter em nova O.C.",()=>act(row,"CONVERTER_NOVA_COMPRA")));
    if(row.status==="CANCELADA")actions.append(button("Reabrir",()=>act(row,"REABRIR")));
@@ -120,6 +121,37 @@ function openAnticipationConfirmation(row){
  $("pr-confirm-anticipation-reason").value="";
  $("pr-confirm-anticipation").showModal();
 }
+async function openAllocateOrder(row){
+ allocatingRow=row;
+ const select=$("pr-allocate-select"),details=$("pr-allocate-details");
+ select.replaceChildren(Object.assign(node("option","Selecione uma O.C."),{value:""}));
+ details.textContent="";$("pr-allocate-reason").value="";
+ $("pr-allocate-request").textContent="SOL-"+row.id.slice(0,8).toUpperCase()+" · "+row.sku_codigo+" · "+qty(row.quantity)+" "+row.unidade;
+ try{
+  const data=await api("/"+encodeURIComponent(row.id)+"/orders");allocationOptions=data.items||[];
+  if(!allocationOptions.length){allocatingRow=null;return message("Não há O.C. vigente com saldo suficiente para esta solicitação.",true);}
+  for(const order of allocationOptions){
+   const option=node("option","OC "+(order.numero_oc||"—")+" · "+(order.fornecedor_nome||"Fornecedor não informado")+" · saldo "+qty(order.available_quantity));
+   option.value=order.id;select.append(option);
+  }
+  select.onchange=()=>{
+   const selected=allocationOptions.find(order=>order.id===select.value);
+   details.textContent=selected?"Entrega prevista: "+date(selected.delivery_date)+" · saldo disponível para alocação: "+qty(selected.available_quantity):"";
+  };
+  $("pr-allocate-order").showModal();
+ }catch(error){allocatingRow=null;message(error.message,true);}
+}
+async function allocateExistingOrder(){
+ const row=allocatingRow,orderId=$("pr-allocate-select").value,reason=$("pr-allocate-reason").value.trim();
+ if(!row||!orderId||!reason)return message("Selecione a O.C. e registre a confirmação/justificativa.",true);
+ const save=$("pr-allocate-save");save.disabled=true;
+ try{
+  await api("/"+encodeURIComponent(row.id)+"/action",{action:"ALOCAR_PEDIDO",purchase_order_id:orderId,version:row.version,reason});
+  $("pr-allocate-order").close();allocatingRow=null;allocationOptions=[];
+  message("O.C. vinculada e solicitação concluída.");await load();
+ }catch(error){message(error.message,true);}
+ finally{save.disabled=false;}
+}
 async function confirmAnticipation(){
  const row=closingAnticipationRow,confirmedDate=$("pr-confirm-anticipation-date").value,reason=$("pr-confirm-anticipation-reason").value.trim();
  if(!row)return;
@@ -140,6 +172,8 @@ async function act(row,action){
 $("pr-close-history").onclick=()=>$("pr-history").close();
 $("pr-confirm-anticipation-cancel").onclick=()=>{$("pr-confirm-anticipation").close();closingAnticipationRow=null;};
 $("pr-confirm-anticipation-save").onclick=confirmAnticipation;
+$("pr-allocate-cancel").onclick=()=>{$("pr-allocate-order").close();allocatingRow=null;allocationOptions=[];};
+$("pr-allocate-save").onclick=allocateExistingOrder;
 $("pr-edit-cancel").onclick=()=>{$("pr-edit-request").close();editingRow=null;};
 $("pr-edit-sku-search").oninput=()=>{clearTimeout(editSkuTimer);editSkuTimer=setTimeout(()=>fillSkuOptions($("pr-edit-sku"),$("pr-edit-sku-search").value).catch(e=>message(e.message,true)),250);};
 $("pr-edit-form").onsubmit=async event=>{

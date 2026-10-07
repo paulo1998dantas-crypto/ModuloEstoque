@@ -22,13 +22,13 @@
   <section class="pr-panel">
     <div class="pr-filters">
       <label>Busca<input id="pr-search" placeholder="SKU, descrição, solicitante, referência ou pedido"></label>
-      <label>Status<select id="pr-status"><option value="">Todos</option><option value="SOLICITADA">Solicitada</option><option value="EM_COMPRAS">Em compras</option><option value="CONCLUIDA">Compra concluída</option><option value="CANCELADA">Cancelada</option></select></label>
+      <label>Status<select id="pr-status"><option value="">Todos</option><option value="SOLICITADA">Solicitada</option><option value="EM_COMPRAS">Em compras</option><option value="CONCLUIDA">Concluído</option><option value="CANCELADA">Cancelada</option></select></label>
       <label>Origem<select id="pr-origin"><option value="">Todas</option><option value="ESTOQUE">Almoxarifado</option><option value="PCP">PCP</option></select></label>
       <label>Necessidade de<input id="pr-from" type="date"></label><label>Até<input id="pr-to" type="date"></label>
       <button type="button" id="pr-filter">Filtrar</button>
       {% if request_config.can_manage %}<button type="button" id="pr-convert">Preparar pedido das selecionadas</button>{% endif %}
     </div>
-    <p class="pr-note">PCP e Almoxarifado aparecem nesta mesma fila. O sistema identifica O.C. emitidas/parcialmente recebidas com saldo do mesmo SKU e vincula a mais próxima pela data de necessidade. Para encerrar uma antecipação, o comprador registra a nova data negociada e o retorno do fornecedor; a solicitação fica vinculada à O.C. existente. A data original da O.C. não é alterada automaticamente.</p>
+    <p class="pr-note">PCP e Almoxarifado aparecem nesta mesma fila. O sistema identifica O.C. vigentes e saldo disponível. A solicitação é concluída quando o comprador aloca uma O.C. válida ou, em uma antecipação, confirma a nova data negociada com o fornecedor. Apenas assumir a solicitação não a conclui.</p>
     <div class="pr-table-wrap"><table class="pr-table"><thead><tr>
       {% if request_config.can_manage %}<th>Selecionar</th>{% endif %}
       <th>Solicitação</th><th>Origem</th><th>Classificação</th><th>SKU</th><th>Descrição</th><th>Unidade</th><th>Quantidade</th><th>Necessidade</th><th>Status</th><th>Referência</th><th>Solicitante</th><th>Solicitada em</th><th>Comprador</th><th>Atualizada em</th><th>Pedido existente / criado</th><th>Fornecedor</th><th>Status do pedido</th><th>Saldo pendente no pedido</th><th>Nova data negociada</th><th>Conclusão compras</th><th>Concluída por</th><th>Observações</th><th>Ações / histórico</th>
@@ -42,6 +42,14 @@
     <label>Nova data de entrega negociada<input id="pr-confirm-anticipation-date" type="date" required></label>
     <label>Protocolo / retorno do fornecedor<textarea id="pr-confirm-anticipation-reason" maxlength="4000" rows="4" required placeholder="Registre a confirmação do fornecedor e as condições negociadas"></textarea></label>
     <div class="pr-actions"><button type="button" id="pr-confirm-anticipation-save">Confirmar e encerrar solicitação</button></div>
+  </dialog>
+  <dialog id="pr-allocate-order" class="pr-confirm-dialog">
+    <div class="pr-heading"><div><h2>Alocar O.C. existente</h2><p>A solicitação será concluída após vincular um pedido vigente com saldo suficiente.</p></div><button type="button" id="pr-allocate-cancel">Cancelar</button></div>
+    <p id="pr-allocate-request" class="pr-note"></p>
+    <label>Pedido de compra vigente<select id="pr-allocate-select" required><option value="">Selecione uma O.C.</option></select></label>
+    <p id="pr-allocate-details" class="pr-note"></p>
+    <label>Motivo / confirmação do fornecedor<textarea id="pr-allocate-reason" maxlength="4000" rows="3" required placeholder="Registre a confirmação e/ou protocolo do fornecedor"></textarea></label>
+    <div class="pr-actions"><button type="button" id="pr-allocate-save">Vincular O.C. e concluir</button></div>
   </dialog>
   <dialog id="pr-edit-request" class="pr-confirm-dialog">
     <div class="pr-heading"><div><h2>Editar solicitação</h2><p>A alteração ficará registrada no histórico.</p></div><button type="button" id="pr-edit-cancel">Fechar</button></div>
