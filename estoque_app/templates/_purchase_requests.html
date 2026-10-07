@@ -1,5 +1,6 @@
 <link rel="stylesheet" href="/static/purchase_requests.css">
 <link rel="stylesheet" href="/static/purchase_requests_edit.css">
+<link rel="stylesheet" href="/static/purchase_requests_references.css">
 <section class="pr-shell" id="purchase-request-app">
   <div class="pr-heading"><div><h1>Solicitações de compra</h1><p>Reposição do almoxarifado e planejamento do PCP · conclusão mediante pedido confirmado.</p></div>
   <div class="pr-actions"><a href="{{ request_config.purchases_url }}">Compras</a><button type="button" id="pr-reload">Atualizar</button></div></div>
@@ -12,7 +13,13 @@
       <label>SKU do cadastro<select id="pr-sku" required><option value="">Selecione um SKU ativo</option></select></label>
       <label>Quantidade<input name="quantity" type="number" min="0.001" step="0.001" required></label>
       <label>Data de necessidade<input name="needed_at" type="date" required></label>
-      <label>Referência / O.S. / setor<input name="reference" maxlength="255"></label>
+      <label>Setor<select name="sector" required><option value="">Selecione</option><option value="PRODUÇÃO">PRODUÇÃO</option><option value="ADMINISTRATIVO">ADMINISTRATIVO</option><option value="GERAL">GERAL</option></select></label>
+      <div class="pr-wide pr-reference-picker" data-pr-reference-picker>
+        <label>Buscar O.S. aberta<input type="search" data-pr-work-order-search placeholder="Número da O.S., item, chassi ou cliente" autocomplete="off"></label>
+        <div class="pr-reference-results" data-pr-work-order-results aria-live="polite"><span>Carregando O.S. abertas…</span></div>
+        <div class="pr-reference-selected" data-pr-work-order-selected aria-live="polite"></div>
+        <small>Você pode vincular mais de uma O.S. Pesquise pelo número, item, chassi ou cliente. Não é permitido repetir o mesmo SKU em solicitações pendentes da mesma O.S.; sem O.S., a referência é o setor.</small>
+      </div>
       <label class="pr-wide">Observações / justificativa<textarea name="notes" maxlength="4000" rows="2"></textarea></label>
       <div class="pr-wide"><button id="pr-submit" type="submit">Enviar solicitação</button><small>Solicitante e horário são registrados automaticamente. Não movimenta estoque.</small></div>
     </form>
@@ -31,7 +38,7 @@
     <p class="pr-note">PCP e Almoxarifado aparecem nesta mesma fila. O sistema identifica O.C. vigentes e saldo disponível. A solicitação é concluída quando o comprador aloca uma O.C. válida ou, em uma antecipação, confirma a nova data negociada com o fornecedor. Apenas assumir a solicitação não a conclui.</p>
     <div class="pr-table-wrap"><table class="pr-table"><thead><tr>
       {% if request_config.can_manage %}<th>Selecionar</th>{% endif %}
-      <th>Solicitação</th><th>Origem</th><th>Classificação</th><th>SKU</th><th>Descrição</th><th>Unidade</th><th>Quantidade</th><th>Necessidade</th><th>Status</th><th>Referência</th><th>Solicitante</th><th>Solicitada em</th><th>Comprador</th><th>Atualizada em</th><th>Pedido existente / criado</th><th>Fornecedor</th><th>Status do pedido</th><th>Saldo pendente no pedido</th><th>Nova data negociada</th><th>Conclusão compras</th><th>Concluída por</th><th>Observações</th><th>Ações / histórico</th>
+      <th>Solicitação</th><th>Origem</th><th>Classificação</th><th>SKU</th><th>Descrição</th><th>Unidade</th><th>Quantidade</th><th>Necessidade</th><th>Status</th><th>Referência / O.S. / setor</th><th>Solicitante</th><th>Solicitada em</th><th>Comprador</th><th>Atualizada em</th><th>Pedido existente / criado</th><th>Fornecedor</th><th>Status do pedido</th><th>Saldo pendente no pedido</th><th>Nova data negociada</th><th>Conclusão compras</th><th>Concluída por</th><th>Observações</th><th>Ações / histórico</th>
     </tr></thead><tbody id="pr-rows"></tbody></table></div>
     <div class="pr-pagination"><button id="pr-prev">Anterior</button><span id="pr-page"></span><button id="pr-next">Próxima</button></div>
   </section>
@@ -58,7 +65,13 @@
       <label>SKU do cadastro<select id="pr-edit-sku" name="sku_codigo" required><option value="">Selecione um SKU ativo</option></select></label>
       <label>Quantidade<input name="quantity" type="number" min="0.001" step="0.001" required></label>
       <label>Data de necessidade<input name="needed_at" type="date" required></label>
-      <label>Referência / O.S. / setor<input name="reference" maxlength="255"></label>
+      <label>Setor<select name="sector" required><option value="">Selecione</option><option value="PRODUÇÃO">PRODUÇÃO</option><option value="ADMINISTRATIVO">ADMINISTRATIVO</option><option value="GERAL">GERAL</option></select></label>
+      <div class="pr-wide pr-reference-picker" data-pr-reference-picker>
+        <label>Buscar O.S. aberta<input type="search" data-pr-work-order-search placeholder="Número da O.S., item, chassi ou cliente" autocomplete="off"></label>
+        <div class="pr-reference-results" data-pr-work-order-results aria-live="polite"><span>Carregando O.S. abertas…</span></div>
+        <div class="pr-reference-selected" data-pr-work-order-selected aria-live="polite"></div>
+        <small>Você pode vincular mais de uma O.S. Pesquise pelo número, item, chassi ou cliente. Não é permitido repetir o mesmo SKU em solicitações pendentes da mesma O.S.; sem O.S., a referência é o setor.</small>
+      </div>
       <label class="pr-wide">Observações / justificativa<textarea name="notes" maxlength="4000" rows="2"></textarea></label>
       <label class="pr-wide">Motivo da alteração<textarea name="reason" maxlength="4000" rows="2" required placeholder="Explique o que precisa ser corrigido"></textarea></label>
       <div class="pr-wide pr-actions"><button id="pr-edit-save" type="submit">Salvar alteração</button><small>Solicitações concluídas não podem ser alteradas.</small></div>
@@ -66,5 +79,5 @@
   </dialog>
 </section>
 <script id="pr-config" type="application/json">{{ request_config|tojson }}</script>
-<script src="/static/purchase_requests.js" defer></script>
+<script src="/static/purchase_requests.js?v=20261007-references" defer></script>
 

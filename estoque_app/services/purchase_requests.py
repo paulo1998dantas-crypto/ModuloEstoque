@@ -4,8 +4,8 @@ from decimal import Decimal, InvalidOperation
 from uuid import UUID, uuid4
 from zoneinfo import ZoneInfo
 from sqlalchemy import (MetaData, Table, Column, String, Integer, Numeric, Date,
-                        DateTime, JSON, Uuid, select, func, or_, inspect,
-                        CheckConstraint, UniqueConstraint, case)
+                        DateTime, JSON, Text, Uuid, select, func, or_, inspect,
+                        CheckConstraint, UniqueConstraint)
 from models import SKU, User
 from auth import effective_roles, can
 
@@ -20,6 +20,7 @@ requests = Table("erp_purchase_requests", metadata,
     Column("unidade", String(20), nullable=False),
     Column("quantity", Numeric(14, 3), nullable=False),
     Column("needed_at", Date, nullable=False),
+    Column("sector", String(20), nullable=False, server_default="GERAL"),
     Column("request_type", String(20), nullable=False, server_default="COMPRA_NOVA"),
     Column("reference", String(255), nullable=False),
     Column("notes", String(4000), nullable=False),
@@ -38,10 +39,18 @@ requests = Table("erp_purchase_requests", metadata,
     Column("idempotency_key", String(80), nullable=False),
     UniqueConstraint("requested_by_id", "idempotency_key"),
     CheckConstraint("quantity > 0"),
+    CheckConstraint("sector in ('PRODUÇÃO', 'ADMINISTRATIVO', 'GERAL')"),
     CheckConstraint("origin in ('ESTOQUE', 'PCP')"),
     CheckConstraint("request_type in ('COMPRA_NOVA', 'ANTECIPACAO')"),
     CheckConstraint("status in ('SOLICITADA', 'EM_COMPRAS', 'CONCLUIDA', 'CANCELADA')"),
     CheckConstraint("(status = 'CONCLUIDA') = (purchase_order_id is not null and completed_at is not null and completed_by is not null)"),
+)
+request_work_orders = Table("erp_purchase_request_work_orders", metadata,
+    Column("request_id", String(36), primary_key=True),
+    Column("work_order_id", Uuid(as_uuid=False), primary_key=True),
+    Column("source", String(20), nullable=False, server_default="USER"),
+    Column("linked_at", DateTime(timezone=True), nullable=False),
+    Column("linked_by", Integer),
 )
 events = Table("erp_purchase_request_events", metadata,
     Column("id", String(36), primary_key=True),
@@ -63,16 +72,71 @@ lines = Table("erp_purchase_order_lines", MetaData(),
     Column("sku_codigo", String), Column("quantidade_pedida", Numeric(14, 3)),
     Column("quantidade_recebida", Numeric(14, 3)), Column("status", String),
     Column("data_necessidade", Date))
+work_orders = Table("erp_work_orders", MetaData(),
+    Column("id", Uuid(as_uuid=False), primary_key=True),
+    Column("vehicle_entry_id", Uuid(as_uuid=False)),
+    Column("numero_os", String), Column("status", String), Column("technical_status", String))
+vehicle_entries = Table("erp_vehicle_entries", MetaData(),
+    Column("id", Uuid(as_uuid=False), primary_key=True), Column("item_number", Integer))
+reference_backfill = Table("erp_purchase_request_reference_backfill", MetaData(),
+    Column("request_id", String(36), primary_key=True),
+    Column("original_reference", String(255)), Column("result", String(24)),
+    Column("linked_work_orders", Integer), Column("unresolved_tokens", Text),
+    Column("resolved_by_id", Integer), Column("resolved_by", String(80)),
+    Column("reviewed_at", DateTime(timezone=True)))
+
+SECTORS = {"PRODUÇÃO", "ADMINISTRATIVO", "GERAL"}
+
+def lock_request_materials(db, sku_ids):
+    """Serialize reference changes for each material until commit/rollback."""
+    if db.bind.dialect.name == "postgresql":
+        from sqlalchemy import text
+        for sku_id in sorted(set(sku_ids)):
+            db.execute(text("select pg_advisory_xact_lock(hashtextextended(:key,0))"),
+                       {"key": f"purchase-request-material:{sku_id}"})
+
+def require_unique_pending_reference(db, sku_id, sku_code, sector, work_order_ids,
+                                     exclude_request_id=None):
+    """O.S. is the specific reference; sector applies to requests without O.S."""
+    selected = normalize_work_order_ids(work_order_ids)
+    linked = select(request_work_orders.c.request_id).where(
+        request_work_orders.c.request_id == requests.c.id)
+    statement = select(requests).where(
+        requests.c.sku_id == sku_id,
+        requests.c.status.in_(("SOLICITADA", "EM_COMPRAS")))
+    if exclude_request_id:
+        statement = statement.where(requests.c.id != exclude_request_id)
+    if selected:
+        statement = statement.where(linked.where(
+            request_work_orders.c.work_order_id.in_(selected)).exists())
+    else:
+        statement = statement.where(requests.c.sector == sector, ~linked.exists())
+    conflict = db.execute(statement.order_by(requests.c.created_at, requests.c.id)
+                          .limit(1)).mappings().first()
+    if conflict:
+        if selected:
+            overlapping = [item["label"] for item in work_order_details(
+                db, [conflict["id"]]).get(conflict["id"], []) if item["id"] in selected]
+            reference = " / ".join(overlapping)
+        else:
+            reference = f"setor {sector}"
+        number = "SOL-" + conflict["id"][:8].upper()
+        raise ValueError(f"Solicitação duplicada: o material {sku_code} já possui "
+                         f"solicitação pendente {number} para {reference}. "
+                         "Consulte ou edite a solicitação existente.")
 
 def now():
     return datetime.now(timezone.utc)
 
 def ready(db):
-    return inspect(db.connection()).has_table(requests.name)
+    inspector = inspect(db.connection())
+    return (inspector.has_table(requests.name) and
+            inspector.has_table(request_work_orders.name) and
+            "sector" in {column["name"] for column in inspector.get_columns(requests.name)})
 
 def require_ready(db):
     if not ready(db):
-        raise ValueError("Workflow indisponível: aplique a migração 20261006120000_purchase_requests.sql no Estoque.")
+        raise ValueError("Workflow indisponível: aplique a migração 20261006120000_purchase_requests.sql e a migração 20261007120000_purchase_request_work_order_references.sql no Estoque.")
 
 def encode(value):
     if isinstance(value, dict):
@@ -110,7 +174,135 @@ def require_request_editor(db, row, user):
         raise PermissionError("Usuário ativo obrigatório para editar/excluir a solicitação.")
     require_origin(db, user, row["origin"])
 
-def editable_request_fields(db, payload):
+def normalize_sector(value, default="GERAL"):
+    selected = str(default if value is None else value).strip().upper()
+    if selected == "PRODUCAO":
+        selected = "PRODUÇÃO"
+    if selected not in SECTORS:
+        raise ValueError("Selecione PRODUÇÃO, ADMINISTRATIVO ou GERAL.")
+    return selected
+
+def normalize_work_order_ids(values):
+    if values is None:
+        return []
+    if not isinstance(values, list) or len(values) > 100:
+        raise ValueError("Selecione até 100 O.S. por solicitação.")
+    ids = []
+    try:
+        for value in values:
+            normalized = str(UUID(str(value)))
+            if normalized not in ids:
+                ids.append(normalized)
+    except (ValueError, TypeError, AttributeError):
+        raise ValueError("Há uma O.S. inválida na seleção. Atualize a tela e selecione novamente.")
+    return ids
+
+def current_work_order_ids(db, request_id):
+    return [str(row[0]) for row in db.execute(
+        select(request_work_orders.c.work_order_id)
+        .where(request_work_orders.c.request_id == request_id)
+        .order_by(request_work_orders.c.linked_at, request_work_orders.c.work_order_id)
+    ).all()]
+
+def work_order_details(db, request_ids):
+    if not request_ids:
+        return {}
+    linked_ids = db.execute(select(request_work_orders.c.request_id,
+        request_work_orders.c.work_order_id).where(
+            request_work_orders.c.request_id.in_(request_ids))).all()
+    result = {str(request_id): [] for request_id in request_ids}
+    if not linked_ids:
+        return result
+    rows = db.execute(
+        select(request_work_orders.c.request_id, work_orders.c.id,
+               work_orders.c.numero_os, vehicle_entries.c.item_number)
+        .select_from(request_work_orders
+            .join(work_orders, request_work_orders.c.work_order_id == work_orders.c.id)
+            .join(vehicle_entries, work_orders.c.vehicle_entry_id == vehicle_entries.c.id))
+        .where(request_work_orders.c.request_id.in_(request_ids))
+        .order_by(vehicle_entries.c.item_number.desc(), work_orders.c.numero_os)
+    ).mappings().all()
+    for row in rows:
+        work_order_id = str(row["id"])
+        number = str(row["numero_os"] or "").strip()
+        item_number = str(row["item_number"] or "").strip()
+        label = f"O.S. {number or item_number}"
+        if item_number and item_number != number:
+            label += f" · Item {item_number}"
+        result[str(row["request_id"])].append({
+            "id": work_order_id, "numero_os": number,
+            "item_number": item_number, "label": label,
+        })
+    return result
+
+def text_array(value):
+    if value is None:
+        return []
+    if isinstance(value, (list, tuple)):
+        return [str(item) for item in value]
+    raw = str(value).strip()
+    if raw.startswith("{") and raw.endswith("}"):
+        raw = raw[1:-1]
+    return [item.strip().strip('"') for item in raw.split(",") if item.strip()]
+
+def attach_reference_data(db, rows):
+    if not rows:
+        return rows
+    references = work_order_details(db, [row["id"] for row in rows])
+    reviews = {}
+    if inspect(db.connection()).has_table(reference_backfill.name):
+        reports = db.execute(select(reference_backfill.c.request_id,
+            reference_backfill.c.result, reference_backfill.c.unresolved_tokens).where(
+                reference_backfill.c.request_id.in_([row["id"] for row in rows]))).mappings()
+        reviews = {str(report["request_id"]): dict(report) for report in reports}
+    for row in rows:
+        linked = references.get(row["id"], [])
+        row["work_orders"] = linked
+        row["work_order_ids"] = [item["id"] for item in linked]
+        sector = row.get("sector") or "GERAL"
+        display_parts = [f"Setor: {sector}"]
+        display_parts.extend(item["label"] for item in linked)
+        if row.get("reference") and not linked:
+            display_parts.append(f"Referência anterior: {row['reference']}")
+        report = reviews.get(row["id"])
+        if report:
+            row["reference_review_result"] = report["result"]
+            row["reference_review_tokens"] = text_array(report["unresolved_tokens"])
+            if report["result"] == "VINCULADA_PARCIAL":
+                display_parts.append("Revisar números antigos não vinculados")
+            elif report["result"] == "AMBIGUA":
+                display_parts.append("Revisar: referência antiga ambígua")
+            elif report["result"] == "SEM_MATCH" and row.get("reference"):
+                display_parts.append("Revisar vínculo histórico")
+        row["reference_display"] = " · ".join(display_parts)
+    return rows
+
+def sync_work_order_links(db, request_id, work_order_ids, user):
+    selected = normalize_work_order_ids(work_order_ids)
+    existing = current_work_order_ids(db, request_id)
+    added = [work_order_id for work_order_id in selected if work_order_id not in existing]
+    if added:
+        open_ids = {str(row[0]) for row in db.execute(
+            select(work_orders.c.id).join(
+                vehicle_entries, work_orders.c.vehicle_entry_id == vehicle_entries.c.id
+            ).where(work_orders.c.id.in_(added),
+                    work_orders.c.status.in_(("ATIVA", "EM_PRODUÇÃO", "EM_PRODUCAO")),
+                    func.coalesce(work_orders.c.technical_status, "ABERTA") == "ABERTA")
+        ).all()}
+        if open_ids != set(added):
+            raise ValueError("Só é possível adicionar O.S. que ainda estejam abertas. Atualize a lista de O.S.")
+    removed = [work_order_id for work_order_id in existing if work_order_id not in selected]
+    if removed:
+        db.execute(request_work_orders.delete().where(
+            request_work_orders.c.request_id == request_id,
+            request_work_orders.c.work_order_id.in_(removed)))
+    for work_order_id in added:
+        db.execute(request_work_orders.insert().values(
+            request_id=request_id, work_order_id=work_order_id,
+            source="USER", linked_at=now(), linked_by=user.id))
+    return selected
+
+def editable_request_fields(db, payload, current_reference=""):
     sku_code = str(payload.get("sku_codigo") or "").strip()
     sku = db.query(SKU).filter(SKU.sku == sku_code, SKU.active.is_(True)).one_or_none()
     if not sku:
@@ -123,14 +315,19 @@ def editable_request_fields(db, payload):
         needed = date.fromisoformat(str(payload.get("needed_at") or ""))
     except (ValueError, InvalidOperation):
         raise ValueError("Informe quantidade positiva (até três decimais) e data de necessidade válida.")
-    reference = str(payload.get("reference") or "").strip()
+    reference = str(payload.get("reference", current_reference) or "").strip()
+    if "reference" in payload and reference != current_reference:
+        raise ValueError("Use a lista de O.S. e setor para alterar os vínculos; a referência antiga é preservada no histórico.")
     notes = str(payload.get("notes") or "").strip()
     if len(reference) > 255 or len(notes) > 4000:
         raise ValueError("Referência: até 255 caracteres. Observações: até 4.000.")
+    sector = normalize_sector(payload.get("sector"), "GERAL")
+    work_order_ids = normalize_work_order_ids(payload.get("work_order_ids"))
     return {"sku_id": sku.id, "sku_codigo": sku.sku,
             "descricao": sku.descricao, "unidade": sku.unidade or "UN",
             "quantity": quantity, "needed_at": needed,
-            "reference": reference, "notes": notes}
+            "reference": reference, "notes": notes, "sector": sector,
+            "work_order_ids": work_order_ids}
 
 def require_origin(db, user, origin):
     roles = effective_roles(user, db) if user and user.active else set()
@@ -143,6 +340,13 @@ def audit(db, row, user, action, before=None, reason=""):
     db.execute(events.insert().values(id=str(uuid4()), request_id=row["id"],
         action=action, actor_id=user.id, actor=user.username, created_at=now(),
         before_data=encode(before), after_data=encode(dict(row)), reason=reason))
+
+def request_snapshot(db, row):
+    snapshot = dict(row)
+    linked = work_order_details(db, [snapshot["id"]]).get(snapshot["id"], [])
+    snapshot["work_orders"] = linked
+    snapshot["work_order_ids"] = [item["id"] for item in linked]
+    return snapshot
 
 def order_condition(db, column, order_id):
     # Legacy SQLite stores UUID strings with hyphens; PostgreSQL uses UUID.
@@ -176,7 +380,9 @@ def create(db, payload, user, origin):
     found = db.execute(select(requests).where(
         requests.c.requested_by_id == user.id, requests.c.idempotency_key == key)).mappings().first()
     if found:
-        return {"request": encode(dict(found)), "replayed": True}
+        return {"request": encode(request_snapshot(db, dict(found))), "replayed": True}
+    if "sector" not in payload or "work_order_ids" not in payload:
+        raise ValueError("Recarregue a tela e selecione o setor e as O.S. pela lista de referências.")
     sku = db.query(SKU).filter(SKU.sku == str(payload.get("sku_codigo") or "").strip(),
                                SKU.active.is_(True)).one_or_none()
     if not sku:
@@ -189,24 +395,31 @@ def create(db, payload, user, origin):
     except (ValueError, InvalidOperation):
         raise ValueError("Informe quantidade positiva (até três decimais) e data de necessidade válida.")
     reference = str(payload.get("reference") or "").strip()
+    if reference:
+        raise ValueError("Selecione as O.S. e o setor nas listas; referências em texto livre não são aceitas em novas solicitações.")
     notes = str(payload.get("notes") or "").strip()
     if len(reference) > 255 or len(notes) > 4000:
         raise ValueError("Referência: até 255 caracteres. Observações: até 4.000.")
+    sector = normalize_sector(payload.get("sector"), "GERAL")
+    selected_work_orders = normalize_work_order_ids(payload.get("work_order_ids"))
+    lock_request_materials(db, [sku.id])
+    require_unique_pending_reference(db, sku.id, sku.sku, sector, selected_work_orders)
     anticipation = closest_active_order(db, sku.sku, needed)
     row = dict(id=str(uuid4()), origin=origin, request_type=("ANTECIPACAO" if anticipation else "COMPRA_NOVA"),
         anticipation_order_id=(str(anticipation["id"]) if anticipation else None),
         anticipation_confirmed_delivery_date=None,
         sku_id=sku.id, sku_codigo=sku.sku,
         descricao=sku.descricao, unidade=sku.unidade or "UN", quantity=quantity,
-        needed_at=needed, reference=reference, notes=notes, status="SOLICITADA",
+        needed_at=needed, sector=sector, reference=reference, notes=notes, status="SOLICITADA",
         requested_by_id=user.id, requested_by=user.username, created_at=now(),
         updated_at=now(), buyer_id=None, buyer=None, purchase_order_id=None,
         completed_at=None, completed_by=None, version=1, idempotency_key=key)
     db.execute(requests.insert().values(**row))
-    audit(db, row, user, "ANTECIPACAO_IDENTIFICADA" if anticipation else "SOLICITADA",
+    sync_work_order_links(db, row["id"], selected_work_orders, user)
+    audit(db, request_snapshot(db, row), user, "ANTECIPACAO_IDENTIFICADA" if anticipation else "SOLICITADA",
           reason=(f"Vinculada automaticamente ao pedido vigente {anticipation['numero_oc']} "
                   f"(saldo pendente {encode(anticipation['pending_quantity'])})." if anticipation else ""))
-    return {"request": encode(row), "replayed": False,
+    return {"request": encode(request_snapshot(db, row)), "replayed": False,
             "anticipation_order": encode(anticipation) if anticipation else None}
 
 def _as_date(value):
@@ -502,10 +715,17 @@ def listing(db, filters, user=None):
             statement = statement.where(requests.c[field] == filters[field])
     if filters.get("q"):
         term = "%" + str(filters["q"]).strip()[:150] + "%"
+        linked_reference = select(1).select_from(
+            request_work_orders.join(work_orders,
+                request_work_orders.c.work_order_id == work_orders.c.id)
+            .join(vehicle_entries, work_orders.c.vehicle_entry_id == vehicle_entries.c.id)
+        ).where(request_work_orders.c.request_id == requests.c.id,
+                or_(work_orders.c.numero_os.ilike(term),
+                    func.cast(vehicle_entries.c.item_number, String).ilike(term))).exists()
         statement = statement.where(or_(*[c.ilike(term) for c in
             (requests.c.sku_codigo, requests.c.descricao, requests.c.requested_by,
-             requests.c.reference, requests.c.buyer, orders.c.numero_oc,
-             anticipated_order.c.numero_oc)]))
+             requests.c.reference, requests.c.sector, requests.c.buyer, orders.c.numero_oc,
+             anticipated_order.c.numero_oc)], linked_reference))
     for key, comparison in (("from", True), ("to", False)):
         if filters.get(key):
             try: value = date.fromisoformat(filters[key])
@@ -536,7 +756,9 @@ def listing(db, filters, user=None):
         else:
             item["anticipation_pending_quantity"] = None
             item["anticipation_delivery_date"] = None
-        items.append(encode(_present_current_request(item)))
+        items.append(_present_current_request(item))
+    items = attach_reference_data(db, items)
+    items = [encode(item) for item in items]
     return {"items": items, "total": count, "page": page,
             "counts": dict(counts), "overdue": overdue}
 
@@ -545,7 +767,33 @@ def history(db, request_id):
     row = get(db, request_id)
     rows = db.execute(select(events).where(events.c.request_id == row["id"])
                       .order_by(events.c.created_at, events.c.id)).mappings()
-    return {"request": encode(row), "events": [encode(dict(r)) for r in rows]}
+    timeline = [dict(r) for r in rows]
+    snapshot = request_snapshot(db, row)
+    if inspect(db.connection()).has_table(reference_backfill.name):
+        report = db.execute(select(reference_backfill).where(
+            reference_backfill.c.request_id == row["id"])).mappings().first()
+        if report:
+            report = dict(report)
+            timeline.append({
+                "id": "BACKFILL:" + row["id"], "request_id": row["id"],
+                "action": "NORMALIZACAO_REFERENCIAS", "actor_id": None,
+                "actor": report.get("resolved_by") or "MIGRAÇÃO AUTOMÁTICA",
+                "created_at": report["reviewed_at"],
+                "before_data": {"reference": report["original_reference"]},
+                "after_data": {
+                    "sector": snapshot.get("sector", "GERAL"),
+                    "work_orders": snapshot.get("work_orders", []),
+                    "reference_backfill_result": report["result"],
+                    "unresolved_tokens": text_array(report["unresolved_tokens"]),
+                },
+                "reason": ("Referências históricas revisadas manualmente; texto original preservado."
+                    if report["result"] == "REVISADA_MANUALMENTE" else
+                    "Vínculos históricos processados sem alterar o texto original. "
+                    "Apenas correspondências exatas e únicas foram vinculadas."),
+            })
+    timeline.sort(key=lambda item: (encode(item.get("created_at")) or "",
+                                    str(item.get("id") or "")))
+    return {"request": encode(snapshot), "events": [encode(item) for item in timeline]}
 
 def existing_order_options(db, request_id, user):
     """List active O.C.s that can cover the request, including component coverage via B.O.M."""
@@ -604,18 +852,33 @@ def transition(db, request_id, payload, user):
     reason = str(payload.get("reason") or "").strip()
     if not reason or len(reason) > 4000:
         raise ValueError("Informe o motivo/observação (até 4.000 caracteres).")
-    edit_fields = editable_request_fields(db, payload) if action == "EDITAR" else None
+    edit_payload = payload
+    if action == "EDITAR":
+        edit_payload = dict(payload)
+        edit_payload.setdefault("sector", row.get("sector") or "GERAL")
+        edit_payload.setdefault("work_order_ids", current_work_order_ids(db, row["id"]))
+    edit_fields = editable_request_fields(db, edit_payload, row.get("reference") or "") if action == "EDITAR" else None
+    references_changed = False
     anticipated = None
     if edit_fields:
+        existing_work_order_ids = current_work_order_ids(db, row["id"])
+        references_changed = (
+            (row.get("sector") or "GERAL") != edit_fields["sector"] or
+            set(existing_work_order_ids) != set(edit_fields["work_order_ids"])
+        )
         changed = (
             row["sku_id"] != edit_fields["sku_id"] or
             Decimal(str(row["quantity"])) != edit_fields["quantity"] or
             row["needed_at"] != edit_fields["needed_at"] or
+            references_changed or
             (row["reference"] or "") != edit_fields["reference"] or
             (row["notes"] or "") != edit_fields["notes"]
         )
         if not changed:
             raise ValueError("Nenhum dado da solicitação foi alterado.")
+        lock_request_materials(db, [row["sku_id"], edit_fields["sku_id"]])
+        require_unique_pending_reference(db, edit_fields["sku_id"], edit_fields["sku_codigo"],
+            edit_fields["sector"], edit_fields["work_order_ids"], exclude_request_id=row["id"])
         anticipated = closest_active_order(db, edit_fields["sku_codigo"], edit_fields["needed_at"])
     if action == "ASSUMIR" and row["status"] == "SOLICITADA":
         status = "EM_COMPRAS"
@@ -665,15 +928,28 @@ def transition(db, request_id, payload, user):
         status = row["status"]
     else:
         raise ValueError("Transição inválida. A conclusão ocorre somente na emissão do pedido.")
-    before = dict(row)
+    if action == "REABRIR":
+        lock_request_materials(db, [row["sku_id"]])
+        require_unique_pending_reference(db, row["sku_id"], row["sku_codigo"], row["sector"],
+            current_work_order_ids(db, row["id"]), exclude_request_id=row["id"])
+    before = request_snapshot(db, row)
     row.update(status=status, updated_at=now(), version=row["version"]+1)
     if action in {"ASSUMIR", "SOLICITAR_ANTECIPACAO"}:
         row.update(buyer_id=user.id, buyer=user.username)
     elif action == "EDITAR":
-        row.update(**edit_fields,
+        request_fields = {key: value for key, value in edit_fields.items() if key != "work_order_ids"}
+        row.update(**request_fields,
                    request_type="ANTECIPACAO" if anticipated else "COMPRA_NOVA",
                    anticipation_order_id=str(anticipated["id"]) if anticipated else None,
                    anticipation_confirmed_delivery_date=None)
+        sync_work_order_links(db, row["id"], edit_fields["work_order_ids"], user)
+        if references_changed and inspect(db.connection()).has_table(reference_backfill.name):
+            db.execute(reference_backfill.update().where(
+                reference_backfill.c.request_id == row["id"]
+            ).values(result="REVISADA_MANUALMENTE",
+                     linked_work_orders=len(edit_fields["work_order_ids"]),
+                     resolved_by_id=user.id, resolved_by=user.username,
+                     reviewed_at=now()))
     elif action == "CONFIRMAR_ANTECIPACAO":
         row.update(status="CONCLUIDA", purchase_order_id=row["anticipation_order_id"],
                    anticipation_confirmed_delivery_date=confirmed_date,
@@ -691,9 +967,12 @@ def transition(db, request_id, payload, user):
     elif action == "REABRIR":
         row.update(buyer_id=None, buyer=None)
     db.execute(requests.update().where(requests.c.id == row["id"]).values(**row))
-    audit(db, dict(row, purchase_order=encode(dict(order))) if action in {"CONFIRMAR_ANTECIPACAO", "ALOCAR_PEDIDO"} else row,
+    after = request_snapshot(db, row)
+    if action in {"CONFIRMAR_ANTECIPACAO", "ALOCAR_PEDIDO"}:
+        after["purchase_order"] = encode(dict(order))
+    audit(db, after,
           user, action, before, reason)
-    return {"request": encode(row)}
+    return {"request": encode(request_snapshot(db, row))}
 
 def actor_user(db, actor):
     user = db.query(User).filter(User.username == actor, User.active.is_(True)).one_or_none()
@@ -760,8 +1039,11 @@ def reopen_cancelled_order(db, order_id, actor, reason):
                       .order_by(requests.c.id).with_for_update()).mappings().all()
     if not rows: return
     user = actor_user(db, actor)
+    lock_request_materials(db, [item["sku_id"] for item in rows])
     for item in rows:
         row, before = dict(item), dict(item)
+        require_unique_pending_reference(db, row["sku_id"], row["sku_codigo"], row["sector"],
+            current_work_order_ids(db, row["id"]), exclude_request_id=row["id"])
         row.update(status="SOLICITADA", purchase_order_id=None, completed_at=None,
                    completed_by=None, buyer_id=None, buyer=None, updated_at=now(),
                    version=row["version"]+1)

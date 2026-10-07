@@ -5,6 +5,7 @@ if (!configNode) return;
 const cfg = JSON.parse(configNode.textContent);
 const $ = id => document.getElementById(id);
 const labels = {SOLICITADA:"Solicitada",EM_COMPRAS:"Em compras",CONCLUIDA:"Concluído",CANCELADA:"Cancelada"};
+const referenceReviewLabels={VINCULADA:"Vinculada automaticamente",VINCULADA_PARCIAL:"Vinculada parcialmente; revisar",AMBIGUA:"Referência ambígua; revisar",SEM_MATCH:"Sem correspondência exata",SEM_REFERENCIA:"Sem referência anterior",REVISADA_MANUALMENTE:"Revisada manualmente"};
 const date = value => !value ? "—" : /^\d{4}-\d{2}-\d{2}$/.test(value) ? value.split("-").reverse().join("/") : new Date(value).toLocaleString("pt-BR",{timeZone:"America/Sao_Paulo"});
 const qty = value => Number(value).toLocaleString("pt-BR",{maximumFractionDigits:3});
 const node = (tag,text,className) => {const n=document.createElement(tag);if(text!=null)n.textContent=text;if(className)n.className=className;return n;};
@@ -29,9 +30,10 @@ function render(){
   const orderNumber=row.numero_oc||row.anticipation_numero_oc;
   const supplier=row.fornecedor_nome||row.anticipation_fornecedor_nome;
   const orderStatus=row.purchase_status||row.anticipation_purchase_status;
-  const values=["SOL-"+row.id.slice(0,8).toUpperCase(),row.origin==="ESTOQUE"?"Almoxarifado":"PCP",anticipation?"ANTECIPAÇÃO":"NOVA COMPRA",row.sku_codigo,row.descricao,row.unidade,qty(row.quantity),date(row.needed_at),row.status,row.reference,row.requested_by,date(row.created_at),row.buyer||"—",date(row.updated_at),orderNumber?(anticipation&&!row.numero_oc?"Antecipar · OC "+orderNumber:orderNumber):"—",supplier||"—",orderStatus||"—",anticipation?qty(row.anticipation_pending_quantity||0):"—",date(row.anticipation_confirmed_delivery_date),date(row.completed_at),row.completed_by||"—",row.notes];
+  const values=["SOL-"+row.id.slice(0,8).toUpperCase(),row.origin==="ESTOQUE"?"Almoxarifado":"PCP",anticipation?"ANTECIPAÇÃO":"NOVA COMPRA",row.sku_codigo,row.descricao,row.unidade,qty(row.quantity),date(row.needed_at),row.status,row.reference_display||row.reference,row.requested_by,date(row.created_at),row.buyer||"—",date(row.updated_at),orderNumber?(anticipation&&!row.numero_oc?"Antecipar · OC "+orderNumber:orderNumber):"—",supplier||"—",orderStatus||"—",anticipation?qty(row.anticipation_pending_quantity||0):"—",date(row.anticipation_confirmed_delivery_date),date(row.completed_at),row.completed_by||"—",row.notes];
   values.forEach((value,index)=>{
    const cell=node("td",value||"—");
+   if(index===9)cell.className="pr-reference-cell";
    if(index===2){const badge=node("span",value,"pr-badge "+(anticipation?"ANTECIPACAO":"COMPRA_NOVA"));if(anticipation){badge.style.background="#fff0d1";badge.style.color="#804900";}cell.replaceChildren(badge);}
    if(index===8){cell.replaceChildren(node("span",labels[row.status]||row.status,"pr-badge "+row.status));}
    if(index===7&&pending&&row.needed_at<today())cell.className="pr-overdue";
@@ -75,10 +77,51 @@ async function fillSkuOptions(select,query,selectedCode=""){
  if(selectedCode&&!items.some(item=>item.sku_codigo===selectedCode))items.unshift({sku_codigo:selectedCode,descricao:"SKU atual",unidade:""});
  for(const item of items){const option=node("option",item.sku_codigo+" · "+item.descricao+(item.unidade?" ("+item.unidade+")":""));option.value=item.sku_codigo;select.append(option);}
 }
+function initWorkOrderPicker(form){
+ const root=form?.querySelector("[data-pr-reference-picker]");
+ if(!root)return null;
+ const search=root.querySelector("[data-pr-work-order-search]");
+ const results=root.querySelector("[data-pr-work-order-results]");
+ const selected=root.querySelector("[data-pr-work-order-selected]");
+ const choices=new Map();let available=[];let timer=null;let serial=0;
+ function draw(){
+  selected.replaceChildren();
+  if(!choices.size){selected.append(node("span","Nenhuma O.S. vinculada.","pr-reference-empty"));return;}
+  for(const [id,item] of choices){
+   const chip=node("span",null,"pr-reference-chip");chip.append(node("span",item.label||("O.S. "+(item.numero_os||item.item_number||id))));
+   const remove=button("×",()=>{choices.delete(id);draw();drawResults();});remove.title="Remover vínculo";chip.append(remove);selected.append(chip);
+  }
+ }
+ function drawResults(){
+  results.replaceChildren();
+  if(!available.length){results.append(node("span","Nenhuma O.S. aberta encontrada. Ajuste a busca.","pr-reference-empty"));return;}
+  for(const item of available){
+   const id=String(item.id);const label=node("label",null,"pr-reference-option");const check=node("input");check.type="checkbox";check.checked=choices.has(id);
+   check.addEventListener("change",()=>{if(check.checked)choices.set(id,item);else choices.delete(id);draw();});
+   label.append(check,node("span",item.label||("O.S. "+(item.numero_os||item.item_number||id))));results.append(label);
+  }
+ }
+ async function load(query=""){
+  const request=++serial;
+  try{const data=await api("/work-orders?q="+encodeURIComponent(query));if(request!==serial)return;available=data.items||[];drawResults();}
+  catch(error){if(request===serial){available=[];results.replaceChildren(node("span",error.message,"pr-reference-empty"));}}
+ }
+ search.addEventListener("input",()=>{clearTimeout(timer);timer=setTimeout(()=>load(search.value.trim()),250);});
+ draw();load("");
+ return {
+  ids:()=>Array.from(choices.keys()),
+  setSelected(items){choices.clear();for(const item of items||[])if(item?.id)choices.set(String(item.id),item);draw();drawResults();},
+  clear(){choices.clear();draw();drawResults();search.value="";load("");}
+ };
+}
+const createReferencePicker=$("pr-form")?initWorkOrderPicker($("pr-form")):null;
+const editReferencePicker=$("pr-edit-form")&&(cfg.can_submit||cfg.can_edit_origin||cfg.can_manage)
+ ?initWorkOrderPicker($("pr-edit-form")):null;
 async function openEdit(row){
  editingRow=row;
  const form=$("pr-edit-form");form.elements.quantity.value=row.quantity;form.elements.needed_at.value=row.needed_at;
- form.elements.reference.value=row.reference||"";form.elements.notes.value=row.notes||"";form.elements.reason.value="";
+ form.elements.sector.value=row.sector||"GERAL";form.elements.notes.value=row.notes||"";form.elements.reason.value="";
+ editReferencePicker?.setSelected(row.work_orders||[]);
  $("pr-edit-sku-search").value=row.sku_codigo;
  try{await fillSkuOptions($("pr-edit-sku"),row.sku_codigo,row.sku_codigo);form.elements.sku_codigo.value=row.sku_codigo;$("pr-edit-request").showModal();}
  catch(e){message(e.message,true);}
@@ -96,12 +139,23 @@ async function showHistory(id){
   content.append(node("p",qty(data.request.quantity)+" "+data.request.unidade+" · Necessidade: "+date(data.request.needed_at)+" · Solicitante: "+data.request.requested_by));
   for(const event of data.events){
    const box=node("section",null,"pr-event");
-   box.append(node("strong",event.action.replaceAll("_"," ")),node("p",event.actor+" · "+date(event.created_at)));
+   box.append(node("strong",event.action==="NORMALIZACAO_REFERENCIAS"?"Padronização de referências históricas":event.action.replaceAll("_"," ")),node("p",event.actor+" · "+date(event.created_at)));
    const before=event.before_data||{},after=event.after_data||{};
    if(before.status!==after.status)box.append(node("p",(labels[before.status]||"Nova solicitação")+" → "+(labels[after.status]||after.status)));
    if(event.action==="EDITAR"){
-    const fields={sku_codigo:"SKU",descricao:"Descrição",unidade:"Unidade",quantity:"Quantidade",needed_at:"Data de necessidade",reference:"Referência",notes:"Observações",request_type:"Classificação"};
+    const fields={sku_codigo:"SKU",descricao:"Descrição",unidade:"Unidade",quantity:"Quantidade",needed_at:"Data de necessidade",sector:"Setor",reference:"Referência",notes:"Observações",request_type:"Classificação"};
     for(const [key,label] of Object.entries(fields))if(String(before[key]??"")!==String(after[key]??""))box.append(node("p",label+": "+(before[key]||"—")+" → "+(after[key]||"—")));
+    const beforeOrders=(before.work_orders||[]).map(item=>item.label||item.numero_os||item.id).join(", ");
+    const afterOrders=(after.work_orders||[]).map(item=>item.label||item.numero_os||item.id).join(", ");
+    if(beforeOrders!==afterOrders)box.append(node("p","O.S. vinculadas: "+(beforeOrders||"—")+" → "+(afterOrders||"—")));
+   }
+   if(event.action==="NORMALIZACAO_REFERENCIAS"){
+    const result=after.reference_backfill_result||"—";
+    box.append(node("p",result==="REVISADA_MANUALMENTE"?"Vínculos históricos revisados manualmente.":"Resultado da vinculação: "+(referenceReviewLabels[result]||result)));
+    box.append(node("p","Setor padronizado: "+(after.sector||"GERAL")));
+    const linked=(after.work_orders||[]).map(item=>item.label||item.numero_os||item.id).join(", ");
+    box.append(node("p","O.S. vinculadas: "+(linked||"nenhuma correspondência exata encontrada")));
+    if((after.unresolved_tokens||[]).length)box.append(node("p","Tokens sem correspondência automática: "+after.unresolved_tokens.join(", ")));
    }
    if(after.buyer&&before.buyer!==after.buyer)box.append(node("p","Comprador: "+after.buyer));
    if(after.purchase_order)box.append(node("p","Pedido: "+after.purchase_order.numero_oc+" · Fornecedor: "+after.purchase_order.fornecedor_nome+" · "+after.purchase_order.status));
@@ -178,7 +232,7 @@ $("pr-edit-cancel").onclick=()=>{$("pr-edit-request").close();editingRow=null;};
 $("pr-edit-sku-search").oninput=()=>{clearTimeout(editSkuTimer);editSkuTimer=setTimeout(()=>fillSkuOptions($("pr-edit-sku"),$("pr-edit-sku-search").value).catch(e=>message(e.message,true)),250);};
 $("pr-edit-form").onsubmit=async event=>{
  event.preventDefault();if(!editingRow)return;
- const payload=Object.fromEntries(new FormData(event.target));payload.action="EDITAR";payload.version=editingRow.version;
+ const payload=Object.fromEntries(new FormData(event.target));payload.work_order_ids=editReferencePicker?editReferencePicker.ids():(editingRow.work_order_ids||[]);payload.action="EDITAR";payload.version=editingRow.version;
  $("pr-edit-save").disabled=true;
  try{await api("/"+encodeURIComponent(editingRow.id)+"/action",payload);$("pr-edit-request").close();editingRow=null;message("Solicitação editada e registrada no histórico.");await load();}
  catch(e){message(e.message,true);}
@@ -206,9 +260,9 @@ if($("pr-form")){
  $("pr-sku-search").oninput=()=>{clearTimeout(timer);timer=setTimeout(options,300);};
  $("pr-form").onsubmit=async event=>{
   event.preventDefault();if(loading)return;
-  const payload=Object.fromEntries(new FormData(event.target));payload.sku_codigo=$("pr-sku").value;payload.idempotency_key=key;
+  const payload=Object.fromEntries(new FormData(event.target));payload.sku_codigo=$("pr-sku").value;payload.work_order_ids=createReferencePicker?.ids()||[];payload.idempotency_key=key;
   loading=true;$("pr-submit").disabled=true;
-  try{const data=await api("",payload);key=crypto.randomUUID();event.target.reset();message(data.request.request_type==="ANTECIPACAO"?"Solicitação SOL-"+data.request.id.slice(0,8).toUpperCase()+" identificada como ANTECIPAÇÃO do pedido "+(data.anticipation_order?.numero_oc||"já vigente")+" e encaminhada à fila do comprador.":"Solicitação SOL-"+data.request.id.slice(0,8).toUpperCase()+" enviada e registrada no histórico.");page=1;await load();}
+  try{const data=await api("",payload);key=crypto.randomUUID();event.target.reset();createReferencePicker?.clear();message(data.request.request_type==="ANTECIPACAO"?"Solicitação SOL-"+data.request.id.slice(0,8).toUpperCase()+" identificada como ANTECIPAÇÃO do pedido "+(data.anticipation_order?.numero_oc||"já vigente")+" e encaminhada à fila do comprador.":"Solicitação SOL-"+data.request.id.slice(0,8).toUpperCase()+" enviada e registrada no histórico.");page=1;await load();}
   catch(e){message(e.message,true);}
   finally{loading=false;$("pr-submit").disabled=false;}
  };

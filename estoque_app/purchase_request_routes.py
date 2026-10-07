@@ -4,6 +4,7 @@ import hmac
 from flask import Blueprint, jsonify, request, session, render_template, current_app
 from sqlalchemy import or_
 from services import purchase_requests as workflow
+from services.erp_service import active_work_orders
 from models import SKU
 
 def register(app, get_db, get_user, internal_allowed, internal_user, feature_required, login_required):
@@ -45,7 +46,7 @@ def register(app, get_db, get_user, internal_allowed, internal_user, feature_req
             return jsonify(ok=False, error=str(exc)), 403
         except ValueError as exc:
             database.rollback()
-            return jsonify(ok=False, error=str(exc)), 503 if "migração" in str(exc) else 400
+            return jsonify(ok=False, error=str(exc)), 503 if "migra" in str(exc).lower() else 400
         except Exception:
             database.rollback()
             current_app.logger.exception("Falha no workflow de solicitações")
@@ -88,6 +89,30 @@ def register(app, get_db, get_user, internal_allowed, internal_user, feature_req
             if q: rows = rows.filter(or_(SKU.sku.ilike("%"+q+"%"), SKU.descricao.ilike("%"+q+"%")))
             return {"items": [{"sku_codigo": r.sku, "descricao": r.descricao, "unidade": r.unidade or "UN"}
                               for r in rows.order_by(SKU.sku).limit(40)]}
+        return execute(lookup)
+
+    @bp.route("/api/erp/purchase-requests/work-orders")
+    @bp.route("/api/erp/internal/purchase-requests/work-orders")
+    @feature_required
+    def work_order_options():
+        def lookup(db, user):
+            if not workflow.buyer_allowed(db, user):
+                allowed = False
+                for origin in ("ESTOQUE", "PCP"):
+                    try:
+                        workflow.require_origin(db, user, origin)
+                        allowed = True
+                        break
+                    except PermissionError:
+                        pass
+                if not allowed:
+                    raise PermissionError("Seu perfil não pode consultar O.S. para solicitações.")
+            rows = active_work_orders(db, request.args.get("q") or "", limit=50)
+            return {"items": [{"id": str(row["work_order_id"]),
+                               "numero_os": row.get("numero_os"),
+                               "item_number": row.get("item_number"),
+                               "label": row.get("label")}
+                              for row in rows]}
         return execute(lookup)
 
     @bp.route("/api/erp/purchase-requests/notifications")

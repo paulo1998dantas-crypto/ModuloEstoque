@@ -3,7 +3,7 @@ import unittest
 from datetime import date
 from decimal import Decimal
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import patch, Mock
 from uuid import uuid4
 from sqlalchemy import select, func, text
 APP = Path(__file__).resolve().parents[1] / "estoque_app"
@@ -22,6 +22,8 @@ class PurchaseRequestTests(unittest.TestCase):
     def setUp(self):
         self.setUpBase()
         pr.metadata.create_all(self.engine)
+        pr.vehicle_entries.create(self.engine, checkfirst=True)
+        pr.work_orders.create(self.engine, checkfirst=True)
         self.operator = User(username="OPERADOR",password_hash="hash",role="OPERADOR",active=True)
         self.buyer = User(username="COMPRADOR",password_hash="hash",role="COMPRADOR",active=True)
         self.pcp = User(username="PCP",password_hash="hash",role="PCP",active=True)
@@ -33,11 +35,22 @@ class PurchaseRequestTests(unittest.TestCase):
 
     def request(self, quantity="2", origin="ESTOQUE", user=None, key=None, **values):
         payload=dict(sku_codigo="MAT-001",quantity=quantity,needed_at="2026-10-15",
-                     idempotency_key=key or str(uuid4()),reference="OS 3185",notes="Reposição")
+                     idempotency_key=key or str(uuid4()),reference="",notes="Reposição",
+                     sector="GERAL",work_order_ids=[])
         payload.update(values)
         result=pr.create(self.db,payload,user or self.operator,origin)
         self.db.commit()
         return result["request"]
+
+    def work_order(self, item_number, numero_os=None, status="ATIVA", technical_status="ABERTA"):
+        entry_id, order_id = str(uuid4()), str(uuid4())
+        self.db.execute(pr.vehicle_entries.insert().values(id=entry_id, item_number=item_number))
+        self.db.execute(pr.work_orders.insert().values(
+            id=order_id, vehicle_entry_id=entry_id,
+            numero_os=numero_os or f"TA{item_number:06d}",
+            status=status, technical_status=technical_status))
+        self.db.commit()
+        return order_id
 
     def order(self, ids, qty="2", actor=None, key=None, sku="MAT-001"):
         data=legacy.ErpSkuResolutionTest._payload(key or str(uuid4()),sku,qty)
@@ -46,12 +59,108 @@ class PurchaseRequestTests(unittest.TestCase):
 
     def test_two_origins_and_automatic_requester(self):
         stock=self.request()
-        pcp=self.request(origin="PCP",user=self.pcp)
+        pcp=self.request(origin="PCP",user=self.pcp,sector="PRODUÇÃO")
         self.assertEqual("ESTOQUE",stock["origin"])
         self.assertEqual("PCP",pcp["origin"])
         self.assertEqual("OPERADOR",stock["requested_by"])
         self.assertEqual("SOLICITADA",stock["status"])
         self.assertEqual(1,len(pr.history(self.db,stock["id"])["events"]))
+
+    def test_request_can_link_multiple_open_work_orders_and_sector(self):
+        first=self.work_order(3185)
+        second=self.work_order(3186)
+        row=self.request(sector="PRODUÇÃO",work_order_ids=[first,second])
+
+        self.assertEqual("PRODUÇÃO",row["sector"])
+        self.assertEqual({first,second},set(row["work_order_ids"]))
+        self.assertEqual(2,len(row["work_orders"]))
+        listed=pr.listing(self.db,{"q":"3186"})["items"][0]
+        self.assertEqual(row["id"],listed["id"])
+        self.assertIn("Setor: PRODUÇÃO",listed["reference_display"])
+        self.assertIn("TA003186",listed["reference_display"])
+        event=pr.history(self.db,row["id"])["events"][0]
+        self.assertEqual("PRODUÇÃO",event["after_data"]["sector"])
+        self.assertEqual(2,len(event["after_data"]["work_orders"]))
+
+    def test_only_open_work_orders_can_be_added_to_a_request(self):
+        closed=self.work_order(3188,status="FINALIZADA",technical_status="CONCLUIDA")
+        with self.assertRaisesRegex(ValueError,"ainda estejam abertas"):
+            self.request(work_order_ids=[closed])
+        self.assertEqual(0,self.db.execute(select(func.count()).select_from(
+            pr.request_work_orders)).scalar_one())
+
+    def test_sector_is_restricted_to_the_three_standard_choices(self):
+        with self.assertRaisesRegex(ValueError,"PRODUÇÃO, ADMINISTRATIVO ou GERAL"):
+            self.request(sector="COMERCIAL")
+        self.assertEqual(0,self.db.execute(select(func.count()).select_from(pr.requests)).scalar_one())
+
+    def test_edit_replaces_multiple_work_order_links_and_audits_changes(self):
+        first=self.work_order(3190)
+        second=self.work_order(3191)
+        third=self.work_order(3192)
+        row=self.request(sector="GERAL",work_order_ids=[first,second])
+        edited=pr.transition(self.db,row["id"],{
+            "action":"EDITAR","version":row["version"],"sku_codigo":"MAT-001",
+            "quantity":"3","needed_at":"2026-10-20","sector":"ADMINISTRATIVO",
+            "work_order_ids":[second,third],"reason":"Corrigir setor e O.S. vinculadas",
+        },self.operator)["request"]
+        self.db.commit()
+
+        self.assertEqual("ADMINISTRATIVO",edited["sector"])
+        self.assertEqual({second,third},set(edited["work_order_ids"]))
+        event=pr.history(self.db,row["id"])["events"][-1]
+        self.assertEqual({first,second},set(event["before_data"]["work_order_ids"]))
+        self.assertEqual({second,third},set(event["after_data"]["work_order_ids"]))
+
+    def test_historical_reference_review_is_traced_and_cleared_by_manual_relink(self):
+        order=self.work_order(3193)
+        row=self.request(sector="GERAL")
+        self.db.execute(pr.requests.update().where(pr.requests.c.id==row["id"])
+                        .values(reference="O.S. 9999"))
+        pr.reference_backfill.create(self.engine,checkfirst=True)
+        self.db.execute(pr.reference_backfill.insert().values(
+            request_id=row["id"],original_reference="O.S. 9999",result="SEM_MATCH",
+            linked_work_orders=0,unresolved_tokens="{9999}",resolved_by_id=None,
+            resolved_by=None,reviewed_at=pr.now()))
+        self.db.commit()
+
+        edited=pr.transition(self.db,row["id"],{
+            "action":"EDITAR","version":row["version"],"sku_codigo":"MAT-001",
+            "quantity":"3","needed_at":"2026-10-20","sector":"PRODUÇÃO",
+            "work_order_ids":[order],"reason":"Vínculo histórico conferido com a O.S. correta",
+        },self.operator)["request"]
+        self.db.commit()
+
+        review=self.db.execute(select(pr.reference_backfill).where(
+            pr.reference_backfill.c.request_id==row["id"])).mappings().one()
+        self.assertEqual("REVISADA_MANUALMENTE",review["result"])
+        self.assertEqual(self.operator.username,review["resolved_by"])
+        timeline=pr.history(self.db,row["id"])["events"]
+        normalized=next(event for event in timeline if event["action"]=="NORMALIZACAO_REFERENCIAS")
+        self.assertEqual(self.operator.username,normalized["actor"])
+        self.assertEqual("REVISADA_MANUALMENTE",normalized["after_data"]["reference_backfill_result"])
+        self.assertEqual([order],edited["work_order_ids"])
+
+    def test_existing_link_survives_os_closure_but_closed_os_cannot_be_added(self):
+        linked=self.work_order(3194)
+        newly_closed=self.work_order(3195,status="FINALIZADA",technical_status="CONCLUIDA")
+        row=self.request(work_order_ids=[linked])
+        self.db.execute(pr.work_orders.update().where(pr.work_orders.c.id==linked)
+                        .values(status="FINALIZADA",technical_status="CONCLUIDA"))
+        self.db.commit()
+
+        edited=pr.transition(self.db,row["id"],{
+            "action":"EDITAR","version":row["version"],"sku_codigo":"MAT-001",
+            "quantity":"3","needed_at":"2026-10-20","reason":"Ajustar quantidade",
+        },self.operator)["request"]
+        self.db.commit()
+        self.assertEqual([linked],edited["work_order_ids"])
+        with self.assertRaisesRegex(ValueError,"ainda estejam abertas"):
+            pr.transition(self.db,row["id"],{
+                "action":"EDITAR","version":edited["version"],"sku_codigo":"MAT-001",
+                "quantity":"4","needed_at":"2026-10-20",
+                "work_order_ids":[linked,newly_closed],"reason":"Tentar incluir O.S. fechada",
+            },self.operator)
 
     def test_retry_is_idempotent(self):
         key=str(uuid4())
@@ -59,6 +168,149 @@ class PurchaseRequestTests(unittest.TestCase):
         b=self.request(key=key)
         self.assertEqual(a["id"],b["id"])
         self.assertEqual(1,self.db.execute(select(func.count()).select_from(pr.events)).scalar())
+
+    def test_duplicate_sector_blocks_across_origins_users_quantity_and_date(self):
+        row=self.request(sector="PRODUÇÃO")
+        with self.assertRaisesRegex(ValueError,"Solicitação duplicada.*MAT-001.*PRODUÇÃO"):
+            self.request(origin="PCP",user=self.pcp,quantity="9",needed_at="2026-11-01",
+                         sector="PRODUCAO")
+        self.db.rollback()
+        self.assertEqual(1,self.db.execute(select(func.count()).select_from(pr.requests)).scalar_one())
+        self.assertEqual(1,len(pr.history(self.db,row["id"])["events"]))
+
+    def test_legacy_free_text_cannot_bypass_structured_duplicate_guard(self):
+        order=self.work_order(3300)
+        self.request(work_order_ids=[order])
+        with self.assertRaisesRegex(ValueError,"texto livre"):
+            self.request(reference="O.S. 3300")
+        self.db.rollback()
+        self.assertEqual(1,self.db.execute(select(func.count()).select_from(pr.requests)).scalar_one())
+
+    def test_old_client_missing_reference_fields_must_refresh_without_writing(self):
+        with self.assertRaisesRegex(ValueError,"Recarregue a tela"):
+            pr.create(self.db,dict(sku_codigo="MAT-001",quantity="2",needed_at="2026-10-15",
+                                 idempotency_key=str(uuid4())),self.operator,"ESTOQUE")
+        self.assertEqual(0,self.db.execute(select(func.count()).select_from(pr.requests)).scalar_one())
+
+    def test_edit_cannot_replace_os_links_with_free_text(self):
+        row=self.request()
+        with self.assertRaisesRegex(ValueError,"lista de O.S."):
+            pr.transition(self.db,row["id"],{
+                "action":"EDITAR","version":1,"sku_codigo":"MAT-001","quantity":"2",
+                "needed_at":"2026-10-15","reference":"O.S. 3185","reason":"Alterar referência",
+            },self.operator)
+
+    def test_duplicate_os_blocks_any_overlap_even_if_sector_differs(self):
+        first,second,third=[self.work_order(number) for number in (3301,3302,3303)]
+        self.request(sector="PRODUÇÃO",work_order_ids=[first,second])
+        with self.assertRaisesRegex(ValueError,"Solicitação duplicada.*TA003302"):
+            self.request(origin="PCP",user=self.pcp,sector="GERAL",work_order_ids=[third,second])
+        self.db.rollback()
+        self.assertEqual(2,self.db.execute(select(func.count()).select_from(pr.request_work_orders)).scalar_one())
+
+    def test_different_os_same_sector_or_different_sku_are_not_duplicates(self):
+        first,second=self.work_order(3304),self.work_order(3305)
+        self.request(sector="PRODUÇÃO",work_order_ids=[first])
+        self.request(sector="PRODUÇÃO",work_order_ids=[second])
+        self.db.add(SKU(sku="MAT-DUP-TEST",descricao="Outro material",unidade="PC",active=True))
+        self.db.commit()
+        self.request(sku_codigo="MAT-DUP-TEST",sector="PRODUÇÃO",work_order_ids=[first])
+        self.request(sector="PRODUÇÃO",work_order_ids=[])
+        self.assertEqual(4,self.db.execute(select(func.count()).select_from(pr.requests)).scalar_one())
+
+    def test_buyer_assuming_request_does_not_release_duplicate_guard(self):
+        row=self.request()
+        pr.transition(self.db,row["id"],{"action":"ASSUMIR","version":1,"reason":"Comprar"},self.buyer)
+        self.db.commit()
+        with self.assertRaisesRegex(ValueError,"Solicitação duplicada"):
+            self.request()
+
+    def test_cancelled_or_completed_requests_allow_a_new_need(self):
+        order=self.work_order(3306)
+        row=self.request(work_order_ids=[order])
+        pr.transition(self.db,row["id"],{"action":"EXCLUIR","version":1,"reason":"Não necessário"},self.operator)
+        self.db.commit()
+        next_request=self.request(work_order_ids=[order])
+        self.order([next_request["id"]])
+        third=self.request(work_order_ids=[order])
+        self.assertEqual("SOLICITADA",third["status"])
+        self.assertEqual(3,self.db.execute(select(func.count()).select_from(pr.requests)).scalar_one())
+
+    def test_edit_cannot_create_duplicate_os_and_leaves_no_event_or_link_changes(self):
+        first,second=self.work_order(3307),self.work_order(3308)
+        self.request(work_order_ids=[first])
+        row=self.request(work_order_ids=[second])
+        with self.assertRaisesRegex(ValueError,"Solicitação duplicada"):
+            pr.transition(self.db,row["id"],{
+                "action":"EDITAR","version":1,"sku_codigo":"MAT-001","quantity":"3",
+                "needed_at":"2026-10-20","work_order_ids":[first,second],"reason":"Mudar vínculo",
+            },self.operator)
+        self.db.rollback()
+        self.assertEqual([second],pr.current_work_order_ids(self.db,row["id"]))
+        self.assertEqual(1,len(pr.history(self.db,row["id"])["events"]))
+        self.assertEqual(1,pr.get(self.db,row["id"])["version"])
+
+    def test_edit_quantity_of_same_request_is_not_a_self_duplicate(self):
+        row=self.request()
+        edited=pr.transition(self.db,row["id"],{
+            "action":"EDITAR","version":1,"sku_codigo":"MAT-001","quantity":"3",
+            "needed_at":"2026-10-20","reason":"Aumentar quantidade",
+        },self.operator)["request"]
+        self.db.commit()
+        self.assertEqual("3",edited["quantity"])
+
+    def test_edit_sku_or_sector_cannot_duplicate_pending_reference(self):
+        self.request(sector="GERAL")
+        row=self.request(sector="ADMINISTRATIVO")
+        with self.assertRaisesRegex(ValueError,"Solicitação duplicada"):
+            pr.transition(self.db,row["id"],{
+                "action":"EDITAR","version":1,"sku_codigo":"MAT-001","quantity":"2",
+                "needed_at":"2026-10-15","sector":"GERAL","reason":"Mudar setor",
+            },self.operator)
+        self.db.rollback()
+        self.db.add(SKU(sku="MAT-DUP-TEST",descricao="Outro material",unidade="PC",active=True))
+        self.db.commit()
+        other=self.request(sku_codigo="MAT-DUP-TEST",sector="GERAL")
+        with self.assertRaisesRegex(ValueError,"Solicitação duplicada"):
+            pr.transition(self.db,other["id"],{
+                "action":"EDITAR","version":1,"sku_codigo":"MAT-001","quantity":"2",
+                "needed_at":"2026-10-15","reason":"Mudar material",
+            },self.operator)
+
+    def test_reopening_cancelled_request_cannot_duplicate_a_new_pending_need(self):
+        row=self.request()
+        cancelled=pr.transition(self.db,row["id"],{
+            "action":"CANCELAR","version":1,"reason":"Cancelar",
+        },self.buyer)["request"]
+        self.db.commit()
+        self.request()
+        with self.assertRaisesRegex(ValueError,"Solicitação duplicada"):
+            pr.transition(self.db,row["id"],{
+                "action":"REABRIR","version":cancelled["version"],"reason":"Reabrir",
+            },self.buyer)
+        self.db.rollback()
+        self.assertEqual("CANCELADA",pr.get(self.db,row["id"])["status"])
+
+    def test_order_cancellation_is_atomic_if_reopening_would_duplicate_a_pending_need(self):
+        row=self.request()
+        order=self.order([row["id"]])
+        self.request()
+        with self.assertRaisesRegex(ValueError,"Solicitação duplicada"):
+            cancel_purchase_order(self.db,order["id"],self.buyer.username,"Cancelar pedido")
+        self.db.rollback()
+        self.assertEqual("CONCLUIDA",pr.get(self.db,row["id"])["status"])
+        self.assertEqual("EMITIDA",self.db.execute(select(pr.orders.c.status).where(
+            pr.order_condition(self.db,pr.orders.c.id,order["id"]))).scalar_one())
+
+    def test_postgres_material_locks_are_transactional_deduplicated_and_ordered(self):
+        database=Mock()
+        database.bind.dialect.name="postgresql"
+        pr.lock_request_materials(database,[7,2,7])
+        self.assertEqual(2,database.execute.call_count)
+        self.assertEqual(["purchase-request-material:2","purchase-request-material:7"],
+            [call.args[1]["key"] for call in database.execute.call_args_list])
+        self.assertTrue(all("pg_advisory_xact_lock" in str(call.args[0])
+                            for call in database.execute.call_args_list))
 
     def test_open_po_auto_routes_request_to_nearest_order_for_anticipation(self):
         earlier_data=legacy.ErpSkuResolutionTest._payload(str(uuid4()),"MAT-001","8")
@@ -328,15 +580,16 @@ class PurchaseRequestTests(unittest.TestCase):
 
     def test_requester_can_edit_and_soft_delete_own_pending_request(self):
         row=self.request()
+        order=self.work_order(3200)
         edited=pr.transition(self.db,row["id"],{
             "action":"EDITAR","version":row["version"],"sku_codigo":"MAT-001",
-            "quantity":"3.5","needed_at":"2026-10-20","reference":"OS 3200",
+            "quantity":"3.5","needed_at":"2026-10-20","work_order_ids":[order],
             "notes":"Quantidade revisada","reason":"Corrigir a necessidade da área",
         },self.operator)["request"]
         self.db.commit()
         self.assertEqual("3.5",edited["quantity"])
         self.assertEqual("2026-10-20",edited["needed_at"])
-        self.assertEqual("OS 3200",edited["reference"])
+        self.assertEqual([order],edited["work_order_ids"])
 
         deleted=pr.transition(self.db,row["id"],{
             "action":"EXCLUIR","version":edited["version"],
@@ -386,7 +639,7 @@ class PurchaseRequestTests(unittest.TestCase):
         self.db.commit()
         edited=pr.transition(self.db,row["id"],{
             "action":"EDITAR","version":row["version"],"sku_codigo":"MAT-001",
-            "quantity":"5","needed_at":"2026-10-20","reference":"OS 3185",
+            "quantity":"5","needed_at":"2026-10-20",
             "notes":"Quantidade corrigida","reason":"Solicitante confirmou a correção",
         },self.buyer)["request"]
         self.db.commit()
@@ -429,7 +682,7 @@ class PurchaseRequestTests(unittest.TestCase):
         self.db.rollback()
 
     def test_sum_multiple_requests_same_sku(self):
-        a,b=self.request(quantity="2"),self.request(quantity="3")
+        a,b=self.request(quantity="2"),self.request(quantity="3",sector="ADMINISTRATIVO")
         with self.assertRaises(ValueError): self.order([a["id"],b["id"]],qty="4")
         self.db.rollback()
         self.order([a["id"],b["id"]],qty="5")
@@ -501,7 +754,7 @@ class PurchaseRequestTests(unittest.TestCase):
         self.assertEqual(0,self.db.query(StockBalance).count())
 
     def test_listing_filters_and_notifications(self):
-        self.request(origin="PCP",user=self.pcp,needed_at="2020-01-01")
+        self.request(origin="PCP",user=self.pcp,needed_at="2020-01-01",sector="PRODUÇÃO")
         self.request()
         data=pr.listing(self.db,{"origin":"PCP","q":"MAT","from":"2019-01-01","to":"2021-01-01"})
         self.assertEqual(1,data["total"])
@@ -536,7 +789,8 @@ class PurchaseRequestRouteTests(unittest.TestCase):
 
     def test_local_creation_requires_csrf_and_forces_stock_origin(self):
         payload={"sku_codigo":"MAT-001","quantity":1,"needed_at":"2026-10-15",
-                 "idempotency_key":str(uuid4()),"origin":"PCP","requested_by":"FAKE"}
+                 "idempotency_key":str(uuid4()),"origin":"PCP","requested_by":"FAKE",
+                 "sector":"GERAL","work_order_ids":[]}
         denied=self.client.post("/api/erp/purchase-requests",json=payload)
         self.assertEqual(403,denied.status_code)
         response=self.client.post("/api/erp/purchase-requests",json=payload,headers={"X-CSRF-Token":"csrf"})
@@ -545,12 +799,25 @@ class PurchaseRequestRouteTests(unittest.TestCase):
         self.assertEqual("OPERADOR",response.json["request"]["requested_by"])
 
     def test_internal_pcp_creation_checks_actual_role(self):
-        payload={"sku_codigo":"MAT-001","quantity":1,"needed_at":"2026-10-15","idempotency_key":str(uuid4())}
+        payload={"sku_codigo":"MAT-001","quantity":1,"needed_at":"2026-10-15",
+                 "idempotency_key":str(uuid4()),"sector":"GERAL","work_order_ids":[]}
         self.assertEqual(403,self.client.post("/api/erp/internal/purchase-requests",json=payload).status_code)
         self.actor=self.pcp
         response=self.client.post("/api/erp/internal/purchase-requests",json=payload)
         self.assertEqual(200,response.status_code)
         self.assertEqual("PCP",response.json["request"]["origin"])
+
+    def test_duplicate_rejection_is_shared_between_stock_and_pcp_apis(self):
+        self.request(sector="PRODUÇÃO")
+        self.actor=self.pcp
+        response=self.client.post("/api/erp/internal/purchase-requests",json={
+            "sku_codigo":"MAT-001","quantity":4,"needed_at":"2026-10-18",
+            "sector":"PRODUÇÃO","work_order_ids":[],"idempotency_key":str(uuid4()),
+        })
+        self.assertEqual(400,response.status_code)
+        self.assertIn("Solicitação duplicada",response.json["error"])
+        self.assertEqual(1,self.db.execute(select(func.count()).select_from(pr.requests)).scalar_one())
+        self.assertEqual(1,self.db.execute(select(func.count()).select_from(pr.events)).scalar_one())
 
     def test_internal_action_checks_buyer_in_database(self):
         row=self.request()
@@ -568,6 +835,16 @@ class PurchaseRequestRouteTests(unittest.TestCase):
         self.assertEqual(1,len(response.json["events"]))
         options=self.client.get("/api/erp/purchase-requests/options?q=MAT")
         self.assertEqual(["MAT-001"],[r["sku_codigo"] for r in options.json["items"]])
+
+    def test_open_work_order_options_are_available_to_requester_and_searchable(self):
+        with patch("purchase_request_routes.active_work_orders",return_value=[{
+            "work_order_id":str(uuid4()),"numero_os":"TA003163",
+            "item_number":3163,"label":"O.S. TA003163 · 3163 · teste",
+        }]) as lookup:
+            response=self.client.get("/api/erp/purchase-requests/work-orders?q=3163")
+        self.assertEqual(200,response.status_code)
+        self.assertEqual("TA003163",response.json["items"][0]["numero_os"])
+        lookup.assert_called_once_with(self.db,"3163",limit=50)
 
     def test_existing_order_options_requires_buyer_and_returns_covered_orders(self):
         order=self.order([],qty="5")
