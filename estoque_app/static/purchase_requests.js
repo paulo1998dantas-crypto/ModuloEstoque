@@ -12,6 +12,7 @@ const node = (tag,text,className) => {const n=document.createElement(tag);if(tex
 let page=1,total=0,rows=[],key=crypto.randomUUID(),loading=false,closingAnticipationRow=null;
 let editingRow=null,editSkuTimer=null,allocatingRow=null,allocationOptions=[];
 let loadSerial=0;
+let appliedFilters=null,exporting=false;
 function message(text,error=false){$("pr-message").textContent=text;$("pr-message").classList.toggle("pr-error",error);}
 async function api(path="",payload){
  const response=await fetch(cfg.api+path,{method:payload?"POST":"GET",headers:{"Accept":"application/json","Content-Type":"application/json","X-CSRF-Token":cfg.csrf},...(payload?{body:JSON.stringify(payload)}:{})});
@@ -21,26 +22,75 @@ async function api(path="",payload){
 }
 const today=()=>new Date().toLocaleDateString("en-CA",{timeZone:"America/Sao_Paulo"});
 function button(text,fn){const b=node("button",text);b.type="button";b.addEventListener("click",fn);return b;}
+function showDetails(row){
+ const content=$("pr-details-content");content.replaceChildren();
+ content.append(node("h3","SOL-"+row.id.slice(0,8).toUpperCase()+" · "+row.sku_codigo));
+ const grid=node("dl",null,"pr-detail-grid");
+ const fields=[
+  ["Origem",row.origin==="ESTOQUE"?"Almoxarifado":"PCP"],["Status",labels[row.status]||row.status],
+  ["Classificação",row.status==="CONCLUIDA"?"CONCLUÍDO":row.request_type==="ANTECIPACAO"?"ANTECIPAÇÃO":"NOVA COMPRA"],
+  ["SKU",row.sku_codigo],["Descrição",row.descricao,true],["Quantidade",qty(row.quantity)+" "+row.unidade],
+  ["Data de necessidade",date(row.needed_at)],["Setor",row.sector],
+  ["Referências / O.S.",row.reference_display||row.reference,true],["Referência original",row.reference,true],
+  ["Solicitante",row.requested_by],["Solicitada em",date(row.created_at)],["Comprador",row.buyer],
+  ["Atualizada em",date(row.updated_at)],["Pedido existente / criado",row.numero_oc||row.anticipation_numero_oc],
+  ["Fornecedor",row.fornecedor_nome||row.anticipation_fornecedor_nome],["Status do pedido",row.purchase_status||row.anticipation_purchase_status],
+  ["Saldo pendente no pedido",row.anticipation_pending_quantity==null?"—":qty(row.anticipation_pending_quantity)],
+  ["Previsão do pedido",date(row.anticipation_delivery_date)],["Nova data negociada",date(row.anticipation_confirmed_delivery_date)],
+  ["Conclusão compras",date(row.completed_at)],["Concluída por",row.completed_by],
+  ["Observações",row.notes,true],["Revisão do vínculo histórico",referenceReviewLabels[row.reference_review_result]||row.reference_review_result],
+  ["Referências históricas sem vínculo",(row.reference_review_tokens||[]).join(" / ")],
+  ["ID da solicitação",row.id],["Versão",row.version]
+ ];
+ for(const [label,value,wide]of fields){const item=node("div",null,wide?"pr-detail-wide":null);item.append(node("dt",label),node("dd",value==null||value===""?"—":String(value)));grid.append(item);}
+ content.append(grid);$("pr-details").showModal();
+}
+async function exportExcel(){
+ if(!appliedFilters||exporting)return;
+ exporting=true;$("pr-export").disabled=true;
+ try{
+  const response=await fetch(cfg.api+"/export.xlsx?"+appliedFilters,{headers:{Accept:"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"}});
+  if(!response.ok||!response.headers.get("Content-Type")?.includes("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")){
+   const data=await response.json().catch(()=>({}));throw new Error(data.error||"Não foi possível exportar. Confira sua sessão e tente novamente.");
+  }
+  const blob=await response.blob(),url=URL.createObjectURL(blob),link=node("a");
+  link.href=url;link.download="Solicitacoes_de_compra_"+today()+".xlsx";document.body.append(link);link.click();link.remove();setTimeout(()=>URL.revokeObjectURL(url),1000);
+  message("Excel exportado com todas as solicitações dos filtros aplicados e seu histórico.");
+ }catch(error){message(error.message,true);}
+ finally{exporting=false;$("pr-export").disabled=!appliedFilters;}
+}
 function render(){
  const body=$("pr-rows");body.replaceChildren();
  for(const row of rows){
   const tr=node("tr");const pending=["SOLICITADA","EM_COMPRAS"].includes(row.status);
   const anticipation=row.request_type==="ANTECIPACAO";
-  if(cfg.can_manage){const cell=node("td"),check=node("input");check.type="checkbox";check.value=row.id;check.className="pr-select";check.disabled=!pending||anticipation;check.title=anticipation?"Esta solicitação deve ser tratada como antecipação do pedido vigente.":"";cell.append(check);tr.append(cell);}
+  if(cfg.can_manage){const cell=node("td",null,"pr-select-cell"),check=node("input");cell.dataset.label="Selecionar";check.type="checkbox";check.setAttribute("aria-label","Selecionar solicitação "+row.sku_codigo);check.value=row.id;check.className="pr-select";check.disabled=!pending||anticipation;check.title=anticipation?"Esta solicitação deve ser tratada como antecipação do pedido vigente.":"";cell.append(check);tr.append(cell);}
   const orderNumber=row.numero_oc||row.anticipation_numero_oc;
   const supplier=row.fornecedor_nome||row.anticipation_fornecedor_nome;
   const orderStatus=row.purchase_status||row.anticipation_purchase_status;
-  const values=["SOL-"+row.id.slice(0,8).toUpperCase(),row.origin==="ESTOQUE"?"Almoxarifado":"PCP",anticipation?"ANTECIPAÇÃO":"NOVA COMPRA",row.sku_codigo,row.descricao,row.unidade,qty(row.quantity),date(row.needed_at),row.status,row.reference_display||row.reference,row.requested_by,date(row.created_at),row.buyer||"—",date(row.updated_at),orderNumber?(anticipation&&!row.numero_oc?"Antecipar · OC "+orderNumber:orderNumber):"—",supplier||"—",orderStatus||"—",anticipation?qty(row.anticipation_pending_quantity||0):"—",date(row.anticipation_confirmed_delivery_date),date(row.completed_at),row.completed_by||"—",row.notes];
-  values.forEach((value,index)=>{
-   const cell=node("td",value||"—");
-   if(index===9)cell.className="pr-reference-cell";
-   if(index===2){const badge=node("span",value,"pr-badge "+(anticipation?"ANTECIPACAO":"COMPRA_NOVA"));if(anticipation){badge.style.background="#fff0d1";badge.style.color="#804900";}cell.replaceChildren(badge);}
-   if(index===8){cell.replaceChildren(node("span",labels[row.status]||row.status,"pr-badge "+row.status));}
-   if(index===7&&pending&&row.needed_at<today())cell.className="pr-overdue";
-   if(index===14&&anticipation){cell.title="Pedido mais próximo da data de necessidade: "+date(row.anticipation_delivery_date);}
-   tr.append(cell);
-  });
-  const actions=node("td");actions.append(button("Histórico",()=>showHistory(row.id)));
+  const cell=(label,className)=>{const td=node("td",null,className);td.dataset.label=label;tr.append(td);return td;};
+  const line=(td,value,muted=false)=>td.append(node("span",value==null||value===""?"—":String(value),"pr-cell-line"+(muted?" pr-cell-muted":"")));
+  const identity=cell("Solicitação / origem");identity.append(node("strong","SOL-"+row.id.slice(0,8).toUpperCase()));
+  line(identity,row.origin==="ESTOQUE"?"Almoxarifado":"PCP");line(identity,row.requested_by,true);line(identity,date(row.created_at),true);
+  const material=cell("Material","pr-material-cell");material.append(node("strong",row.sku_codigo));line(material,row.descricao);
+  const quantity=cell("Qtd. / necessidade");quantity.append(node("strong",qty(row.quantity)+" "+row.unidade));line(quantity,date(row.needed_at));
+  if(pending&&row.needed_at<today())quantity.classList.add("pr-overdue");
+  const reference=cell("Referências","pr-reference-cell");line(reference,row.sector||"GERAL");
+  const linked=row.work_orders||[];
+  if(linked.length){for(const item of linked.slice(0,2))line(reference,item.label||item.numero_os||item.id);if(linked.length>2)line(reference,"+ "+(linked.length-2)+" O.S. em Detalhes");}
+  else line(reference,row.reference_display||row.reference);
+  reference.title=row.reference_display||row.reference||"";
+  if(linked.length&&["VINCULADA_PARCIAL","AMBIGUA","SEM_MATCH"].includes(row.reference_review_result))reference.append(node("span","Revisar vínculo histórico","pr-cell-line pr-overdue"));
+  const situation=cell("Situação");situation.append(node("span",labels[row.status]||row.status,"pr-badge "+row.status));
+  line(situation,row.status==="CONCLUIDA"?"CONCLUÍDO":anticipation?"ANTECIPAÇÃO":"NOVA COMPRA");
+  if(row.buyer)line(situation,"Comprador: "+row.buyer,true);
+  const order=cell("Pedido / fornecedor","pr-order-cell");order.append(node("strong",orderNumber?"O.C. "+orderNumber:"Sem pedido"));
+  if(supplier)line(order,supplier);if(orderStatus)line(order,orderStatus,true);
+  if(anticipation){line(order,"Saldo: "+qty(row.anticipation_pending_quantity||0)+" "+row.unidade);line(order,"Previsão: "+date(row.anticipation_delivery_date));}
+  if(row.anticipation_confirmed_delivery_date)line(order,"Negociada: "+date(row.anticipation_confirmed_delivery_date));
+  const actionCell=cell("Ações","pr-actions-cell");actionCell.append(button("Detalhes",()=>showDetails(row)));
+  const menu=node("details",null,"pr-row-menu");menu.append(node("summary","Ações"));
+  const actions=node("div",null,"pr-row-actions");actions.append(button("Histórico",()=>showHistory(row.id)));
   const isOwner=String(row.requested_by_id)===String(cfg.user_id);
   const canEditOrigin=cfg.can_edit_origin&&row.origin===cfg.origin&&row.status==="SOLICITADA";
   const canEditRequest=pending&&(cfg.can_manage||canEditOrigin||(isOwner&&row.status==="SOLICITADA"));
@@ -53,9 +103,9 @@ function render(){
    if(row.status==="CANCELADA")actions.append(button("Reabrir",()=>act(row,"REABRIR")));
    actions.append(button("Observação",()=>act(row,"OBSERVACAO")));
   }
-  tr.append(actions);body.append(tr);
+  menu.append(actions);actionCell.append(menu);body.append(tr);
  }
- if(!rows.length){const tr=node("tr"),td=node("td","Nenhuma solicitação para os filtros selecionados.");td.colSpan=cfg.can_manage?24:23;tr.append(td);body.append(tr);}
+ if(!rows.length){const tr=node("tr"),td=node("td","Nenhuma solicitação para os filtros selecionados.","pr-empty-cell");td.colSpan=cfg.can_manage?8:7;tr.append(td);body.append(tr);}
  $("pr-page").textContent=total+" solicitações · página "+page+" de "+Math.max(1,Math.ceil(total/100));
  $("pr-prev").disabled=page<=1;$("pr-next").disabled=page*100>=total;
 }
@@ -65,6 +115,7 @@ async function load(){
   const params=new URLSearchParams({page,q:$("pr-search").value,status:$("pr-status").value,origin:$("pr-origin").value,from:$("pr-from").value,to:$("pr-to").value});
   const data=await api("?"+params);if(serial!==loadSerial)return;
   rows=data.items;total=data.total;page=data.page;render();
+  appliedFilters=new URLSearchParams(params);appliedFilters.delete("page");$("pr-export").disabled=exporting;
   $("pr-metrics").replaceChildren();
   for(const [code,label]of Object.entries(labels)){const box=node("div",label,"pr-metric");box.append(node("strong",data.counts[code]||0));$("pr-metrics").append(box);}
   const overdue=node("div","Necessidade vencida","pr-metric pr-overdue");overdue.append(node("strong",data.overdue));$("pr-metrics").append(overdue);
@@ -239,6 +290,8 @@ $("pr-edit-form").onsubmit=async event=>{
  finally{$("pr-edit-save").disabled=false;}
 };
 $("pr-reload").onclick=()=>load();
+$("pr-export").onclick=()=>exportExcel();
+$("pr-close-details").onclick=()=>$("pr-details").close();
 $("pr-filter").onclick=()=>{page=1;load();};
 $("pr-prev").onclick=()=>{page--;load();};
 $("pr-next").onclick=()=>{page++;load();};

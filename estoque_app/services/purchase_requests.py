@@ -694,7 +694,7 @@ def synchronize_stale_anticipations(db, user):
             changed += 1
     return changed
 
-def listing(db, filters, user=None):
+def listing(db, filters, user=None, *, paginate=True):
     require_ready(db)
     synchronize_stale_anticipations(db, user)
     from sqlalchemy import cast
@@ -731,11 +731,13 @@ def listing(db, filters, user=None):
             try: value = date.fromisoformat(filters[key])
             except ValueError: raise ValueError("Filtro de data inválido.")
             statement = statement.where(requests.c.needed_at >= value if comparison else requests.c.needed_at <= value)
-    try: page = max(1, int(filters.get("page", 1)))
+    try: page = max(1, int(filters.get("page", 1))) if paginate else 1
     except (ValueError, TypeError): raise ValueError("Página inválida.")
     count = db.execute(select(func.count()).select_from(statement.subquery())).scalar_one()
-    rows = db.execute(statement.order_by(requests.c.created_at.desc(), requests.c.id)
-                      .offset((page-1)*100).limit(100)).mappings().all()
+    statement = statement.order_by(requests.c.created_at.desc(), requests.c.id)
+    if paginate:
+        statement = statement.offset((page-1)*100).limit(100)
+    rows = db.execute(statement).mappings().all()
     pending = requests.c.status.in_(["SOLICITADA", "EM_COMPRAS"])
     counts = db.execute(select(requests.c.status, func.count()).group_by(requests.c.status)).all()
     overdue = db.execute(select(func.count()).select_from(requests).where(
@@ -761,6 +763,37 @@ def listing(db, filters, user=None):
     items = [encode(item) for item in items]
     return {"items": items, "total": count, "page": page,
             "counts": dict(counts), "overdue": overdue}
+
+def export_data(db, filters, user=None):
+    """Export the same canonical view, without the screen's 100-row pagination."""
+    result = listing(db, filters, user, paginate=False)
+    snapshots = {row["id"]: row for row in result["items"]}
+    ids = [row["id"] for row in result["items"]]
+    timeline = []
+    for start in range(0, len(ids), 500):
+        batch = ids[start:start + 500]
+        timeline.extend(encode(dict(row)) for row in db.execute(
+            select(events).where(events.c.request_id.in_(batch))
+            .order_by(events.c.created_at, events.c.id)).mappings())
+        if inspect(db.connection()).has_table(reference_backfill.name):
+            for report in db.execute(select(reference_backfill).where(
+                    reference_backfill.c.request_id.in_(batch))).mappings():
+                timeline.append(encode({
+                    "id": "BACKFILL:" + report["request_id"],
+                    "request_id": report["request_id"],
+                    "action": "NORMALIZACAO_REFERENCIAS",
+                    "actor": report.get("resolved_by") or "MIGRAÇÃO AUTOMÁTICA",
+                    "created_at": report.get("reviewed_at"),
+                    "reason": "Padronização de referências históricas; texto original preservado.",
+                    "before_data": {"reference": report["original_reference"]},
+                    "after_data": {"sector": snapshots[report["request_id"]].get("sector"),
+                                   "work_orders": snapshots[report["request_id"]].get("work_orders", []),
+                                   "reference_backfill_result": report["result"],
+                                   "unresolved_tokens": text_array(report["unresolved_tokens"])},
+                }))
+    timeline.sort(key=lambda item: (item.get("created_at") or "", str(item.get("id") or "")))
+    result["events"] = timeline
+    return result
 
 def history(db, request_id):
     require_ready(db)

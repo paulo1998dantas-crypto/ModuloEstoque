@@ -1,6 +1,7 @@
 <link rel="stylesheet" href="/static/purchase_requests.css">
 <link rel="stylesheet" href="/static/purchase_requests_edit.css">
 <link rel="stylesheet" href="/static/purchase_requests_references.css">
+<link rel="stylesheet" href="/static/purchase_requests_compact.css?v=20261008-excel">
 <section class="pr-shell" id="purchase-request-app">
   <div class="pr-heading"><div><h1>Solicitações de compra</h1><p>Reposição do almoxarifado e planejamento do PCP · conclusão mediante pedido confirmado.</p></div>
   <div class="pr-actions"><a href="{{ request_config.purchases_url }}">Compras</a><button type="button" id="pr-reload">Atualizar</button></div></div>
@@ -33,15 +34,21 @@
       <label>Origem<select id="pr-origin"><option value="">Todas</option><option value="ESTOQUE">Almoxarifado</option><option value="PCP">PCP</option></select></label>
       <label>Necessidade de<input id="pr-from" type="date"></label><label>Até<input id="pr-to" type="date"></label>
       <button type="button" id="pr-filter">Filtrar</button>
+      <button type="button" id="pr-export" disabled>Exportar Excel</button>
       {% if request_config.can_manage %}<button type="button" id="pr-convert">Preparar pedido das selecionadas</button>{% endif %}
     </div>
     <p class="pr-note">PCP e Almoxarifado aparecem nesta mesma fila. O sistema identifica O.C. vigentes e saldo disponível. A solicitação é concluída quando o comprador aloca uma O.C. válida ou, em uma antecipação, confirma a nova data negociada com o fornecedor. Apenas assumir a solicitação não a conclui.</p>
-    <div class="pr-table-wrap"><table class="pr-table"><thead><tr>
-      {% if request_config.can_manage %}<th>Selecionar</th>{% endif %}
-      <th>Solicitação</th><th>Origem</th><th>Classificação</th><th>SKU</th><th>Descrição</th><th>Unidade</th><th>Quantidade</th><th>Necessidade</th><th>Status</th><th>Referência / O.S. / setor</th><th>Solicitante</th><th>Solicitada em</th><th>Comprador</th><th>Atualizada em</th><th>Pedido existente / criado</th><th>Fornecedor</th><th>Status do pedido</th><th>Saldo pendente no pedido</th><th>Nova data negociada</th><th>Conclusão compras</th><th>Concluída por</th><th>Observações</th><th>Ações / histórico</th>
+    <p class="pr-note">Exportar Excel inclui todas as solicitações dos filtros aplicados e seu histórico, sem limitar à página atual. Use Detalhes para consultar todos os dados de uma linha.</p>
+    <div class="pr-table-wrap"><table class="pr-table {% if request_config.can_manage %}pr-buyer-table{% endif %}"><colgroup>
+      {% if request_config.can_manage %}<col class="pr-col-select">{% endif %}
+      <col class="pr-col-identity"><col class="pr-col-material"><col class="pr-col-quantity"><col class="pr-col-reference"><col class="pr-col-status"><col class="pr-col-order"><col class="pr-col-actions">
+    </colgroup><thead><tr>
+      {% if request_config.can_manage %}<th scope="col" aria-label="Selecionar solicitações">Sel.</th>{% endif %}
+      <th scope="col">Solicitação / origem</th><th scope="col">Material</th><th scope="col">Qtd. / necessidade</th><th scope="col">Referências</th><th scope="col">Situação</th><th scope="col">Pedido / fornecedor</th><th scope="col">Ações</th>
     </tr></thead><tbody id="pr-rows"></tbody></table></div>
     <div class="pr-pagination"><button id="pr-prev">Anterior</button><span id="pr-page"></span><button id="pr-next">Próxima</button></div>
   </section>
+  <dialog id="pr-details"><div class="pr-heading"><h2>Detalhes da solicitação</h2><button type="button" id="pr-close-details">Fechar</button></div><div id="pr-details-content"></div></dialog>
   <dialog id="pr-history"><div class="pr-heading"><h2>Rastreabilidade da solicitação</h2><button id="pr-close-history">Fechar</button></div><div id="pr-history-content"></div></dialog>
   <dialog id="pr-confirm-anticipation" class="pr-confirm-dialog">
     <div class="pr-heading"><div><h2>Confirmar antecipação negociada</h2><p>Preencha os dados acordados com o fornecedor para encerrar a solicitação.</p></div><button type="button" id="pr-confirm-anticipation-cancel">Cancelar</button></div>
@@ -79,5 +86,5 @@
   </dialog>
 </section>
 <script id="pr-config" type="application/json">{{ request_config|tojson }}</script>
-<script src="/static/purchase_requests.js?v=20261007-references" defer></script>
+<script src="/static/purchase_requests.js?v=20261008-excel" defer></script>
 

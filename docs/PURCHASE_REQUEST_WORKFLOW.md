@@ -57,3 +57,14 @@ Reversão: desativar os novos pontos de entrada/republicar as versões anteriore
 - Clientes antigos sem os campos estruturados recebem orientação para recarregar a tela; texto livre não pode contornar a validação de novas referências. O texto histórico continua preservado. As 10 falhas fora deste escopo na suíte geral foram reproduzidas em checkouts isolados dos commits anteriores.
 - O bloqueio de duplicidade entra em vigor com a publicação do backend do Estoque; Suprimentos usa a mesma validação canônica, sem fila independente.
 
+## Exportação e visão compacta — 08/10/2026
+
+- Botão **Exportar Excel** nas telas de Estoque e Suprimentos; usa a mesma base canônica.
+- Exporta todas as solicitações dos filtros efetivamente aplicados (busca, status, origem e período de necessidade), sem o limite de 100 linhas por página. Alterar um filtro sem clicar em Filtrar não muda a exportação da tabela exibida.
+- Arquivo .xlsx com abas Solicitações (todos os campos, referências, pedidos, datas, usuários e IDs) e Histórico (ações, usuário, horário, motivo e campos antes/depois, incluindo normalização histórica). Cada solicitação permanece uma única linha, mesmo com várias O.S.
+- Datas e quantidades são valores tipados de Excel. Horários são apresentados em Brasília. Texto informado por usuários nunca é executado como fórmula.
+- Exportação usa o mesmo acesso autenticado da consulta; a integração interna valida o serviço e o ator no Estoque. Respostas não são armazenadas em cache.
+- Tabela agrupada em sete colunas de dados/ações, mais seleção quando comprador. Todos os dados seguem acessíveis no botão Detalhes; ações e histórico ficam no menu Ações. Em telas pequenas, as linhas se adaptam verticalmente sem rolagem horizontal.
+- Nenhuma migração nova, alteração de estoque, recebimento, B.O.M. ou regra de conclusão. A exportação utiliza a reconciliação de pedidos vigente na consulta.
+- Validação: 79 testes de Estoque/exportação e 22 de Suprimentos; testes de navegador em 1920, 1366, 1280, 1024, 900 e 390 pixels, com detalhes, ações, histórico, seleção e download filtrado. Dados de teste apenas locais.
+

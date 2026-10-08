@@ -1,7 +1,8 @@
 """Stock entry + authenticated internal interface consumed by Suprimentos."""
 import secrets
 import hmac
-from flask import Blueprint, jsonify, request, session, render_template, current_app
+from flask import Blueprint, jsonify, request, session, render_template, current_app, send_file
+from purchase_request_export import build_workbook, XLSX_MIME
 from sqlalchemy import or_
 from services import purchase_requests as workflow
 from services.erp_service import active_work_orders
@@ -33,13 +34,18 @@ def register(app, get_db, get_user, internal_allowed, internal_user, feature_req
             raise PermissionError("Autenticação obrigatória.")
         return user
 
-    def execute(callback, write=False, commit=False):
+    def execute(callback, write=False, commit=False, download=False):
         database = get_db()
         try:
             user = access()
             if write and not request.path.startswith("/api/erp/internal/"): csrf()
             result = callback(database, user)
             if write or commit: database.commit()
+            if download:
+                response = send_file(result, as_attachment=True, mimetype=XLSX_MIME,
+                                     download_name="Solicitacoes_de_compra.xlsx", max_age=0)
+                response.headers["Cache-Control"] = "no-store"
+                return response
             return jsonify(ok=True, **result)
         except PermissionError as exc:
             database.rollback()
@@ -78,6 +84,14 @@ def register(app, get_db, get_user, internal_allowed, internal_user, feature_req
             return execute(lambda db, user: workflow.listing(db, request.args, user), commit=True)
         origin = "PCP" if request.path.startswith("/api/erp/internal/") else "ESTOQUE"
         return execute(lambda db, user: workflow.create(db, request.get_json(silent=True) or {}, user, origin), True)
+
+    @bp.route("/api/erp/purchase-requests/export.xlsx")
+    @bp.route("/api/erp/internal/purchase-requests/export.xlsx")
+    @feature_required
+    def export_excel():
+        return execute(lambda db, user: build_workbook(
+            workflow.export_data(db, request.args, user), request.args, user.username),
+            commit=True, download=True)
 
     @bp.route("/api/erp/purchase-requests/options")
     @bp.route("/api/erp/internal/purchase-requests/options")
