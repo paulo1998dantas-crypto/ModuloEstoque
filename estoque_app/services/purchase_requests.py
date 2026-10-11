@@ -694,6 +694,35 @@ def synchronize_stale_anticipations(db, user):
             changed += 1
     return changed
 
+def attach_assumption_data(db, items):
+    """Read the first assumption in the current cycle from the existing audit trail.
+
+    No inferred dates: direct order allocation may conclude without an assumption.
+    Reopening starts a new cycle; previous assumptions remain in the history.
+    Batch queries also cover old requests without a schema/data migration.
+    """
+    by_id = {item["id"]: item for item in items}
+    for item in items:
+        item.update(assumed_at=None, assumed_by=None)
+    ids = list(by_id)
+    actions = {"ASSUMIR", "SOLICITAR_ANTECIPACAO", "REABRIR", "PEDIDO_CANCELADO_REABERTURA"}
+    for start in range(0, len(ids), 500):
+        timeline = db.execute(select(events.c.id, events.c.request_id, events.c.action,
+            events.c.created_at, events.c.actor, events.c.after_data).where(
+            events.c.request_id.in_(ids[start:start + 500]),
+            events.c.action.in_(actions))).mappings().all()
+        # Transactional versions disambiguate events with the same timestamp.
+        timeline = sorted(timeline, key=lambda event: (event["request_id"],
+            (event["after_data"] or {}).get("version", 0), event["created_at"], event["id"]))
+        for event in timeline:
+            item = by_id[event["request_id"]]
+            if event["action"] in {"REABRIR", "PEDIDO_CANCELADO_REABERTURA"}:
+                item.update(assumed_at=None, assumed_by=None)
+            elif item["assumed_at"] is None:
+                item.update(assumed_at=event["created_at"], assumed_by=event["actor"])
+    return items
+
+
 def listing(db, filters, user=None, *, paginate=True):
     require_ready(db)
     synchronize_stale_anticipations(db, user)
@@ -760,6 +789,7 @@ def listing(db, filters, user=None, *, paginate=True):
             item["anticipation_delivery_date"] = None
         items.append(_present_current_request(item))
     items = attach_reference_data(db, items)
+    items = attach_assumption_data(db, items)
     items = [encode(item) for item in items]
     return {"items": items, "total": count, "page": page,
             "counts": dict(counts), "overdue": overdue}
@@ -791,7 +821,8 @@ def export_data(db, filters, user=None):
                                    "reference_backfill_result": report["result"],
                                    "unresolved_tokens": text_array(report["unresolved_tokens"])},
                 }))
-    timeline.sort(key=lambda item: (item.get("created_at") or "", str(item.get("id") or "")))
+    timeline.sort(key=lambda item: (item.get("created_at") or "",
+        (item.get("after_data") or {}).get("version", 0), str(item.get("id") or "")))
     result["events"] = timeline
     return result
 
@@ -802,6 +833,7 @@ def history(db, request_id):
                       .order_by(events.c.created_at, events.c.id)).mappings()
     timeline = [dict(r) for r in rows]
     snapshot = request_snapshot(db, row)
+    attach_assumption_data(db, [snapshot])
     if inspect(db.connection()).has_table(reference_backfill.name):
         report = db.execute(select(reference_backfill).where(
             reference_backfill.c.request_id == row["id"])).mappings().first()
@@ -825,6 +857,7 @@ def history(db, request_id):
                     "Apenas correspondências exatas e únicas foram vinculadas."),
             })
     timeline.sort(key=lambda item: (encode(item.get("created_at")) or "",
+                                    (item.get("after_data") or {}).get("version", 0),
                                     str(item.get("id") or "")))
     return {"request": encode(snapshot), "events": [encode(item) for item in timeline]}
 

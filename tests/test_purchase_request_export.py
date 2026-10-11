@@ -67,7 +67,7 @@ class PurchaseRequestExportTests(unittest.TestCase):
         self.assertEqual([], values(book["Solicitações"]))
         self.assertEqual(len(COLUMNS), book["Solicitações"].max_column)
         self.assertEqual("D5", book["Solicitações"].freeze_panes)
-        self.assertEqual("A4:AF4", book["Solicitações"].auto_filter.ref)
+        self.assertEqual("A4:AH4", book["Solicitações"].auto_filter.ref)
 
     def test_quantities_and_dates_are_typed_and_time_is_brasilia(self):
         row = self.request(quantity="2.375")
@@ -89,6 +89,19 @@ class PurchaseRequestExportTests(unittest.TestCase):
         self.assertEqual("s", cell.data_type)
         self.assertTrue(cell.value.startswith("="))
         self.assertFalse(any(cell.data_type == "f" for sheet in book for row in sheet for cell in row))
+
+    def test_assumed_date_is_a_real_brasilia_timestamp_in_excel(self):
+        row = self.request()
+        pr.transition(self.db, row["id"], {"action": "ASSUMIR", "version": row["version"],
+            "reason": "Iniciar compra"}, self.buyer)
+        stamp = datetime(2026, 10, 8, 2, 30, tzinfo=timezone.utc)
+        self.db.execute(pr.events.update().where(pr.events.c.request_id == row["id"],
+            pr.events.c.action == "ASSUMIR").values(created_at=stamp))
+        self.db.commit()
+        exported = values(self.export()["Solicitações"])[0]
+        self.assertEqual(datetime(2026, 10, 7, 23, 30), exported["Assumida em (Brasília)"])
+        self.assertEqual("COMPRADOR", exported["Assumida por"])
+        self.assertIsNone(exported["Conclusão compras (Brasília)"])
 
     def test_history_keeps_before_after_actor_and_reason(self):
         row = self.request()

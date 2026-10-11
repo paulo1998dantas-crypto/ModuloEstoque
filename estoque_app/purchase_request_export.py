@@ -37,9 +37,11 @@ COLUMNS = [
     ("ID do pedido criado / alocado", "purchase_order_id", 40),
     ("ID do pedido de antecipação", "anticipation_order_id", 40),
     ("Versão", "version", 12),
+    ("Assumida em (Brasília)", "assumed_at", 25),
+    ("Assumida por", "assumed_by", 22),
 ]
 DATE_FIELDS = {"needed_at", "anticipation_delivery_date", "anticipation_confirmed_delivery_date"}
-TIME_FIELDS = {"created_at", "updated_at", "completed_at"}
+TIME_FIELDS = {"created_at", "updated_at", "completed_at", "assumed_at"}
 NUMBER_FIELDS = {"quantity", "anticipation_pending_quantity", "version"}
 
 

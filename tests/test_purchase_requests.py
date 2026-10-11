@@ -1,6 +1,6 @@
 import sys
 import unittest
-from datetime import date
+from datetime import date, datetime, timezone
 from decimal import Decimal
 from pathlib import Path
 from unittest.mock import patch, Mock
@@ -334,6 +334,9 @@ class PurchaseRequestTests(unittest.TestCase):
         self.assertEqual("EM_COMPRAS",treated["status"])
         self.assertEqual("COMPRADOR",treated["buyer"])
         self.assertEqual("SOLICITAR_ANTECIPACAO",pr.history(self.db,row["id"])["events"][-1]["action"])
+        assumed = pr.listing(self.db, {})["items"][0]
+        self.assertIsNotNone(assumed["assumed_at"])
+        self.assertEqual("COMPRADOR", assumed["assumed_by"])
         with self.assertRaisesRegex(ValueError,"antecipação"):
             pr.prepare(self.db,[row["id"]],self.buyer)
         converted=pr.transition(self.db,row["id"],{"action":"CONVERTER_NOVA_COMPRA","version":treated["version"],"reason":"Fornecedor não consegue antecipar"},self.buyer)["request"]
@@ -631,6 +634,63 @@ class PurchaseRequestTests(unittest.TestCase):
                 "quantity":"4","needed_at":"2026-10-20","reason":"Teste",
             },self.operator)
 
+    def test_assumption_date_comes_from_audit_and_survives_observations(self):
+        row = self.request()
+        self.assertIsNone(pr.listing(self.db, {})["items"][0]["assumed_at"])
+        stamp = datetime(2026, 10, 9, 14, 30, tzinfo=timezone.utc)
+        with patch.object(pr, "now", return_value=stamp):
+            assumed = pr.transition(self.db, row["id"], {
+                "action": "ASSUMIR", "version": row["version"], "reason": "Vou comprar",
+            }, self.buyer)["request"]
+        self.db.commit()
+        pr.transition(self.db, row["id"], {
+            "action": "OBSERVACAO", "version": assumed["version"], "reason": "Contato posterior",
+        }, self.buyer)
+        self.db.commit()
+        listed = pr.listing(self.db, {})["items"][0]
+        self.assertTrue(listed["assumed_at"].startswith("2026-10-09T14:30:00"))
+        self.assertEqual("COMPRADOR", listed["assumed_by"])
+        self.assertIsNone(listed["completed_at"])
+        self.assertEqual(listed["assumed_at"], pr.history(self.db, row["id"])["request"]["assumed_at"])
+        self.assertEqual(listed["assumed_at"], pr.export_data(self.db, {})["items"][0]["assumed_at"])
+        self.order([row["id"]])
+        self.db.commit()
+        completed = pr.listing(self.db, {})["items"][0]
+        self.assertEqual("CONCLUIDA", completed["status"])
+        self.assertEqual(listed["assumed_at"], completed["assumed_at"])
+        self.assertIsNotNone(completed["completed_at"])
+
+    def test_reopening_clears_current_cycle_assumption_but_keeps_history(self):
+        row = self.request()
+        versions = row["version"]
+        for day, action in ((8, "ASSUMIR"), (9, "CANCELAR"), (10, "REABRIR")):
+            with patch.object(pr, "now", return_value=datetime(2026, 10, day, 12, tzinfo=timezone.utc)):
+                row = pr.transition(self.db, row["id"], {
+                    "action": action, "version": versions, "reason": "Teste de ciclo",
+                }, self.buyer)["request"]
+            versions = row["version"]
+        self.db.commit()
+        self.assertIsNone(pr.listing(self.db, {})["items"][0]["assumed_at"])
+        with patch.object(pr, "now", return_value=datetime(2026, 10, 11, 12, tzinfo=timezone.utc)):
+            pr.transition(self.db, row["id"], {
+                "action": "ASSUMIR", "version": versions, "reason": "Retomar compra",
+            }, self.buyer)
+        self.db.commit()
+        listed = pr.listing(self.db, {})["items"][0]
+        self.assertTrue(listed["assumed_at"].startswith("2026-10-11T12:00:00"))
+        history = pr.history(self.db, row["id"])["events"]
+        self.assertEqual(2, len([event for event in history if event["action"] == "ASSUMIR"]))
+
+    def test_direct_conclusion_does_not_invent_assumption_date(self):
+        row = self.request()
+        self.order([row["id"]])
+        self.db.commit()
+        listed = pr.listing(self.db, {})["items"][0]
+        self.assertEqual("CONCLUIDA", listed["status"])
+        self.assertIsNotNone(listed["completed_at"])
+        self.assertIsNone(listed["assumed_at"])
+        self.assertIsNone(listed["assumed_by"])
+
     def test_buyer_can_edit_request_already_in_progress(self):
         row=self.request()
         row=pr.transition(self.db,row["id"],{
@@ -739,6 +799,8 @@ class PurchaseRequestTests(unittest.TestCase):
 
     def test_order_cancellation_reopens_and_preserves_history(self):
         row=self.request()
+        pr.transition(self.db, row["id"], {"action": "ASSUMIR", "version": row["version"],
+            "reason": "Tratativa inicial"}, self.buyer)
         order=self.order([row["id"]])
         cancel_purchase_order(self.db,order["id"],self.buyer.username,"Compra incorreta")
         current=pr.get(self.db,row["id"])
@@ -746,6 +808,16 @@ class PurchaseRequestTests(unittest.TestCase):
         self.assertIsNone(current["purchase_order_id"])
         event=pr.history(self.db,row["id"])["events"][-1]
         self.assertEqual(order["id"],event["before_data"]["purchase_order_id"])
+        self.assertIsNone(pr.listing(self.db, {})["items"][0]["assumed_at"])
+
+    def test_cycle_event_versions_break_identical_timestamp_ties(self):
+        row = self.request()
+        with patch.object(pr, "now", return_value=datetime(2026, 10, 11, 12, tzinfo=timezone.utc)):
+            for action in ("ASSUMIR", "CANCELAR", "REABRIR"):
+                row = pr.transition(self.db, row["id"], {"action": action,
+                    "version": row["version"], "reason": "Teste"}, self.buyer)["request"]
+        self.db.commit()
+        self.assertIsNone(pr.listing(self.db, {})["items"][0]["assumed_at"])
 
     def test_request_and_confirmation_do_not_change_stock(self):
         row=self.request()

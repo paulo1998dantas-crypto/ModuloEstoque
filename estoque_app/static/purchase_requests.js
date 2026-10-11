@@ -33,6 +33,7 @@ function showDetails(row){
   ["Data de necessidade",date(row.needed_at)],["Setor",row.sector],
   ["Referências / O.S.",row.reference_display||row.reference,true],["Referência original",row.reference,true],
   ["Solicitante",row.requested_by],["Solicitada em",date(row.created_at)],["Comprador",row.buyer],
+  ["Assumida em",date(row.assumed_at)],["Assumida por",row.assumed_by],
   ["Atualizada em",date(row.updated_at)],["Pedido existente / criado",row.numero_oc||row.anticipation_numero_oc],
   ["Fornecedor",row.fornecedor_nome||row.anticipation_fornecedor_nome],["Status do pedido",row.purchase_status||row.anticipation_purchase_status],
   ["Saldo pendente no pedido",row.anticipation_pending_quantity==null?"—":qty(row.anticipation_pending_quantity)],
@@ -71,7 +72,7 @@ function render(){
   const cell=(label,className)=>{const td=node("td",null,className);td.dataset.label=label;tr.append(td);return td;};
   const line=(td,value,muted=false)=>td.append(node("span",value==null||value===""?"—":String(value),"pr-cell-line"+(muted?" pr-cell-muted":"")));
   const identity=cell("Solicitação / origem");identity.append(node("strong","SOL-"+row.id.slice(0,8).toUpperCase()));
-  line(identity,row.origin==="ESTOQUE"?"Almoxarifado":"PCP");line(identity,row.requested_by,true);line(identity,date(row.created_at),true);
+  line(identity,row.origin==="ESTOQUE"?"Almoxarifado":"PCP");line(identity,row.requested_by,true);line(identity,"Solicitada: "+date(row.created_at),true);
   const material=cell("Material","pr-material-cell");material.append(node("strong",row.sku_codigo));line(material,row.descricao);
   const quantity=cell("Qtd. / necessidade");quantity.append(node("strong",qty(row.quantity)+" "+row.unidade));line(quantity,date(row.needed_at));
   if(pending&&row.needed_at<today())quantity.classList.add("pr-overdue");
@@ -81,9 +82,19 @@ function render(){
   else line(reference,row.reference_display||row.reference);
   reference.title=row.reference_display||row.reference||"";
   if(linked.length&&["VINCULADA_PARCIAL","AMBIGUA","SEM_MATCH"].includes(row.reference_review_result))reference.append(node("span","Revisar vínculo histórico","pr-cell-line pr-overdue"));
-  const situation=cell("Situação");situation.append(node("span",labels[row.status]||row.status,"pr-badge "+row.status));
-  line(situation,row.status==="CONCLUIDA"?"CONCLUÍDO":anticipation?"ANTECIPAÇÃO":"NOVA COMPRA");
+  const situation=cell("Situação","pr-situation-cell");
+  const typeLabel=anticipation?"ANTECIPAÇÃO":"NOVA COMPRA";
+  const typeClass=anticipation?"ANTECIPACAO":"COMPRA_NOVA";
+  situation.append(node("span",row.status==="CONCLUIDA"?"CONCLUÍDO":typeLabel,
+   "pr-badge pr-kind-badge "+(row.status==="CONCLUIDA"?"CONCLUIDA":typeClass)));
+  if(row.status==="CONCLUIDA")line(situation,typeLabel,true);
+  else situation.append(node("span",labels[row.status]||row.status,"pr-badge pr-status-badge "+row.status));
   if(row.buyer)line(situation,"Comprador: "+row.buyer,true);
+  const milestones=node("div",null,"pr-milestones");
+  line(milestones,row.assumed_at?"Assumida: "+date(row.assumed_at):
+   row.status==="SOLICITADA"?"Ainda não assumida":"Sem registro de assunção",!row.assumed_at);
+  if(row.completed_at)line(milestones,"Concluída: "+date(row.completed_at));
+  situation.append(milestones);
   const order=cell("Pedido / fornecedor","pr-order-cell");order.append(node("strong",orderNumber?"O.C. "+orderNumber:"Sem pedido"));
   if(supplier)line(order,supplier);if(orderStatus)line(order,orderStatus,true);
   if(anticipation){line(order,"Saldo: "+qty(row.anticipation_pending_quantity||0)+" "+row.unidade);line(order,"Previsão: "+date(row.anticipation_delivery_date));}

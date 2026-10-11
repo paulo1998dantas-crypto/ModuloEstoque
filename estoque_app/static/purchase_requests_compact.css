@@ -12,14 +12,18 @@
 .pr-shell .pr-table th,.pr-shell .pr-table td{padding:8px 6px;white-space:normal;overflow-wrap:anywhere;min-width:0;max-width:none;vertical-align:top}
 .pr-shell .pr-table td:nth-child(5),.pr-shell .pr-table td:nth-last-child(2),.pr-shell .pr-table td.pr-reference-cell{min-width:0;max-width:none;white-space:normal}
 .pr-table .pr-col-select{width:3%}.pr-table .pr-col-identity{width:12%}
-.pr-table .pr-col-material{width:23%}.pr-table .pr-col-quantity{width:10%}
-.pr-table .pr-col-reference{width:15%}.pr-table .pr-col-status{width:10%}
-.pr-table .pr-col-order{width:19%}.pr-table .pr-col-actions{width:8%}
+.pr-table .pr-col-material{width:20%}.pr-table .pr-col-quantity{width:10%}
+.pr-table .pr-col-reference{width:14%}.pr-table .pr-col-status{width:17%}
+.pr-table .pr-col-order{width:16%}.pr-table .pr-col-actions{width:8%}
 .pr-table:not(.pr-buyer-table) .pr-col-identity{width:15%}
 .pr-cell-line{display:block;margin-top:4px;line-height:1.35}
 .pr-table .pr-cell-muted{color:#52637a;font-size:11px}
 .pr-shell .pr-table .pr-badge{font-size:11px;padding:4px 6px;border-radius:6px;max-width:100%}
 .pr-badge.ANTECIPACAO{background:#fff0d1;color:#804900}
+.pr-badge.COMPRA_NOVA{background:#e4efff;color:#174a85}
+.pr-shell .pr-table .pr-kind-badge{display:block;font-size:12px;padding:8px;font-weight:800;border-left:4px solid currentColor;letter-spacing:.2px;line-height:1.4}
+.pr-shell .pr-table .pr-status-badge{margin-top:6px}
+.pr-milestones{margin-top:8px;padding-top:5px;border-top:1px solid #dbe3ec;font-size:11px;line-height:1.4}
 .pr-shell .pr-table button{display:block;width:100%;margin:0 0 5px;padding:5px;font-size:11px;white-space:normal}
 .pr-row-menu>summary{cursor:pointer;padding:5px;background:#eaf0f7;border-radius:5px;font-weight:600}
 .pr-row-actions{margin-top:7px}.pr-shell .pr-row-actions button{text-align:left}
