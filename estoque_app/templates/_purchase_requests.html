@@ -38,7 +38,7 @@
       {% if request_config.can_manage %}<button type="button" id="pr-convert">Preparar pedido das selecionadas</button>{% endif %}
     </div>
     <p class="pr-note">PCP e Almoxarifado aparecem nesta mesma fila. O sistema identifica O.C. vigentes e saldo disponível. A solicitação é concluída quando o comprador aloca uma O.C. válida ou, em uma antecipação, confirma a nova data negociada com o fornecedor. Apenas assumir a solicitação não a conclui.</p>
-    <p class="pr-note">Exportar Excel inclui todas as solicitações dos filtros aplicados e seu histórico, sem limitar à página atual. Use Detalhes para consultar todos os dados de uma linha.</p>
+    <p class="pr-note">No Excel, Solicitações contém apenas pendências dos filtros aplicados, sem limite de página. Histórico mantém todas as solicitações e seus eventos, inclusive concluídas e excluídas, independentemente dos filtros. Use Detalhes para consultar uma linha.</p>
     <div class="pr-table-wrap"><table class="pr-table {% if request_config.can_manage %}pr-buyer-table{% endif %}"><colgroup>
       {% if request_config.can_manage %}<col class="pr-col-select">{% endif %}
       <col class="pr-col-identity"><col class="pr-col-material"><col class="pr-col-quantity"><col class="pr-col-reference"><col class="pr-col-status"><col class="pr-col-order"><col class="pr-col-actions">
