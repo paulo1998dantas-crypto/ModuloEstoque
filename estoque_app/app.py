@@ -2552,6 +2552,8 @@ def erp_receipt_reversal(receipt_id):
     receipt_id = str(receipt_id)
     if request.method == 'POST':
         try:
+            if request.form.get('confirmar_estorno') != '1':
+                raise ValueError('Confirme a conferencia da nota e dos itens antes de estornar.')
             result = reverse_receipt(db(), receipt_id, current_user().username,
                                      current_user().id, request.form.get('motivo', ''),
                                      reopen_technical=request.form.get('reabrir_pedido') == '1')

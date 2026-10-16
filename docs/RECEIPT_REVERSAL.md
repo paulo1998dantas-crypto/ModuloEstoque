@@ -2,6 +2,8 @@
 
 Em Movimentações, uma entrada vinculada à inspeção oferece **Estornar recebimento completo**. A prévia lista todos os movimentos daquele UUID, fornecedor, NF, O.C., usuário original e possíveis bloqueios. Confirmar exige motivo e permissão `estoque.movement.cancel_any`.
 
+A confirmação é feita na própria página, marcando a conferência da nota/itens e clicando no botão. O servidor valida essa confirmação; o formulário não depende de pop-up JavaScript, evitando travamentos do navegador e preservando a etapa de aprovação.
+
 - O serviço existente `reverse_receipt` é a única fonte da operação. Todos os componentes, ajustes, vínculo de reversão, estado do recebimento, quantidades da O.C. e auditoria são atualizados numa transação. Falhas revertem tudo. Repetições não geram ajustes adicionais.
 - Nenhuma nota ou movimentação é apagada. As entradas compensadas ficam canceladas e os ajustes apontam aos movimentos originais. Cancelamentos individuais antigos não são descontados duas vezes.
 - Por padrão a tela marca **Reabrir O.C. para recebimento**: encerra a conclusão técnica com evento auditável e recompõe `EMITIDA` ou `PARCIALMENTE_RECEBIDA`, conforme os outros recebimentos confirmados. Desmarcar preserva uma conclusão técnica já existente.

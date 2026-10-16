@@ -25,13 +25,14 @@
     <p>Esta ação estorna <strong>todos os itens deste recebimento</strong>, inclusive componentes de conjuntos. Não exclui a nota, a O.C. nem outros recebimentos.</p>
     {% if receipt.financial_entries %}<p role="alert">Bloqueado: há baixa financeira vinculada ao pedido. Ela precisa ser corrigida antes do estorno físico.</p>{% endif %}
     {% if shortages %}<p role="alert">Saldo físico insuficiente para estorno: {{ shortages|join(', ') }}. Nenhum saldo negativo será forçado.</p>{% endif %}
-    <form method="post" class="form-grid" onsubmit="return confirm('Estornar todos os itens deste recebimento? Os saldos e as quantidades recebidas da O.C. serão recalculados.');">
+    <form method="post" class="form-grid">
       <label>Motivo do estorno integral<textarea name="motivo" required rows="3">{{ request.form.get('motivo', '') }}</textarea></label>
       {% if receipt.purchase_order_id %}
       <label class="receipt-reversal-choice"><input type="checkbox" name="reabrir_pedido" value="1" {% if request.method == 'GET' or request.form.get('reabrir_pedido') == '1' %}checked{% endif %}> Reabrir O.C. para recebimento, se estiver concluída tecnicamente</label>
       <p>Marcado: as quantidades estornadas voltam à inspeção e ao trânsito de materiais. Outros recebimentos válidos continuam considerados. Desmarcado: uma conclusão técnica existente é mantida.</p>
       {% endif %}
       <p>Responsável pelo estorno: <strong>{{ current_user.username }}</strong>. Não altera pagamentos, empenhos ou baixas de produção.</p>
+      <label class="receipt-reversal-choice"><input type="checkbox" name="confirmar_estorno" value="1" required> Conferi a nota e os itens e confirmo o estorno integral deste recebimento.</label>
       <button class="btn danger" type="submit" {% if receipt.financial_entries or shortages %}disabled{% endif %}>Confirmar estorno integral</button>
     </form>
   {% endif %}

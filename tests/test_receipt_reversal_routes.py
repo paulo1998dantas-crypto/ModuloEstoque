@@ -66,13 +66,15 @@ assert response.status_code == 200, response.data[:300]
 assert b'235972' in response.data and b'2810' in response.data
 assert b'Confirmar estorno integral' in response.data
 assert b'Reabrir O.C.' in response.data
-response = client.post(path, data={'motivo':' ', 'reabrir_pedido':'1'})
+response = client.post(path, data={'motivo':'Teste sem conferencia'})
+assert b'Confirme a conferencia' in response.data
+response = client.post(path, data={'motivo':' ', 'reabrir_pedido':'1','confirmar_estorno':'1'})
 assert b'Informe o motivo' in response.data
 response = client.post(f'/movimentacoes/{movement_id}/cancelar',data={'reason':'Individual'})
 assert response.status_code == 302
 database = SessionLocal(); assert database.get(Movement,movement_id).movement_status == 'ATIVA'
 database.close(); SessionLocal.remove()
-response = client.post(path,data={'motivo':'Entrada incorreta solicitada por PAULO','reabrir_pedido':'1'},follow_redirects=True)
+response = client.post(path,data={'motivo':'Entrada incorreta solicitada por PAULO','reabrir_pedido':'1','confirmar_estorno':'1'},follow_redirects=True)
 assert response.status_code == 200, response.data[:500]
 assert b'ESTORNADO' in response.data
 assert b'Confirmar estorno integral' not in response.data
