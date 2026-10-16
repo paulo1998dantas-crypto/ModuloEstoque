@@ -336,6 +336,13 @@ def require_origin(db, user, origin):
     if origin not in {"ESTOQUE", "PCP"} or not roles & required or not can(user, permission, db):
         raise PermissionError("Seu perfil não pode solicitar nesta origem.")
 
+
+def require_create(db, user, origin):
+    """Only an explicit, active PCP role may create requests, from either module."""
+    require_origin(db, user, origin)
+    if "PCP" not in effective_roles(user, db):
+        raise PermissionError("Somente usuários com o perfil PCP podem incluir solicitações de compra.")
+
 def audit(db, row, user, action, before=None, reason=""):
     db.execute(events.insert().values(id=str(uuid4()), request_id=row["id"],
         action=action, actor_id=user.id, actor=user.username, created_at=now(),
@@ -368,7 +375,7 @@ def get(db, request_id, lock=False):
 
 def create(db, payload, user, origin):
     require_ready(db)
-    require_origin(db, user, origin)
+    require_create(db, user, origin)
     if not isinstance(payload, dict):
         raise ValueError("Dados da solicitação inválidos.")
     key = uid(payload.get("idempotency_key"))
@@ -795,10 +802,15 @@ def listing(db, filters, user=None, *, paginate=True):
             "counts": dict(counts), "overdue": overdue}
 
 def export_data(db, filters, user=None):
-    """Export the same canonical view, without the screen's 100-row pagination."""
+    """Filtered pending queue plus an unfiltered, complete audit history."""
     result = listing(db, filters, user, paginate=False)
-    snapshots = {row["id"]: row for row in result["items"]}
-    ids = [row["id"] for row in result["items"]]
+    all_items = listing(db, {}, user, paginate=False)["items"]
+    result["items"] = [row for row in result["items"]
+                       if row["status"] in {"SOLICITADA", "EM_COMPRAS"}]
+    result["total"] = len(result["items"])
+    result["history_items"] = all_items
+    snapshots = {row["id"]: row for row in all_items}
+    ids = list(snapshots)
     timeline = []
     for start in range(0, len(ids), 500):
         batch = ids[start:start + 500]

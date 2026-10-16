@@ -38,7 +38,7 @@ class PurchaseRequestTests(unittest.TestCase):
                      idempotency_key=key or str(uuid4()),reference="",notes="Reposição",
                      sector="GERAL",work_order_ids=[])
         payload.update(values)
-        result=pr.create(self.db,payload,user or self.operator,origin)
+        result=pr.create(self.db,payload,user or self.pcp,origin)
         self.db.commit()
         return result["request"]
 
@@ -62,7 +62,7 @@ class PurchaseRequestTests(unittest.TestCase):
         pcp=self.request(origin="PCP",user=self.pcp,sector="PRODUÇÃO")
         self.assertEqual("ESTOQUE",stock["origin"])
         self.assertEqual("PCP",pcp["origin"])
-        self.assertEqual("OPERADOR",stock["requested_by"])
+        self.assertEqual("PCP",stock["requested_by"])
         self.assertEqual("SOLICITADA",stock["status"])
         self.assertEqual(1,len(pr.history(self.db,stock["id"])["events"]))
 
@@ -189,7 +189,7 @@ class PurchaseRequestTests(unittest.TestCase):
     def test_old_client_missing_reference_fields_must_refresh_without_writing(self):
         with self.assertRaisesRegex(ValueError,"Recarregue a tela"):
             pr.create(self.db,dict(sku_codigo="MAT-001",quantity="2",needed_at="2026-10-15",
-                                 idempotency_key=str(uuid4())),self.operator,"ESTOQUE")
+                                 idempotency_key=str(uuid4())),self.pcp,"ESTOQUE")
         self.assertEqual(0,self.db.execute(select(func.count()).select_from(pr.requests)).scalar_one())
 
     def test_edit_cannot_replace_os_links_with_free_text(self):
@@ -566,7 +566,25 @@ class PurchaseRequestTests(unittest.TestCase):
                 self.request(**vals)
 
     def test_operator_cannot_submit_for_pcp(self):
-        with self.assertRaises(PermissionError): self.request(origin="PCP")
+        with self.assertRaises(PermissionError): self.request(origin="PCP", user=self.operator)
+
+    def test_only_explicit_pcp_role_can_create_in_either_origin(self):
+        for origin in ("PCP", "ESTOQUE"):
+            for user in (self.operator, self.buyer, self.user):
+                with self.subTest(origin=origin, role=user.role), self.assertRaises(PermissionError):
+                    self.request(origin=origin, user=user)
+        self.assertEqual(0, self.db.execute(select(func.count()).select_from(pr.requests)).scalar_one())
+        self.assertEqual(0, self.db.execute(select(func.count()).select_from(pr.events)).scalar_one())
+
+    def test_admin_with_explicit_pcp_role_can_create(self):
+        with patch.object(pr, "effective_roles", return_value={"ADMIN", "PCP"}):
+            row = self.request(user=self.user)
+        self.assertEqual(self.user.username, row["requested_by"])
+
+    def test_inactive_pcp_cannot_create(self):
+        self.pcp.active = False
+        with self.assertRaises(PermissionError):
+            self.request()
 
     def test_pcp_cannot_treat_workflow_even_with_legacy_broad_permissions(self):
         row=self.request()
@@ -860,6 +878,7 @@ class PurchaseRequestRouteTests(unittest.TestCase):
             session["purchase_requests_csrf"]="csrf"
 
     def test_local_creation_requires_csrf_and_forces_stock_origin(self):
+        self.actor=self.pcp
         payload={"sku_codigo":"MAT-001","quantity":1,"needed_at":"2026-10-15",
                  "idempotency_key":str(uuid4()),"origin":"PCP","requested_by":"FAKE",
                  "sector":"GERAL","work_order_ids":[]}
@@ -868,7 +887,24 @@ class PurchaseRequestRouteTests(unittest.TestCase):
         response=self.client.post("/api/erp/purchase-requests",json=payload,headers={"X-CSRF-Token":"csrf"})
         self.assertEqual(200,response.status_code)
         self.assertEqual("ESTOQUE",response.json["request"]["origin"])
-        self.assertEqual("OPERADOR",response.json["request"]["requested_by"])
+        self.assertEqual("PCP",response.json["request"]["requested_by"])
+
+    def test_non_pcp_cannot_create_via_local_or_internal_api(self):
+        for actor in (self.operator, self.buyer, self.user):
+            self.actor = actor
+            for prefix in ("/api/erp/", "/api/erp/internal/"):
+                with self.subTest(role=actor.role, prefix=prefix):
+                    response = self.client.post(prefix + "purchase-requests", json={
+                        "sku_codigo":"MAT-001", "quantity":1, "needed_at":"2026-10-15",
+                        "idempotency_key":str(uuid4()), "origin":"PCP", "roles":["PCP"],
+                        "sector":"GERAL", "work_order_ids":[]}, headers={"X-CSRF-Token":"csrf"})
+                    self.assertEqual(403, response.status_code)
+        self.assertEqual(0, self.db.execute(select(func.count()).select_from(pr.requests)).scalar_one())
+
+    def test_non_pcp_screen_hides_creation_but_preserves_edit_permission(self):
+        response = self.client.get("/solicitacoes")
+        self.assertIn('"can_submit": false', response.get_data(as_text=True))
+        self.assertIn('"can_edit_origin": true', response.get_data(as_text=True))
 
     def test_internal_pcp_creation_checks_actual_role(self):
         payload={"sku_codigo":"MAT-001","quantity":1,"needed_at":"2026-10-15",
@@ -946,6 +982,7 @@ class PurchaseRequestRouteTests(unittest.TestCase):
         self.assertEqual("COMPRADOR",pr.history(self.db,row["id"])["events"][-1]["actor"])
 
     def test_invalid_payload_no_write(self):
+        self.actor=self.pcp
         response=self.client.post("/api/erp/purchase-requests",json=["bad"],headers={"X-CSRF-Token":"csrf"})
         self.assertEqual(400,response.status_code)
         self.assertEqual(0,self.db.execute(select(func.count()).select_from(pr.requests)).scalar())

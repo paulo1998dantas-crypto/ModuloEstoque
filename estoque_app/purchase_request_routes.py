@@ -64,13 +64,16 @@ def register(app, get_db, get_user, internal_allowed, internal_user, feature_req
     def screen():
         user = get_user()
         can_submit = False
+        can_edit_origin = False
         try:
             workflow.require_origin(get_db(), user, "ESTOQUE")
+            can_edit_origin = True
+            workflow.require_create(get_db(), user, "ESTOQUE")
             can_submit = True
         except PermissionError: can_submit = False
         return render_template("purchase_requests.html", request_config={
             "api": "/api/erp/purchase-requests", "origin": "ESTOQUE",
-            "can_submit": can_submit, "can_edit_origin": can_submit,
+            "can_submit": can_submit, "can_edit_origin": can_edit_origin,
             "can_manage": False, "user_id": user.id,
             "csrf": token(),
             "purchases_url": (app.config.get("ERP_SUPRIMENTOS_URL", "") or

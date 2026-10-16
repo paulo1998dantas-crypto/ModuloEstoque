@@ -41,14 +41,16 @@ class PurchaseRequestExportTests(unittest.TestCase):
         self.db.commit()
         self.assertEqual(100, len(pr.listing(self.db, {})["items"]))
         exported = values(self.export()["Solicitações"])
-        self.assertEqual(102, len(exported))
-        self.assertEqual(102, len({row["ID da solicitação"] for row in exported}))
+        self.assertEqual(1, len(exported))
+        self.assertEqual(1, len({row["ID da solicitação"] for row in exported}))
+        historical = values(self.export()["Histórico"])
+        self.assertEqual(102, len({row["ID da solicitação"] for row in historical}))
         linked = next(row for row in exported if row["ID da solicitação"] == original["id"])
         self.assertIn("TA003185", linked["Referência / O.S. / setor"])
         self.assertIn("TA003186", linked["Referência / O.S. / setor"])
 
     def test_export_filters_origin_status_dates_and_linked_work_order(self):
-        self.request(sector="GERAL")
+        other = self.request(sector="GERAL")
         order = self.work_order(3191)
         row = self.request(origin="PCP", user=self.pcp, sector="PRODUÇÃO", work_order_ids=[order])
         filters = {"q": "3191", "origin": "PCP", "status": "SOLICITADA",
@@ -58,7 +60,7 @@ class PurchaseRequestExportTests(unittest.TestCase):
         self.assertEqual([row["id"]], [r["ID da solicitação"] for r in exported])
         history = values(book["Histórico"])
         self.assertTrue(history)
-        self.assertEqual({row["id"]}, {r["ID da solicitação"] for r in history})
+        self.assertEqual({row["id"], other["id"]}, {r["ID da solicitação"] for r in history})
         self.assertIn("Origem: PCP", book["Solicitações"]["A2"].value)
 
     def test_empty_export_has_headers_and_valid_sheets(self):
@@ -147,7 +149,27 @@ class PurchaseRequestExportTests(unittest.TestCase):
         row = self.request()
         self.order([row["id"]])
         self.db.commit()
-        self.assertEqual("CONCLUÍDO", values(self.export()["Solicitações"])[0]["Classificação"])
+        book = self.export()
+        self.assertEqual([], values(book["Solicitações"]))
+        history = values(book["Histórico"])
+        self.assertTrue(any(r["Depois"] == "CONCLUIDA" for r in history if r["Campo"] == "status"))
+
+    def test_pending_and_full_history_are_separate_even_with_closed_status_filter(self):
+        completed = self.request(sector="GERAL")
+        self.order([completed["id"]])
+        cancelled = self.request(sector="ADMINISTRATIVO")
+        pr.transition(self.db, cancelled["id"], {"action":"EXCLUIR", "version":1,
+            "reason":"Excluída conforme revisão"}, self.buyer)
+        pending = self.request(sector="PRODUÇÃO")
+        pr.transition(self.db, pending["id"], {"action":"ASSUMIR", "version":1,
+            "reason":"Em tratamento"}, self.buyer)
+        self.db.commit()
+        book = self.export({"status":"CONCLUIDA", "q":"sem resultado"})
+        self.assertEqual([], values(book["Solicitações"]))
+        self.assertEqual({completed["id"],cancelled["id"],pending["id"]},
+                         {r["ID da solicitação"] for r in values(book["Histórico"])})
+        self.assertEqual([pending["id"]],
+                         [r["ID da solicitação"] for r in values(self.export()["Solicitações"])])
 
 
 class PurchaseRequestExportRouteTests(unittest.TestCase):

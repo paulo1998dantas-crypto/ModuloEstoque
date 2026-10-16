@@ -107,12 +107,13 @@ def build_workbook(data, filters=None, exported_by="", generated_at=None):
     filters = filters or {}
     filter_names = {"q": "Busca", "status": "Status", "origin": "Origem", "from": "Necessidade de", "to": "Até"}
     selected = "; ".join(f"{label}: {filters[key]}" for key, label in filter_names.items() if filters.get(key)) or "Todos"
-    metadata = f"Gerado em Brasília: {stamp}. Usuário: {exported_by}. Filtros: {selected}. Solicitações: {len(data['items'])}."
+    pending_items = [row for row in data["items"] if row["status"] in {"SOLICITADA", "EM_COMPRAS"}]
+    metadata = f"Gerado em Brasília: {stamp}. Usuário: {exported_by}. Filtros: {selected}. Pendências: {len(pending_items)}."
     wb = Workbook()
     wb.remove(wb.active)
-    sheet = _sheet(wb, "Solicitações", "Workflow de solicitações de compra",
+    sheet = _sheet(wb, "Solicitações", "Solicitações de compra pendentes",
                    [col[0] for col in COLUMNS], [col[2] for col in COLUMNS], metadata)
-    for row_index, raw in enumerate(data["items"], 5):
+    for row_index, raw in enumerate(pending_items, 5):
         row = dict(raw)
         row.update(number="SOL-" + row["id"][:8].upper(),
                    origin_label="Almoxarifado" if row["origin"] == "ESTOQUE" else "PCP",
@@ -140,13 +141,27 @@ def build_workbook(data, filters=None, exported_by="", generated_at=None):
         sheet.row_dimensions[row_index].height = 48
     sheet.auto_filter.ref = f"A4:{get_column_letter(len(COLUMNS))}{max(4, sheet.max_row)}"
 
-    history = _sheet(wb, "Histórico", "Rastreabilidade das solicitações exportadas",
+    history_items = data.get("history_items", data["items"])
+    history_metadata = (f"Gerado em Brasília: {stamp}. Usuário: {exported_by}. "
+                        f"Histórico completo, sem filtros: {len(history_items)} solicitações de todos os status.")
+    history = _sheet(wb, "Histórico", "Histórico completo das solicitações de compra",
                      ["Solicitação", "SKU", "Ação", "Usuário", "Data / hora (Brasília)",
                       "Campo", "Antes", "Depois", "Motivo", "ID do evento", "ID da solicitação", "Parte"],
-                     [20, 16, 32, 24, 25, 28, 65, 65, 65, 40, 40, 12], metadata)
-    by_id = {row["id"]: row for row in data["items"]}
+                     [20, 16, 32, 24, 25, 28, 65, 65, 65, 40, 40, 12], history_metadata)
+    by_id = {row["id"]: row for row in history_items}
     row_index = 5
-    for event in data.get("events", []):
+    timeline = list(data.get("events", []))
+    with_events = {event["request_id"] for event in timeline}
+    # Do not lose legacy records that predate audit capture. This is an export
+    # snapshot, explicitly labelled, not a fabricated historical event.
+    for request_row in history_items:
+        if request_row["id"] not in with_events:
+            timeline.append({"id": "ESTADO_ATUAL:" + request_row["id"],
+                             "request_id": request_row["id"], "action": "ESTADO_ATUAL_SEM_EVENTOS",
+                             "actor": "", "created_at": None, "before_data": {},
+                             "after_data": dict(request_row),
+                             "reason": "Registro legado sem eventos; estado atual na exportação."})
+    for event in timeline:
         request_row = by_id.get(event["request_id"])
         if not request_row:
             continue
