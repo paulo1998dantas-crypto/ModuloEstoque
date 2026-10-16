@@ -63,6 +63,19 @@ def _purchase_allocation(db, data, current=None):
     if mode == "WORK_ORDER":
         if not work_order_id:
             raise ValueError("Selecione a O.S. ativa vinculada ao pedido de compra.")
+        # Editing commercial lines does not allocate a vehicle again. Keep the
+        # persisted historical link even after that O.S. has been delivered.
+        # New orders and actual destination changes still require an active O.S.
+        keeps_existing_work_order = (
+            current is not None
+            and str(current.get("allocation_mode") or "").strip().upper() == mode
+            and str(current.get("work_order_id") or "").strip() == work_order_id
+        )
+        if keeps_existing_work_order:
+            return (
+                mode, work_order_id, vehicle_entry_id,
+                reference or str(current.get("allocation_reference") or "").strip(),
+            )
         target = db.execute(text("""
             select id,numero_os,vehicle_entry_id
               from erp_work_orders
