@@ -145,6 +145,7 @@ from services.erp_service import (
     pending_purchase_order_lines_by_sku,
     purchase_order_financial_detail,
     purchase_orders_dashboard,
+    receipt_reversal_detail,
     reopen_purchase_order_technical,
     register_purchase_order_financial_entry,
     reverse_receipt,
@@ -2532,9 +2533,42 @@ def erp_financial_detail_purchase_order(order_id):
 def erp_reverse_receipt(receipt_id):
     user=current_user()
     try:
-        reverse_receipt(db(), receipt_id, user.username, user.id, (request.get_json(silent=True) or {}).get("motivo", ""))
-        return jsonify({"ok": True})
+        payload = request.get_json(silent=True) or {}
+        result = reverse_receipt(db(), receipt_id, user.username, user.id, payload.get('motivo', ''),
+                                 reopen_technical=payload.get('reabrir_pedido') is True)
+        return jsonify({"ok": True, **result})
     except ValueError as exc: return jsonify({"ok":False,"error":str(exc)}),400
+    except Exception:
+        db().rollback()
+        app.logger.exception('Falha no estorno integral do recebimento')
+        return jsonify({'ok': False, 'error': 'Nao foi possivel concluir o estorno. Nenhuma alteracao foi salva.'}), 500
+
+
+@app.route('/erp/recebimentos/<uuid:receipt_id>/estorno', methods=['GET', 'POST'])
+@login_required
+@permission_required('estoque.movement.cancel_any')
+@erp_feature_required
+def erp_receipt_reversal(receipt_id):
+    receipt_id = str(receipt_id)
+    if request.method == 'POST':
+        try:
+            result = reverse_receipt(db(), receipt_id, current_user().username,
+                                     current_user().id, request.form.get('motivo', ''),
+                                     reopen_technical=request.form.get('reabrir_pedido') == '1')
+            flash('Recebimento ja estava estornado; nenhum ajuste foi repetido.' if result['replayed']
+                  else 'Recebimento estornado integralmente. Saldos e quantidades da O.C. recalculados; historico preservado.', 'success')
+            return redirect(url_for('erp_receipt_reversal', receipt_id=receipt_id))
+        except ValueError as exc:
+            flash(str(exc), 'danger')
+        except Exception:
+            db().rollback()
+            app.logger.exception('Falha no estorno integral do recebimento')
+            flash('Nao foi possivel concluir o estorno. Nenhuma alteracao foi salva.', 'danger')
+    try:
+        detail = receipt_reversal_detail(db(), receipt_id)
+    except ValueError:
+        raise NotFound('Recebimento nao encontrado.')
+    return render_template('erp_estorno_recebimento.html', **detail)
 
 
 @app.route("/api/erp/receipts/<receipt_id>/explode-bom", methods=["POST"])

@@ -87,6 +87,7 @@ class MovementContextAndCancellationTest(unittest.TestCase):
         )
         self.sku = SKU(
             sku="CTX-001",
+            grupo="20 - PRODUTO PROCESSO",
             descricao="Material contextual",
             unidade="UN",
             active=True,
@@ -758,7 +759,7 @@ class MovementContextAndCancellationTest(unittest.TestCase):
             )
         self.db.rollback()
 
-    def test_only_admin_can_cancel_a_goods_receipt_movement(self):
+    def test_goods_receipt_requires_integral_reversal_even_for_admin(self):
         movement = register_movement(
             self.db,
             self.sku,
@@ -771,7 +772,7 @@ class MovementContextAndCancellationTest(unittest.TestCase):
         movement.source_line_id = str(uuid4())
         self.db.commit()
 
-        with self.assertRaisesRegex(ValueError, "Inspecao de Recebimento"):
+        with self.assertRaisesRegex(ValueError, "recebimento completo"):
             cancel_movement(
                 self.db,
                 movement,
@@ -781,31 +782,15 @@ class MovementContextAndCancellationTest(unittest.TestCase):
         self.db.rollback()
 
         movement = self.db.get(Movement, movement.id)
-        canceled, reversal, replayed = cancel_movement(
-            self.db,
-            movement,
-            self.other_user.id,
-            "Entrada de recebimento registrada incorretamente.",
-            allow_any=True,
-        )
+        with self.assertRaisesRegex(ValueError, "recebimento completo"):
+            cancel_movement(
+                self.db, movement, self.other_user.id,
+                "Entrada de recebimento registrada incorretamente.", allow_any=True,
+            )
         balance = self.db.query(StockBalance).filter_by(sku_id=self.sku.id).one()
-
-        self.assertFalse(replayed)
-        self.assertEqual("CANCELADA", canceled.movement_status)
-        self.assertEqual(self.other_user.id, canceled.canceled_by)
-        self.assertEqual("MOVEMENT_CANCELLATION", reversal.source_type)
-        self.assertEqual(canceled.id, reversal.related_movement_id)
-        self.assertEqual(Decimal("0.000"), balance.saldo_atual)
-
-        _, replay_reversal, replayed = cancel_movement(
-            self.db,
-            canceled,
-            self.other_user.id,
-            "Repeticao segura.",
-            allow_any=True,
-        )
-        self.assertTrue(replayed)
-        self.assertEqual(reversal.id, replay_reversal.id)
+        self.assertEqual('ATIVA', movement.movement_status)
+        self.assertEqual(Decimal('5.000'), balance.saldo_atual)
+        self.assertEqual(0, self.db.query(Movement).filter_by(source_type='MOVEMENT_CANCELLATION').count())
 
     def test_work_order_must_be_technically_open(self):
         self.db.execute(

@@ -1,0 +1,43 @@
+{% extends 'base.html' %}
+{% block title %}Estorno integral de recebimento - Estoque{% endblock %}
+{% block content %}
+<style>.form-grid .receipt-reversal-choice{display:flex;flex-direction:row;align-items:center;gap:10px}.form-grid .receipt-reversal-choice input{width:18px;height:18px;margin:0;flex:none}</style>
+<section class="page-head"><div>
+  <h1>Estorno integral de recebimento</h1>
+  <p>NF {{ receipt.numero_nf or 'não informada' }} · O.C. {{ receipt.numero_oc or 'Entrada sem pedido' }}</p>
+</div><a class="btn secondary" href="{{ url_for('movements', vinculo=receipt.numero_nf) }}">Consultar movimentações</a></section>
+<section class="panel">
+  <div class="detail-grid">
+    <span>Fornecedor</span><strong>{{ receipt.fornecedor_exibicao or 'Não informado' }}</strong>
+    <span>Recebido por</span><strong>{{ receipt.operador }}</strong>
+    <span>Recebimento</span><strong>{{ receipt.data_recebimento|dt }}</strong>
+    <span>Situação do recebimento</span><strong>{{ receipt.status }}</strong>
+    {% if receipt.purchase_order_id %}<span>Situação atual da O.C.</span><strong>{{ receipt.purchase_order_status }} · Técnica: {{ receipt.technical_status }}</strong>{% endif %}
+    <span>Abrangência</span><strong>{{ lines|length }} movimentações · {{ sku_count }} SKUs</strong>
+    <span>Identificador</span><strong>{{ receipt.id }}</strong>
+  </div>
+  {% if receipt.status == 'ESTORNADO' %}
+    <p class="badge">ESTORNADO · {{ receipt.reversed_at|dt }}</p>
+    <p>Motivo: {{ receipt.motivo_excecao }}</p>
+    <p>Estornado por: <strong>{{ receipt.reversed_by }}</strong></p>
+    <p>Os registros originais foram preservados. O estoque foi compensado e a O.C. recalculada.</p>
+  {% else %}
+    <p>Esta ação estorna <strong>todos os itens deste recebimento</strong>, inclusive componentes de conjuntos. Não exclui a nota, a O.C. nem outros recebimentos.</p>
+    {% if receipt.financial_entries %}<p role="alert">Bloqueado: há baixa financeira vinculada ao pedido. Ela precisa ser corrigida antes do estorno físico.</p>{% endif %}
+    {% if shortages %}<p role="alert">Saldo físico insuficiente para estorno: {{ shortages|join(', ') }}. Nenhum saldo negativo será forçado.</p>{% endif %}
+    <form method="post" class="form-grid" onsubmit="return confirm('Estornar todos os itens deste recebimento? Os saldos e as quantidades recebidas da O.C. serão recalculados.');">
+      <label>Motivo do estorno integral<textarea name="motivo" required rows="3">{{ request.form.get('motivo', '') }}</textarea></label>
+      {% if receipt.purchase_order_id %}
+      <label class="receipt-reversal-choice"><input type="checkbox" name="reabrir_pedido" value="1" {% if request.method == 'GET' or request.form.get('reabrir_pedido') == '1' %}checked{% endif %}> Reabrir O.C. para recebimento, se estiver concluída tecnicamente</label>
+      <p>Marcado: as quantidades estornadas voltam à inspeção e ao trânsito de materiais. Outros recebimentos válidos continuam considerados. Desmarcado: uma conclusão técnica existente é mantida.</p>
+      {% endif %}
+      <p>Responsável pelo estorno: <strong>{{ current_user.username }}</strong>. Não altera pagamentos, empenhos ou baixas de produção.</p>
+      <button class="btn danger" type="submit" {% if receipt.financial_entries or shortages %}disabled{% endif %}>Confirmar estorno integral</button>
+    </form>
+  {% endif %}
+</section>
+<section class="panel"><div class="panel-head"><h2>Itens do recebimento</h2></div>
+  <div class="table-wrap"><table><thead><tr><th>Movimento</th><th>SKU</th><th>Descrição</th><th>Qtd.</th><th>Unidade</th><th>A estornar do saldo físico</th><th>Situação</th></tr></thead>
+  <tbody>{% for line in lines %}<tr><td>{{ line.id }}</td><td>{{ line.sku }}</td><td>{{ line.descricao }}</td><td>{{ line.quantidade|qty }}</td><td>{{ line.unidade }}</td><td>{{ line.impacto|qty }}</td><td>{{ line.status }}</td></tr>{% endfor %}</tbody></table></div>
+</section>
+{% endblock %}

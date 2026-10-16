@@ -626,8 +626,8 @@ class ErpSkuResolutionTest(unittest.TestCase):
         self.assertEqual(0, self.db.query(Movement).count())
 
     def test_confirm_receipt_explodes_nested_bom_and_reversal_preserves_oc_quantity(self):
-        assembly = SKU(sku="CJ-001", descricao="Conjunto comprado", unidade="CJ", active=True)
-        intermediate = SKU(sku="SUB-001", descricao="Subconjunto", unidade="UN", active=True)
+        assembly = SKU(sku="CJ-001", grupo="30 - CJ", descricao="Conjunto comprado", unidade="CJ", active=True)
+        intermediate = SKU(sku="SUB-001", grupo="20 - PP", descricao="Subconjunto", unidade="UN", active=True)
         direct_leaf = SKU(sku="COMP-001", descricao="Componente direto", unidade="UN", active=True)
         nested_leaf = SKU(sku="COMP-002", descricao="Componente interno", unidade="UN", active=True)
         self.db.add_all([assembly, intermediate, direct_leaf, nested_leaf])
@@ -683,6 +683,7 @@ class ErpSkuResolutionTest(unittest.TestCase):
     def test_pending_receipt_exposes_leaf_bom_components_without_changing_commercial_line(self):
         assembly = SKU(
             sku="CJ-PREVIEW",
+            grupo="30 - CJ",
             descricao="Conjunto comercial",
             unidade="CJ",
             active=True,
@@ -730,7 +731,7 @@ class ErpSkuResolutionTest(unittest.TestCase):
 
     def test_component_receipt_keeps_commercial_conjunto_partial_until_bom_is_complete(self):
         """A bought kit is received and inspected per leaf, not as parent stock."""
-        assembly = SKU(sku="CJ-INSPECAO", descricao="Conjunto comercial", unidade="CJ", active=True)
+        assembly = SKU(sku="CJ-INSPECAO", grupo="30 - CJ", descricao="Conjunto comercial", unidade="CJ", active=True)
         first_component = SKU(sku="PC-INSPECAO-1", descricao="Peca um", unidade="PC", active=True)
         second_component = SKU(sku="PC-INSPECAO-2", descricao="Peca dois", unidade="PC", active=True)
         self.db.add_all([assembly, first_component, second_component])

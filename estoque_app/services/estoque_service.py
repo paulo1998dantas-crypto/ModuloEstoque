@@ -1277,6 +1277,8 @@ def cancel_movement(
 ):
     if movement is None:
         raise ValueError("Movimentacao nao encontrada.")
+    if movement.source_type in {'GOODS_RECEIPT', 'GOODS_RECEIPT_REVERSAL'}:
+        raise ValueError('Use Estornar recebimento completo para preservar o vinculo com a O.C. e a inspecao.')
     movement = (
         db.query(Movement)
         .filter(Movement.id == movement.id)

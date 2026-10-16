@@ -6,9 +6,10 @@ from uuid import uuid4
 from sqlalchemy import Uuid, bindparam, text
 from sqlalchemy.exc import MultipleResultsFound
 
-from models import Movement, SKU, User
+from models import Movement, SKU, StockBalance, User, now_utc
 from services.estoque_service import (
     bom_components_for_sku,
+    clear_dashboard_movement_cache,
     get_sku_by_code,
     is_bom_manufacturing_sku,
     register_movement,
@@ -2079,11 +2080,72 @@ def close_purchase_order_by_idempotency_key(db, key, actor, reason):
     return close_purchase_order_technical(db, str(order["id"]), actor, reason)
 
 
-def reverse_receipt(db, receipt_id, actor, user_id, reason):
+def receipt_reversal_detail(db, receipt_id):
+    """Read-only preview of the entire receipt, never just a selected component."""
+    receipt = _row(db.execute(text("""
+        select r.*,o.numero_oc,o.technical_status,o.financial_status,o.status purchase_order_status,
+               coalesce(nullif(r.fornecedor_nome,''),o.fornecedor_nome,'') fornecedor_exibicao,
+               (select a.actor from erp_audit_events a where a.entity_type='GOODS_RECEIPT'
+                 and a.entity_id=r.id and a.action='ESTORNADO' order by a.created_at desc limit 1) reversed_by,
+               (select count(*) from erp_purchase_order_financial_entries f
+                 where f.purchase_order_id=r.purchase_order_id) financial_entries
+          from erp_goods_receipts r
+          left join erp_purchase_orders o on o.id=r.purchase_order_id
+         where r.id=:id
+    """), {'id': receipt_id}).first())
+    if not receipt:
+        raise ValueError('Recebimento nao encontrado.')
+    for field in ('data_recebimento', 'reversed_at'):
+        if isinstance(receipt.get(field), str):
+            receipt[field] = datetime.fromisoformat(receipt[field])
+    movements = db.query(Movement).filter(
+        Movement.source_type == 'GOODS_RECEIPT', Movement.source_id == receipt_id,
+    ).order_by(Movement.sku_id, Movement.id).all()
+    sku_ids = {m.sku_id for m in movements}
+    balances = {b.sku_id: to_decimal(b.saldo_atual) for b in db.query(StockBalance).filter(
+        StockBalance.sku_id.in_(sku_ids),
+    ).all()} if sku_ids else {}
+    totals = {}
+    lines = []
+    for movement in movements:
+        impact = (to_decimal(movement.saldo_posterior) - to_decimal(movement.saldo_anterior))
+        remaining = impact if movement.movement_status != 'CANCELADA' else Decimal('0')
+        totals[movement.sku_id] = totals.get(movement.sku_id, Decimal('0')) + remaining
+        lines.append({'id': movement.id, 'sku': movement.sku.sku,
+                      'descricao': movement.sku.descricao, 'quantidade': movement.quantidade,
+                      'unidade': movement.sku.unidade, 'status': movement.movement_status,
+                      'impacto': remaining})
+    shortages = [movement.sku.sku for movement in movements
+                 if balances.get(movement.sku_id, Decimal('0')) < totals[movement.sku_id]]
+    return {'receipt': receipt, 'lines': lines, 'sku_count': len(sku_ids),
+            'quantity': sum((line['impacto'] for line in lines), Decimal('0')),
+            'shortages': sorted(set(shortages))}
+
+
+def reverse_receipt(db, receipt_id, actor, user_id, reason, *, reopen_technical=False):
+    """All-or-nothing reversal. Reopening a technical closure is an explicit choice."""
+    try:
+        return _reverse_receipt(db, receipt_id, actor, user_id, reason,
+                                reopen_technical=reopen_technical)
+    except Exception:
+        db.rollback()
+        clear_dashboard_movement_cache(db)
+        raise
+
+
+def _reverse_receipt(db, receipt_id, actor, user_id, reason, *, reopen_technical=False):
+    reason = str(reason or '').strip()
+    if not reason:
+        raise ValueError('Informe o motivo do estorno integral.')
     receipt=_row(db.execute(text('select * from erp_goods_receipts where id=:id for update'),{'id':receipt_id}).first())
     if not receipt: raise ValueError('Recebimento nao encontrado.')
+    if receipt['status'] == 'ESTORNADO':
+        db.commit()
+        return {'id': str(receipt_id), 'status': 'ESTORNADO', 'replayed': True}
     if receipt['status']!='CONFIRMADO': raise ValueError('Somente recebimento confirmado pode ser estornado.')
     if receipt["purchase_order_id"]:
+        db.execute(text('select id from erp_purchase_orders where id=:id for update'),
+                   {'id': receipt['purchase_order_id']}).first()
         financial_entries = db.execute(text("""
             select count(*) from erp_purchase_order_financial_entries
              where purchase_order_id=:id
@@ -2106,6 +2168,7 @@ def reverse_receipt(db, receipt_id, actor, user_id, reason):
         """), {"id": receipt_id}).all()
     ]
     touched_purchase_lines = set()
+    reversed_movement_ids = set()
     for line in lines:
         links = [
             _row(raw)
@@ -2120,13 +2183,24 @@ def reverse_receipt(db, receipt_id, actor, user_id, reason):
             quantity = to_decimal(link["quantidade_disponivel"])
             if not link["movement_id"] or not quantity:
                 continue
-            original_movement = db.get(Movement, int(link["movement_id"]))
+            original_movement = db.query(Movement).filter(
+                Movement.id == int(link['movement_id']),
+            ).with_for_update().one_or_none()
             if not original_movement:
                 raise ValueError("Movimento de estoque vinculado ao recebimento nao encontrado.")
+            if original_movement.id in reversed_movement_ids:
+                raise ValueError('Recebimento com vinculo de movimento duplicado; confira a rastreabilidade.')
+            reversed_movement_ids.add(original_movement.id)
+            if original_movement.movement_status == 'CANCELADA':
+                continue  # A prior per-movement cancellation already removed this stock.
+            if (original_movement.source_type != 'GOODS_RECEIPT'
+                or str(original_movement.source_id).replace('-', '') != str(receipt_id).replace('-', '')
+                or to_decimal(original_movement.saldo_posterior) - to_decimal(original_movement.saldo_anterior) != quantity):
+                raise ValueError('Vinculo ou quantidade do recebimento diverge do movimento de estoque.')
             sku = db.get(SKU, original_movement.sku_id)
             if not sku:
                 raise ValueError("SKU do movimento vinculado ao recebimento nao encontrado.")
-            register_movement(
+            reversal = register_movement(
                 db, sku, 'AJUSTE', -quantity, user_id,
                 documento=receipt['numero_nf'],
                 observacao=f'Estorno ERP {receipt_id}: {reason}',
@@ -2135,8 +2209,19 @@ def reverse_receipt(db, receipt_id, actor, user_id, reason):
                 source_line_id=line['id'],
                 idempotency_key=f'reversal:{receipt_id}:{link["id"]}',
             )
+            original_movement.movement_status = 'CANCELADA'
+            original_movement.canceled_at = now_utc()
+            original_movement.canceled_by = user_id
+            original_movement.cancel_reason = reason
+            original_movement.reversal_movement_id = reversal.id
         if line['purchase_order_line_id']:
             touched_purchase_lines.add(str(line['purchase_order_line_id']))
+    active_stock_ids = {m.id for m in db.query(Movement).filter(
+        Movement.source_type == 'GOODS_RECEIPT', Movement.source_id == receipt_id,
+    ).all() if m.movement_status != 'CANCELADA' and
+        to_decimal(m.saldo_posterior) != to_decimal(m.saldo_anterior)}
+    if active_stock_ids - reversed_movement_ids:
+        raise ValueError('Recebimento com movimento de estoque sem vinculo completo. Nenhum item foi estornado.')
     # Rejections do not alter stock, but they are operational movements.  On
     # reversal keep their audit trail and explicitly mark them cancelled so a
     # reversed receipt is never presented as an active rejection.
@@ -2157,11 +2242,13 @@ def reverse_receipt(db, receipt_id, actor, user_id, reason):
         "reason": reason or "Estorno do recebimento.",
     })
     db.execute(text("update erp_goods_receipts set status='ESTORNADO',reversed_at=now(),motivo_excecao=:reason where id=:id"),{'id':receipt_id,'reason':reason or ''})
+    order_status = None
     if receipt['purchase_order_id']:
         for purchase_line_id in touched_purchase_lines:
             _refresh_purchase_order_line_receipt_status(db, purchase_line_id)
         order_before = _row(db.execute(text("""
-            select financial_status,technical_status
+            select financial_status,technical_status,technical_closed_at,
+                   technical_closed_by,technical_close_reason
               from erp_purchase_orders
              where id=:id
              for update
@@ -2169,9 +2256,25 @@ def reverse_receipt(db, receipt_id, actor, user_id, reason):
         order_status = _refresh_purchase_order_receipt_status(
             db, receipt['purchase_order_id']
         )
+        if reopen_technical and order_before and order_before.get('technical_status') == 'CONCLUIDA':
+            db.execute(text("""
+                update erp_purchase_orders set technical_status='ABERTA',
+                    technical_closed_at=null,technical_closed_by=null,
+                    technical_close_reason='' where id=:id
+            """), {'id': receipt['purchase_order_id']})
+            db.execute(text("""
+                insert into erp_audit_events(entity_type,entity_id,action,actor,reason,origin,before_data,after_data)
+                values ('PURCHASE_ORDER',:id,'REABERTURA_TECNICA_POR_ESTORNO',:actor,:reason,'ESTOQUE',
+                    jsonb_build_object('technical_status','CONCLUIDA','technical_closed_at',cast(:closed_at as text),
+                        'technical_closed_by',cast(:closed_by as text),'technical_close_reason',cast(:close_reason as text)),
+                    jsonb_build_object('technical_status','ABERTA','receipt_id',cast(:receipt_id as text)))
+            """), {'id': receipt['purchase_order_id'], 'actor': actor, 'reason': reason,
+                     'closed_at': str(order_before.get('technical_closed_at') or ''),
+                     'closed_by': order_before.get('technical_closed_by'),
+                     'close_reason': order_before.get('technical_close_reason'), 'receipt_id': str(receipt_id)})
         canonical_status = (
             'CONCLUIDA'
-            if order_before and order_before.get('technical_status') == 'CONCLUIDA'
+            if not reopen_technical and order_before and order_before.get('technical_status') == 'CONCLUIDA'
             else order_status
         )
         db.execute(text("""
@@ -2202,4 +2305,10 @@ def reverse_receipt(db, receipt_id, actor, user_id, reason):
                 'reason': reason or '',
             })
     db.execute(text("insert into erp_audit_events(entity_type,entity_id,action,actor,reason) values('GOODS_RECEIPT',:id,'ESTORNADO',:actor,:reason)"),{'id':receipt_id,'actor':actor,'reason':reason or ''})
+    clear_dashboard_movement_cache(db)
     db.commit()
+    return {'id': str(receipt_id), 'status': 'ESTORNADO', 'replayed': False,
+            'purchase_order_status': canonical_status if receipt['purchase_order_id'] else None,
+            'reopened_technical': bool(reopen_technical and order_before and
+                                       order_before.get('technical_status') == 'CONCLUIDA')
+                                  if receipt['purchase_order_id'] else False}
