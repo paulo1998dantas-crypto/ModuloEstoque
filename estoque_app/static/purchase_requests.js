@@ -106,6 +106,10 @@ function render(){
   const canEditOrigin=cfg.can_edit_origin&&row.origin===cfg.origin&&row.status==="SOLICITADA";
   const canEditRequest=pending&&(cfg.can_manage||canEditOrigin||(isOwner&&row.status==="SOLICITADA"));
   if(canEditRequest){actions.append(button("Editar",()=>openEdit(row)));actions.append(button("Excluir",()=>excludeRequest(row)));}
+  if(cfg.can_admin){
+   actions.append(button("Alterar quantidade (ADMIN)",()=>openAdminRequest(row,false)));
+   actions.append(button("Excluir definitivamente",()=>openAdminRequest(row,true)));
+  }
   if(cfg.can_manage){
    if(row.status==="SOLICITADA")actions.append(button(anticipation?"Registrar solicitação ao fornecedor":"Assumir",()=>act(row,anticipation?"SOLICITAR_ANTECIPACAO":"ASSUMIR")));
    if(pending)actions.append(button("Alocar O.C. existente",()=>openAllocateOrder(row)));
@@ -188,6 +192,50 @@ async function openEdit(row){
  try{await fillSkuOptions($("pr-edit-sku"),row.sku_codigo,row.sku_codigo);form.elements.sku_codigo.value=row.sku_codigo;$("pr-edit-request").showModal();}
  catch(e){message(e.message,true);}
 }
+let adminRequest=null;
+function openAdminRequest(row,permanent){
+ if(!cfg.can_admin)return;
+ adminRequest={row,permanent};
+ $("pr-admin-form").reset();
+ $("pr-admin-title").textContent=permanent?"Excluir definitivamente":"Alterar quantidade solicitada";
+ $("pr-admin-identity").textContent="SOL-"+row.id.slice(0,8).toUpperCase()+" · "+row.sku_codigo+" · "+row.descricao+" · "+qty(row.quantity)+" "+row.unidade;
+ $("pr-admin-quantity").value=row.quantity;
+ $("pr-admin-quantity").required=!permanent;
+ $("pr-admin-quantity-label").hidden=permanent;
+ $("pr-admin-reason").required=!permanent;
+ $("pr-admin-reason-label").hidden=permanent;
+ $("pr-admin-confirm").required=permanent;
+ $("pr-admin-confirm-label").hidden=!permanent;
+ $("pr-admin-warning").textContent=permanent
+  ?"A solicitação, TODOS os seus eventos e vínculos próprios serão apagados definitivamente do sistema e de futuras exportações. Não é cancelamento e não poderá ser reaberta. Pedidos, O.S. e estoque não serão excluídos."
+  :"A correção altera somente a quantidade da solicitação, com motivo registrado no histórico. Status, datas de conclusão, pedidos, O.S. e estoque serão preservados; pedidos emitidos não terão suas quantidades ajustadas.";
+ $("pr-admin-error").textContent="";
+ $("pr-admin-save").textContent=permanent?"Apagar definitivamente":"Salvar quantidade";
+ $("pr-admin-save").dataset.permanent=String(permanent);
+ $("pr-admin-dialog").showModal();
+}
+if($("pr-admin-form")){
+ $("pr-admin-cancel").onclick=()=>{$("pr-admin-dialog").close();adminRequest=null;};
+ $("pr-admin-dialog").addEventListener("cancel",()=>{adminRequest=null;});
+ $("pr-admin-form").onsubmit=async event=>{
+  event.preventDefault();
+  if(!cfg.can_admin||!adminRequest)return;
+  const {row,permanent}=adminRequest;
+  if(permanent&&!$("pr-admin-confirm").checked)return;
+  const payload=permanent
+   ?{action:"EXCLUIR_DEFINITIVO",version:row.version,confirmation:row.id}
+   :{action:"EDITAR_QUANTIDADE_ADMIN",version:row.version,quantity:$("pr-admin-quantity").value,reason:$("pr-admin-reason").value.trim()};
+  $("pr-admin-save").disabled=true;$("pr-admin-cancel").disabled=true;
+  try{
+   await api("/"+encodeURIComponent(row.id)+"/action",payload);
+   $("pr-admin-dialog").close();adminRequest=null;
+   message(permanent?"Solicitação e histórico apagados definitivamente.":"Quantidade corrigida e registrada no histórico.");
+   if(permanent)page=1;
+   await load();
+  }catch(error){$("pr-admin-error").textContent=error.message;}
+  finally{$("pr-admin-save").disabled=false;$("pr-admin-cancel").disabled=false;}
+ };
+}
 async function excludeRequest(row){
  if(!confirm("Excluir esta solicitação? Ela será cancelada e mantida no histórico de rastreabilidade."))return;
  const reason=prompt("Informe o motivo da exclusão/cancelamento:");if(!reason||!reason.trim())return;
@@ -204,7 +252,7 @@ async function showHistory(id){
    box.append(node("strong",event.action==="NORMALIZACAO_REFERENCIAS"?"Padronização de referências históricas":event.action.replaceAll("_"," ")),node("p",event.actor+" · "+date(event.created_at)));
    const before=event.before_data||{},after=event.after_data||{};
    if(before.status!==after.status)box.append(node("p",(labels[before.status]||"Nova solicitação")+" → "+(labels[after.status]||after.status)));
-   if(event.action==="EDITAR"){
+   if(event.action==="EDITAR"||event.action==="EDITAR_QUANTIDADE_ADMIN"){
     const fields={sku_codigo:"SKU",descricao:"Descrição",unidade:"Unidade",quantity:"Quantidade",needed_at:"Data de necessidade",sector:"Setor",reference:"Referência",notes:"Observações",request_type:"Classificação"};
     for(const [key,label] of Object.entries(fields))if(String(before[key]??"")!==String(after[key]??""))box.append(node("p",label+": "+(before[key]||"—")+" → "+(after[key]||"—")));
     const beforeOrders=(before.work_orders||[]).map(item=>item.label||item.numero_os||item.id).join(", ");

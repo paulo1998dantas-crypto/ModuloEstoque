@@ -159,6 +159,45 @@ def buyer_allowed(db, user):
     return bool(user and user.active and effective_roles(user, db) & {"ADMIN", "COMPRADOR"}
                 and can(user, "suprimentos.purchase.create", db))
 
+def admin_allowed(db, user):
+    return bool(user and user.active and "ADMIN" in effective_roles(user, db))
+
+
+def administer_request(db, row, payload, user):
+    """Explicit admin corrections; never modify the linked O.C., O.S. or stock."""
+    if not admin_allowed(db, user):
+        raise PermissionError("Somente ADMIN pode corrigir quantidades históricas ou excluir definitivamente.")
+    action = payload["action"]
+    lock_request_materials(db, [row["sku_id"]])
+    if action == "EXCLUIR_DEFINITIVO":
+        if payload.get("confirmation") != row["id"]:
+            raise ValueError("Confirme explicitamente a exclusão definitiva desta solicitação e de seu histórico.")
+        db.execute(events.delete().where(events.c.request_id == row["id"]))
+        db.execute(request_work_orders.delete().where(request_work_orders.c.request_id == row["id"]))
+        if inspect(db.connection()).has_table(reference_backfill.name):
+            db.execute(reference_backfill.delete().where(reference_backfill.c.request_id == row["id"]))
+        db.execute(requests.delete().where(requests.c.id == row["id"]))
+        return {"deleted_id": row["id"], "permanent": True}
+    reason = str(payload.get("reason") or "").strip()
+    if not reason or len(reason) > 4000:
+        raise ValueError("Informe o motivo/observação (até 4.000 caracteres).")
+    try:
+        quantity = Decimal(str(payload.get("quantity") or "").replace(",", "."))
+        if (not quantity.is_finite() or quantity <= 0 or
+                quantity > Decimal("99999999999.999") or quantity.as_tuple().exponent < -3):
+            raise InvalidOperation()
+    except (InvalidOperation, ValueError):
+        raise ValueError("Informe quantidade positiva com até três casas decimais.")
+    if quantity == Decimal(str(row["quantity"])):
+        raise ValueError("Nenhuma quantidade foi alterada.")
+    before = request_snapshot(db, row)
+    row.update(quantity=quantity, updated_at=now(), version=row["version"]+1)
+    db.execute(requests.update().where(requests.c.id == row["id"]).values(
+        quantity=quantity, updated_at=row["updated_at"], version=row["version"]))
+    after = request_snapshot(db, row)
+    audit(db, after, user, action, before, reason)
+    return {"request": encode(after)}
+
 def require_buyer(db, user):
     if not buyer_allowed(db, user):
         raise PermissionError("Somente o comprador (ou administrador) pode tratar solicitações.")
@@ -918,7 +957,11 @@ def transition(db, request_id, payload, user):
         raise ValueError("Dados do tratamento inválidos.")
     row = get(db, request_id, lock=True)
     action = payload.get("action")
-    if action in {"EDITAR", "EXCLUIR"}:
+    admin_action = action in {"EDITAR_QUANTIDADE_ADMIN", "EXCLUIR_DEFINITIVO"}
+    if admin_action:
+        if not admin_allowed(db, user):
+            raise PermissionError("Somente ADMIN pode corrigir quantidades históricas ou excluir definitivamente.")
+    elif action in {"EDITAR", "EXCLUIR"}:
         require_request_editor(db, row, user)
     else:
         require_buyer(db, user)
@@ -926,6 +969,8 @@ def transition(db, request_id, payload, user):
     except (ValueError, TypeError): raise ValueError("Atualize a tabela antes de tratar a solicitação.")
     if row["version"] != version:
         raise ValueError("A solicitação foi alterada por outro usuário. Atualize a tabela.")
+    if admin_action:
+        return administer_request(db, row, payload, user)
     row = _reclassify_stale_anticipation(db, row, user)
     reason = str(payload.get("reason") or "").strip()
     if not reason or len(reason) > 4000:

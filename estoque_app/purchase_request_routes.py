@@ -75,6 +75,7 @@ def register(app, get_db, get_user, internal_allowed, internal_user, feature_req
             "api": "/api/erp/purchase-requests", "origin": "ESTOQUE",
             "can_submit": can_submit, "can_edit_origin": can_edit_origin,
             "can_manage": False, "user_id": user.id,
+            "can_admin": workflow.admin_allowed(get_db(), user),
             "csrf": token(),
             "purchases_url": (app.config.get("ERP_SUPRIMENTOS_URL", "") or
                 __import__("config").Config.ERP_SUPRIMENTOS_URL).rstrip("/") + "/erp/solicitacoes"})

@@ -1,0 +1,4 @@
+#pr-admin-dialog [hidden]{display:none!important}
+#pr-admin-confirm{width:auto;margin-right:8px}
+#pr-admin-error:not(:empty){padding:10px;background:#fff0f0;color:#921b1b;border-radius:6px}
+#pr-admin-save[data-permanent="true"]{background:#a31b25;border-color:#a31b25}

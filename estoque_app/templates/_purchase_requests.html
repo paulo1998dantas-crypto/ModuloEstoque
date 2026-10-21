@@ -1,5 +1,6 @@
 <link rel="stylesheet" href="/static/purchase_requests.css">
 <link rel="stylesheet" href="/static/purchase_requests_edit.css">
+<link rel="stylesheet" href="/static/purchase_requests_admin.css?v=20261021">
 <link rel="stylesheet" href="/static/purchase_requests_references.css">
 <link rel="stylesheet" href="/static/purchase_requests_compact.css?v=20261011-situacao">
 <section class="pr-shell" id="purchase-request-app">
@@ -38,7 +39,7 @@
       {% if request_config.can_manage %}<button type="button" id="pr-convert">Preparar pedido das selecionadas</button>{% endif %}
     </div>
     <p class="pr-note">PCP e Almoxarifado aparecem nesta mesma fila. O sistema identifica O.C. vigentes e saldo disponível. A solicitação é concluída quando o comprador aloca uma O.C. válida ou, em uma antecipação, confirma a nova data negociada com o fornecedor. Apenas assumir a solicitação não a conclui.</p>
-    <p class="pr-note">No Excel, Solicitações contém apenas pendências dos filtros aplicados, sem limite de página. Histórico mantém todas as solicitações e seus eventos, inclusive concluídas e excluídas, independentemente dos filtros. Use Detalhes para consultar uma linha.</p>
+    <p class="pr-note">No Excel, Solicitações contém apenas pendências dos filtros aplicados, sem limite de página. Histórico mantém todas as solicitações e seus eventos, inclusive concluídas e canceladas, independentemente dos filtros. Registros apagados definitivamente pelo ADMIN não constam mais no sistema nem em novas exportações. Use Detalhes para consultar uma linha.</p>
     <div class="pr-table-wrap"><table class="pr-table {% if request_config.can_manage %}pr-buyer-table{% endif %}"><colgroup>
       {% if request_config.can_manage %}<col class="pr-col-select">{% endif %}
       <col class="pr-col-identity"><col class="pr-col-material"><col class="pr-col-quantity"><col class="pr-col-reference"><col class="pr-col-status"><col class="pr-col-order"><col class="pr-col-actions">
@@ -81,10 +82,24 @@
       </div>
       <label class="pr-wide">Observações / justificativa<textarea name="notes" maxlength="4000" rows="2"></textarea></label>
       <label class="pr-wide">Motivo da alteração<textarea name="reason" maxlength="4000" rows="2" required placeholder="Explique o que precisa ser corrigido"></textarea></label>
-      <div class="pr-wide pr-actions"><button id="pr-edit-save" type="submit">Salvar alteração</button><small>Solicitações concluídas não podem ser alteradas.</small></div>
+      <div class="pr-wide pr-actions"><button id="pr-edit-save" type="submit">Salvar alteração</button><small>Para corrigir apenas a quantidade de uma solicitação encerrada, use a ação exclusiva do ADMIN.</small></div>
     </form>
   </dialog>
+  {% if request_config.can_admin %}
+  <dialog id="pr-admin-dialog" class="pr-confirm-dialog">
+    <div class="pr-heading"><h2 id="pr-admin-title"></h2><button type="button" id="pr-admin-cancel">Cancelar</button></div>
+    <p id="pr-admin-identity"></p>
+    <p id="pr-admin-warning" class="pr-note"></p>
+    <p id="pr-admin-error" class="pr-error" role="alert"></p>
+    <form id="pr-admin-form" class="pr-form">
+      <label id="pr-admin-quantity-label">Quantidade solicitada<input id="pr-admin-quantity" type="number" min="0.001" max="99999999999.999" step="0.001"></label>
+      <label id="pr-admin-reason-label" class="pr-wide">Motivo da correção<textarea id="pr-admin-reason" maxlength="4000" rows="3"></textarea></label>
+      <label id="pr-admin-confirm-label" class="pr-wide"><input id="pr-admin-confirm" type="checkbox"> Confirmo apagar esta solicitação e TODO o seu histórico definitivamente, sem possibilidade de reabertura.</label>
+      <div class="pr-wide pr-actions"><button id="pr-admin-save" type="submit">Confirmar</button></div>
+    </form>
+  </dialog>
+  {% endif %}
 </section>
 <script id="pr-config" type="application/json">{{ request_config|tojson }}</script>
-<script src="/static/purchase_requests.js?v=20261011-situacao" defer></script>
+<script src="/static/purchase_requests.js?v=20261021-admin-historico" defer></script>
 
