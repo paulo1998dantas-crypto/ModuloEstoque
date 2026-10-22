@@ -568,9 +568,25 @@ class PurchaseRequestTests(unittest.TestCase):
     def test_operator_cannot_submit_for_pcp(self):
         with self.assertRaises(PermissionError): self.request(origin="PCP", user=self.operator)
 
-    def test_only_explicit_pcp_role_can_create_in_either_origin(self):
+    def test_stock_operator_can_create_only_in_stock_origin_and_is_audited(self):
+        row = self.request(user=self.operator)
+        self.assertEqual("ESTOQUE", row["origin"])
+        self.assertEqual(self.operator.id, row["requested_by_id"])
+        self.assertEqual(self.operator.username, row["requested_by"])
+        self.assertEqual("SOLICITADA", row["status"])
+        events = pr.history(self.db, row["id"])["events"]
+        self.assertEqual(1, len(events))
+        self.assertEqual(self.operator.username, events[0]["actor"])
+        with self.assertRaises(PermissionError):
+            self.request(origin="PCP", user=self.operator)
+        with self.assertRaises(PermissionError):
+            pr.transition(self.db, row["id"], {"action":"ASSUMIR", "version":1}, self.operator)
+        self.assertEqual(0, self.db.query(Movement).count())
+
+    def test_creation_still_requires_explicit_role_for_each_origin(self):
         for origin in ("PCP", "ESTOQUE"):
-            for user in (self.operator, self.buyer, self.user):
+            denied_users = (self.operator, self.buyer, self.user) if origin == "PCP" else (self.buyer, self.user)
+            for user in denied_users:
                 with self.subTest(origin=origin, role=user.role), self.assertRaises(PermissionError):
                     self.request(origin=origin, user=user)
         self.assertEqual(0, self.db.execute(select(func.count()).select_from(pr.requests)).scalar_one())
@@ -585,6 +601,20 @@ class PurchaseRequestTests(unittest.TestCase):
         self.pcp.active = False
         with self.assertRaises(PermissionError):
             self.request()
+
+    def test_inactive_stock_operator_cannot_create(self):
+        self.operator.active = False
+        with self.assertRaises(PermissionError):
+            self.request(user=self.operator)
+
+    def test_stock_operator_still_needs_stock_view_permission(self):
+        with patch.object(pr, "can", return_value=False), self.assertRaises(PermissionError):
+            self.request(user=self.operator)
+
+    def test_operator_in_multiple_roles_can_create_from_stock(self):
+        with patch.object(pr, "effective_roles", return_value={"ADMIN", "OPERADOR"}):
+            row = self.request(user=self.user)
+        self.assertEqual(self.user.username, row["requested_by"])
 
     def test_pcp_cannot_treat_workflow_even_with_legacy_broad_permissions(self):
         row=self.request()
@@ -889,8 +919,8 @@ class PurchaseRequestRouteTests(unittest.TestCase):
         self.assertEqual("ESTOQUE",response.json["request"]["origin"])
         self.assertEqual("PCP",response.json["request"]["requested_by"])
 
-    def test_non_pcp_cannot_create_via_local_or_internal_api(self):
-        for actor in (self.operator, self.buyer, self.user):
+    def test_buyer_and_admin_without_requester_role_cannot_create_via_any_api(self):
+        for actor in (self.buyer, self.user):
             self.actor = actor
             for prefix in ("/api/erp/", "/api/erp/internal/"):
                 with self.subTest(role=actor.role, prefix=prefix):
@@ -901,7 +931,27 @@ class PurchaseRequestRouteTests(unittest.TestCase):
                     self.assertEqual(403, response.status_code)
         self.assertEqual(0, self.db.execute(select(func.count()).select_from(pr.requests)).scalar_one())
 
-    def test_non_pcp_screen_hides_creation_but_preserves_edit_permission(self):
+    def test_stock_operator_screen_displays_creation_form(self):
+        response = self.client.get("/solicitacoes")
+        self.assertIn('"can_submit": true', response.get_data(as_text=True))
+        self.assertIn('id="pr-form"', response.get_data(as_text=True))
+        self.assertIn("Reposição / Almoxarifado", response.get_data(as_text=True))
+
+    def test_stock_operator_creation_requires_csrf_and_cannot_spoof_origin(self):
+        payload = {"sku_codigo":"MAT-001", "quantity":1, "needed_at":"2026-10-15",
+                   "idempotency_key":str(uuid4()), "origin":"PCP", "requested_by":"FAKE",
+                   "sector":"GERAL", "work_order_ids":[]}
+        self.assertEqual(403, self.client.post("/api/erp/purchase-requests", json=payload).status_code)
+        response = self.client.post("/api/erp/purchase-requests", json=payload,
+                                    headers={"X-CSRF-Token":"csrf"})
+        self.assertEqual(200, response.status_code)
+        self.assertEqual("ESTOQUE", response.json["request"]["origin"])
+        self.assertEqual("OPERADOR", response.json["request"]["requested_by"])
+        self.assertEqual(403, self.client.post("/api/erp/internal/purchase-requests", json={
+            **payload, "idempotency_key":str(uuid4()), "roles":["PCP"]}).status_code)
+
+    def test_buyer_screen_hides_creation_but_preserves_edit_permission(self):
+        self.actor = self.buyer
         response = self.client.get("/solicitacoes")
         self.assertIn('"can_submit": false', response.get_data(as_text=True))
         self.assertIn('"can_edit_origin": true', response.get_data(as_text=True))

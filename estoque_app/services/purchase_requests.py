@@ -394,10 +394,14 @@ def require_origin(db, user, origin):
 
 
 def require_create(db, user, origin):
-    """Only an explicit, active PCP role may create requests, from either module."""
+    """PCP may create in either module; stock operators only in Estoque."""
     require_origin(db, user, origin)
-    if "PCP" not in effective_roles(user, db):
-        raise PermissionError("Somente usuários com o perfil PCP podem incluir solicitações de compra.")
+    roles = effective_roles(user, db)
+    if "PCP" in roles or (origin == "ESTOQUE" and "OPERADOR" in roles):
+        return
+    if origin == "ESTOQUE":
+        raise PermissionError("Somente usuários PCP ou Operador do Estoque (Almoxarifado) podem incluir solicitações de compra neste módulo.")
+    raise PermissionError("Somente usuários com o perfil PCP podem incluir solicitações de compra no Suprimentos.")
 
 def audit(db, row, user, action, before=None, reason=""):
     db.execute(events.insert().values(id=str(uuid4()), request_id=row["id"],

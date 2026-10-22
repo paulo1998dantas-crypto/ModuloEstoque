@@ -2,8 +2,8 @@
 
 ## Fluxo operacional
 
-- Estoque: menu **Solicitações de compra**; selecionar SKU ativo, quantidade, data de necessidade e setor (PRODUÇÃO, ADMINISTRATIVO ou GERAL). Vincular uma ou mais O.S. abertas pela lista pesquisável; observações opcionais.
-- Suprimentos: **Solicitações**; perfis PCP/ADMIN possuem o formulário de Planejamento/PCP.
+- Estoque: menu **Solicitações de compra**; perfis OPERADOR (Almoxarifado) e PCP podem selecionar SKU ativo, quantidade, data de necessidade e setor (PRODUÇÃO, ADMINISTRATIVO ou GERAL). Vincular uma ou mais O.S. abertas pela lista pesquisável; observações opcionais.
+- Suprimentos: **Solicitações**; a criação de Planejamento/PCP exige o perfil PCP, mesmo em contas ADMIN.
 - A tabela consolidada de Compras contém as duas origens, filtros e paginação (100 linhas por página). Os demais usuários autenticados podem consultar e abrir o histórico.
 - COMPRADOR/ADMIN pode assumir, registrar observações, cancelar/reabrir e selecionar solicitações para preparar o formulário atual de O.C.
 - Estados: SOLICITADA → EM_COMPRAS → CONCLUIDA; CANCELADA pode ser reaberta. Emissão direta também pode concluir SOLICITADA.
