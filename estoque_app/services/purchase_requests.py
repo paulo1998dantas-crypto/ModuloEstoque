@@ -175,6 +175,15 @@ def admin_allowed(db, user):
     return bool(user and user.active and "ADMIN" in effective_roles(user, db))
 
 
+def _authorize_admin_request_purge(db, row):
+    if db.bind.dialect.name == "postgresql":
+        from sqlalchemy import text
+        # The database history trigger remains immutable except for this
+        # explicitly authorized purge, scoped to this request and txn.
+        db.execute(text("select set_config('erp.purchase_request_purge_id', :request_id, true)"),
+                   {"request_id": row["id"]})
+
+
 def administer_request(db, row, payload, user):
     """Explicit admin corrections; never modify the linked O.C., O.S. or stock."""
     if not admin_allowed(db, user):
@@ -184,6 +193,7 @@ def administer_request(db, row, payload, user):
     if action == "EXCLUIR_DEFINITIVO":
         if payload.get("confirmation") != row["id"]:
             raise ValueError("Confirme explicitamente a exclusão definitiva desta solicitação e de seu histórico.")
+        _authorize_admin_request_purge(db, row)
         if multi_order_ready(db):
             db.execute(request_orders.delete().where(request_orders.c.request_id == row["id"]))
         db.execute(events.delete().where(events.c.request_id == row["id"]))

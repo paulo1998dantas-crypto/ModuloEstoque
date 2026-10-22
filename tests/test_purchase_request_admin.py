@@ -112,6 +112,23 @@ class PurchaseRequestAdminTests(unittest.TestCase):
         for sheet in book:
             self.assertNotIn(row["id"], str(list(sheet.values)))
 
+    def test_postgres_admin_purge_sets_transaction_local_request_scope(self):
+        class PostgreSQLSession:
+            class Bind:
+                class Dialect:
+                    name = "postgresql"
+                dialect = Dialect()
+            bind = Bind()
+            def __init__(self):
+                self.statements = []
+            def execute(self, statement, params=None):
+                self.statements.append((str(statement), params))
+        row = {"id": "request-admin-purge-test"}
+        session = PostgreSQLSession()
+        pr._authorize_admin_request_purge(session, row)
+        self.assertIn("set_config('erp.purchase_request_purge_id'", session.statements[0][0])
+        self.assertEqual({"request_id": row["id"]}, session.statements[0][1])
+
     def test_quantity_requires_reason_and_fresh_version(self):
         row = self.request()
         for values in (dict(reason=""), dict(version=0)):
