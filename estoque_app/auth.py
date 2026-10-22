@@ -48,6 +48,7 @@ ROLE_DEFINITIONS = {
     "ENGENHARIA": "Engenharia",
     "PRODUCAO": "Produção",
     "APONTAMENTO": "Apontamento",
+    "QUALIDADE": "Qualidade",
     "COMERCIAL": "Comercial",
 }
 
@@ -93,6 +94,8 @@ PERMISSION_DEFINITIONS = {
     "suprimentos.master_data.manage": ("suprimentos", "Administrar dados mestres auxiliares"),
     "suprimentos.system.admin": ("suprimentos", "Administrar o modulo"),
     "mes.dashboard.read": ("mes", "Consultar visoes do MES"),
+    "mes.quality.read": ("mes", "Consultar indicadores de qualidade FTT"),
+    "mes.quality.write": ("mes", "Registrar defeitos e apontamentos de qualidade"),
     "mes.stage.write": ("mes", "Apontar etapas do MES"),
     "mes.exports.read": ("mes", "Exportar controle, logs e tempos"),
     "mes.work_orders.manage": ("mes", "Administrar O.S. no MES"),
@@ -117,6 +120,7 @@ _MES_OPERATOR = {
     "mes.exports.read",
 }
 ROLE_PERMISSION_MAP = {
+    "QUALIDADE": {"mes.dashboard.read", "mes.quality.read", "mes.quality.write"},
     "APONTAMENTO": {"mes.dashboard.read", "mes.stage.write"},
     "PRODUCAO": {
         "mes.dashboard.read",
