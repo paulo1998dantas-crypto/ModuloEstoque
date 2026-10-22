@@ -109,7 +109,7 @@ def _headers():
     }
 
 
-def _request_rows(table, select, order, offset):
+def _request_rows(table, select, order, offset, filters=None):
     if not configured():
         raise CadastroSupabaseError("Configure SUPABASE_URL e SUPABASE_SERVICE_ROLE_KEY.")
     query = [
@@ -118,6 +118,7 @@ def _request_rows(table, select, order, offset):
         ("limit", str(PAGE_SIZE)),
         ("offset", str(offset)),
     ]
+    query.extend(filters or [])
     url = f"{_supabase_url()}/rest/v1/{table}?{urllib.parse.urlencode(query)}"
     request = urllib.request.Request(url, headers=_headers(), method="GET")
     try:
@@ -131,11 +132,12 @@ def _request_rows(table, select, order, offset):
         raise CadastroSupabaseError(f"Nao foi possivel conectar ao Supabase: {exc}") from exc
 
 
-def _all_rows(table, select, order):
+def _all_rows(table, select, order, filters=None):
     rows = []
     offset = 0
     while True:
-        page = _request_rows(table, select, order, offset)
+        page = (_request_rows(table, select, order, offset, filters=filters)
+                if filters else _request_rows(table, select, order, offset))
         if not page:
             break
         rows.extend(page)

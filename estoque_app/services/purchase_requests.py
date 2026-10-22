@@ -52,6 +52,16 @@ request_work_orders = Table("erp_purchase_request_work_orders", metadata,
     Column("linked_at", DateTime(timezone=True), nullable=False),
     Column("linked_by", Integer),
 )
+request_orders = Table("erp_purchase_request_orders", metadata,
+    Column("request_id", String(36), primary_key=True),
+    Column("purchase_order_id", Uuid(as_uuid=False), primary_key=True),
+    Column("quantity", Numeric(14, 3), nullable=False),
+    Column("status", String(20), nullable=False),
+    Column("linked_at", DateTime(timezone=True), nullable=False),
+    Column("linked_by", String(80), nullable=False),
+    CheckConstraint("quantity > 0"),
+    CheckConstraint("status in ('ATIVA', 'CANCELADA')"),
+)
 events = Table("erp_purchase_request_events", metadata,
     Column("id", String(36), primary_key=True),
     Column("request_id", String(36), nullable=False),
@@ -139,6 +149,8 @@ def require_ready(db):
         raise ValueError("Workflow indisponível: aplique a migração 20261006120000_purchase_requests.sql e a migração 20261007120000_purchase_request_work_order_references.sql no Estoque.")
 
 def encode(value):
+    if isinstance(value, (list, tuple)):
+        return [encode(v) for v in value]
     if isinstance(value, dict):
         return {k: encode(v) for k, v in value.items()}
     if isinstance(value, (datetime, date)):
@@ -172,6 +184,8 @@ def administer_request(db, row, payload, user):
     if action == "EXCLUIR_DEFINITIVO":
         if payload.get("confirmation") != row["id"]:
             raise ValueError("Confirme explicitamente a exclusão definitiva desta solicitação e de seu histórico.")
+        if multi_order_ready(db):
+            db.execute(request_orders.delete().where(request_orders.c.request_id == row["id"]))
         db.execute(events.delete().where(events.c.request_id == row["id"]))
         db.execute(request_work_orders.delete().where(request_work_orders.c.request_id == row["id"]))
         if inspect(db.connection()).has_table(reference_backfill.name):
@@ -190,6 +204,9 @@ def administer_request(db, row, payload, user):
         raise ValueError("Informe quantidade positiva com até três casas decimais.")
     if quantity == Decimal(str(row["quantity"])):
         raise ValueError("Nenhuma quantidade foi alterada.")
+    linked_quantity = allocated_quantity(db, row)
+    if active_allocations(db, row["id"]) and quantity < linked_quantity:
+        raise ValueError("A quantidade não pode ser menor que o total já alocado nos pedidos.")
     before = request_snapshot(db, row)
     row.update(quantity=quantity, updated_at=now(), version=row["version"]+1)
     db.execute(requests.update().where(requests.c.id == row["id"]).values(
@@ -392,7 +409,138 @@ def request_snapshot(db, row):
     linked = work_order_details(db, [snapshot["id"]]).get(snapshot["id"], [])
     snapshot["work_orders"] = linked
     snapshot["work_order_ids"] = [item["id"] for item in linked]
+    attach_purchase_orders(db, [snapshot])
     return snapshot
+
+
+def multi_order_ready(db):
+    return inspect(db.connection()).has_table(request_orders.name)
+
+
+def active_allocations(db, request_id):
+    if not multi_order_ready(db):
+        return []
+    return [dict(r) for r in db.execute(select(request_orders).where(
+        request_orders.c.request_id == request_id,
+        request_orders.c.status == "ATIVA").order_by(request_orders.c.linked_at,
+                                                   request_orders.c.purchase_order_id)).mappings()]
+
+
+def allocated_quantity(db, row):
+    links = active_allocations(db, row["id"])
+    if links:
+        return sum((Decimal(str(r["quantity"])) for r in links), Decimal(0))
+    return Decimal(str(row["quantity"])) if row.get("purchase_order_id") else Decimal(0)
+
+
+def attach_purchase_orders(db, items):
+    """Batch enrich without multiplying requests; retain the legacy primary link."""
+    by_id = {r["id"]: r for r in items}
+    for row in items:
+        row["purchase_orders"] = []
+    if by_id and multi_order_ready(db):
+        for start in range(0, len(by_id), 500):
+            ids = list(by_id)[start:start + 500]
+            statement = select(request_orders, orders.c.numero_oc,
+                orders.c.fornecedor_nome, orders.c.status.label("purchase_status"))\
+                .select_from(request_orders.join(orders, order_condition(
+                    db, request_orders.c.purchase_order_id, orders.c.id)))\
+                .where(request_orders.c.request_id.in_(ids), request_orders.c.status == "ATIVA")\
+                .order_by(request_orders.c.linked_at, request_orders.c.purchase_order_id)
+            for link in db.execute(statement).mappings():
+                by_id[link["request_id"]]["purchase_orders"].append(dict(link))
+    for row in items:
+        if not row["purchase_orders"] and row.get("purchase_order_id"):
+            order = db.execute(select(orders).where(order_condition(
+                db, orders.c.id, row["purchase_order_id"]))).mappings().first()
+            if order:
+                row["purchase_orders"] = [dict(purchase_order_id=str(order["id"]),
+                    quantity=row["quantity"], numero_oc=order["numero_oc"],
+                    fornecedor_nome=order["fornecedor_nome"], purchase_status=order["status"],
+                    linked_at=row.get("completed_at"), linked_by=row.get("completed_by"))]
+        total = sum((Decimal(str(r["quantity"])) for r in row["purchase_orders"]), Decimal(0))
+        row.update(allocated_quantity=total,
+                   remaining_quantity=max(Decimal(0), Decimal(str(row["quantity"])) - total))
+    return items
+
+
+def allocate_orders(db, row, selections, user, *, replace=False, new_order_capacity=None):
+    """Add positive allocations atomically; caller holds the request row lock.
+
+    Order locks serialize with edits; NOWAIT prevents order/request lock inversion.
+    """
+    if not multi_order_ready(db):
+        raise ValueError("Aplique a migração de múltiplos pedidos no Estoque antes de alocar.")
+    if not isinstance(selections, list) or not 1 <= len(selections) <= 100:
+        raise ValueError("Selecione entre um e 100 pedidos e informe as quantidades.")
+    normalized = {}
+    for item in selections:
+        if not isinstance(item, dict):
+            raise ValueError("Seleção de pedidos inválida.")
+        order_id = uid(item.get("purchase_order_id"))
+        try:
+            quantity = Decimal(str(item.get("quantity", "")).replace(",", "."))
+            if (not quantity.is_finite() or quantity <= 0 or
+                    quantity > Decimal("99999999999.999") or quantity.as_tuple().exponent < -3):
+                raise InvalidOperation()
+        except (InvalidOperation, ValueError):
+            raise ValueError("Informe quantidade positiva por pedido, com até três casas decimais.")
+        if order_id in normalized:
+            raise ValueError("O mesmo pedido não pode aparecer duas vezes na seleção.")
+        normalized[order_id] = quantity
+    previous = {str(r['purchase_order_id']): r for r in active_allocations(db, row["id"])}
+    if not previous and row.get("purchase_order_id"):
+        previous[str(row["purchase_order_id"])] = {"quantity": row["quantity"]}
+    remaining = Decimal(str(row["quantity"])) if replace else Decimal(str(row["quantity"])) - allocated_quantity(db, row)
+    if sum(normalized.values()) > remaining:
+        raise ValueError("A soma por pedido excede a quantidade restante da solicitação.")
+    # NOWAIT avoids order -> request / request -> order deadlocks. Retry reload is safe.
+    try:
+        found = db.execute(select(orders).where(or_(*[
+            order_condition(db, orders.c.id, i) for i in sorted(normalized)]))
+            .order_by(orders.c.id).with_for_update(nowait=True)).mappings().all()
+    except Exception as exc:
+        original = getattr(exc, "orig", None)
+        if (getattr(original, "pgcode", None) or getattr(original, "sqlstate", None)) == "55P03":
+            raise ValueError("Um pedido está sendo alterado. Atualize e tente novamente.") from exc
+        raise
+    found = {str(r["id"]): r for r in found}
+    for order_id, quantity in normalized.items():
+        order = found.get(order_id)
+        existing = previous.get(order_id) if replace else None
+        preserving_closed = existing and order and order["status"] == "CONCLUIDA" and quantity <= Decimal(str(existing["quantity"]))
+        if not order or (order["status"] not in {"EMITIDA", "PARCIALMENTE_RECEBIDA"} and not preserving_closed) or not str(order["numero_oc"] or "").strip():
+            raise ValueError("Selecione uma O.C. emitida e ainda vigente.")
+        capacity = _order_component_unallocated(db, order_id, row["sku_codigo"], row["id"] if replace else None,
+            pending_quantity=(new_order_capacity or {}).get(order_id))
+        # Previously allocated/received quantities remain valid without allocating them twice.
+        if existing:
+            capacity = max(capacity, Decimal(str(existing["quantity"])))
+        if quantity > capacity:
+            raise ValueError("A O.C. não tem saldo pendente suficiente deste SKU, considerando alocações já confirmadas.")
+    # All validation precedes writes; any failure rolls back the route transaction.
+    if replace:
+        db.execute(request_orders.update().where(request_orders.c.request_id == row["id"])
+                   .values(status="CANCELADA"))
+    for order_id, quantity in normalized.items():
+        old = db.execute(select(request_orders).where(
+            request_orders.c.request_id == row["id"],
+            order_condition(db, request_orders.c.purchase_order_id, order_id))).mappings().first()
+        values = dict(quantity=quantity + (Decimal(str(old["quantity"])) if old and old["status"] == "ATIVA" and not replace else Decimal(0)),
+                      status="ATIVA", linked_at=now(), linked_by=user.username)
+        if old:
+            db.execute(request_orders.update().where(request_orders.c.request_id == row["id"],
+                order_condition(db, request_orders.c.purchase_order_id, order_id)).values(**values))
+        else:
+            db.execute(request_orders.insert().values(request_id=row["id"], purchase_order_id=order_id, **values))
+    complete = sum(normalized.values()) == remaining
+    previous_completion = (row.get("completed_at"), row.get("completed_by")) if row.get("status") == "CONCLUIDA" else (None, None)
+    row.update(status="CONCLUIDA" if complete else "EM_COMPRAS",
+               purchase_order_id=active_allocations(db, row["id"])[0]["purchase_order_id"] if complete else None,
+               completed_at=(previous_completion[0] or now()) if complete else None,
+               completed_by=(previous_completion[1] or user.username) if complete else None,
+               buyer_id=user.id, buyer=user.username)
+    return found
 
 def order_condition(db, column, order_id):
     # Legacy SQLite stores UUID strings with hyphens; PostgreSQL uses UUID.
@@ -583,13 +731,28 @@ def order_component_pending(db, order_id, sku_code, rows=None,
     ).get(str(order_id))
     return balance or {"pending_quantity": Decimal("0"), "delivery_date": None}
 
-def _order_component_unallocated(db, order_id, sku_code, exclude_request_id=None):
-    pending = order_component_pending(db, order_id, sku_code)["pending_quantity"]
+def _order_component_unallocated(db, order_id, sku_code, exclude_request_id=None, *, pending_quantity=None):
+    pending = (order_component_pending(db, order_id, sku_code)["pending_quantity"]
+               if pending_quantity is None else Decimal(str(pending_quantity)))
     conditions = [order_condition(db, requests.c.purchase_order_id, order_id),
                   requests.c.status == "CONCLUIDA", requests.c.sku_codigo == sku_code]
+    if multi_order_ready(db):
+        # Legacy fallback only for requests without normalized allocations.
+        conditions.append(~select(request_orders.c.request_id).where(
+            request_orders.c.request_id == requests.c.id,
+            request_orders.c.status == "ATIVA").exists())
     if exclude_request_id:
         conditions.append(requests.c.id != exclude_request_id)
     reserved = db.execute(select(func.coalesce(func.sum(requests.c.quantity), 0)).where(*conditions)).scalar_one()
+    if multi_order_ready(db):
+        linked_conditions = [order_condition(db, request_orders.c.purchase_order_id, order_id),
+            request_orders.c.status == "ATIVA", requests.c.status != "CANCELADA",
+            requests.c.sku_codigo == sku_code]
+        if exclude_request_id:
+            linked_conditions.append(requests.c.id != exclude_request_id)
+        reserved += db.execute(select(func.coalesce(func.sum(request_orders.c.quantity), 0))
+            .select_from(request_orders.join(requests, request_orders.c.request_id == requests.c.id))
+            .where(*linked_conditions)).scalar_one()
     return max(Decimal("0"), pending - Decimal(str(reserved or 0)))
 
 def closest_active_order(db, sku_code, needed_at, rows=None,
@@ -637,9 +800,11 @@ def _is_pending_request(row):
 
 def _reclassify_stale_anticipation(db, row, user, reason_prefix="", coverage_lines=None,
                                    factor_cache=None, sku_cache=None,
-                                   latest_decision=_UNSET):
+                                   latest_decision=_UNSET, has_allocations=None):
     """Keep pending request classification synchronized with open O.C.s and kit B.O.M.s."""
     if not _is_pending_request(row):
+        return row
+    if has_allocations if has_allocations is not None else bool(active_allocations(db, row["id"])):
         return row
     if row.get("request_type") == "ANTECIPACAO":
         order, pending, reason = _anticipation_state(
@@ -721,6 +886,12 @@ def synchronize_stale_anticipations(db, user):
     open_lines = _active_order_lines(db)
     factor_cache, sku_cache = {}, {}
     request_ids = [row["id"] for row in rows]
+    allocated_ids = set()
+    if request_ids and multi_order_ready(db):
+        for start in range(0, len(request_ids), 500):
+            allocated_ids.update(db.execute(select(request_orders.c.request_id).where(
+                request_orders.c.request_id.in_(request_ids[start:start+500]),
+                request_orders.c.status == "ATIVA")).scalars())
     decisions = db.execute(select(events.c.request_id, events.c.action).where(
         events.c.request_id.in_(request_ids),
         events.c.action.in_({"CONVERTER_NOVA_COMPRA", "EDITAR", "ANTECIPACAO_IDENTIFICADA", "ANTECIPACAO_RECLASSIFICADA"}),
@@ -735,6 +906,7 @@ def synchronize_stale_anticipations(db, user):
             db, row, user, "Reconciliação automática ao atualizar a fila de solicitações.",
             coverage_lines=open_lines, factor_cache=factor_cache,
             sku_cache=sku_cache, latest_decision=latest_decision.get(row["id"], ""),
+            has_allocations=row["id"] in allocated_ids,
         )
         if row["request_type"] != original_type:
             changed += 1
@@ -797,10 +969,14 @@ def listing(db, filters, user=None, *, paginate=True):
         ).where(request_work_orders.c.request_id == requests.c.id,
                 or_(work_orders.c.numero_os.ilike(term),
                     func.cast(vehicle_entries.c.item_number, String).ilike(term))).exists()
+        linked_purchase = select(1).select_from(request_orders.join(
+            orders, order_condition(db, request_orders.c.purchase_order_id, orders.c.id)))\
+            .where(request_orders.c.request_id == requests.c.id,
+                   request_orders.c.status == "ATIVA", orders.c.numero_oc.ilike(term)).exists() if multi_order_ready(db) else False
         statement = statement.where(or_(*[c.ilike(term) for c in
             (requests.c.sku_codigo, requests.c.descricao, requests.c.requested_by,
              requests.c.reference, requests.c.sector, requests.c.buyer, orders.c.numero_oc,
-             anticipated_order.c.numero_oc)], linked_reference))
+             anticipated_order.c.numero_oc)], linked_reference, linked_purchase))
     for key, comparison in (("from", True), ("to", False)):
         if filters.get(key):
             try: value = date.fromisoformat(filters[key])
@@ -834,6 +1010,7 @@ def listing(db, filters, user=None, *, paginate=True):
             item["anticipation_pending_quantity"] = None
             item["anticipation_delivery_date"] = None
         items.append(_present_current_request(item))
+    items = attach_purchase_orders(db, items)
     items = attach_reference_data(db, items)
     items = attach_assumption_data(db, items)
     items = [encode(item) for item in items]
@@ -875,6 +1052,8 @@ def export_data(db, filters, user=None):
     timeline.sort(key=lambda item: (item.get("created_at") or "",
         (item.get("after_data") or {}).get("version", 0), str(item.get("id") or "")))
     result["events"] = timeline
+    from services.purchase_request_components import export_components
+    result["component_items"] = export_components(db, result["items"])
     return result
 
 def history(db, request_id):
@@ -917,21 +1096,30 @@ def existing_order_options(db, request_id, user):
     require_ready(db)
     require_buyer(db, user)
     row = get(db, request_id)
-    if not _is_pending_request(row) or row.get("purchase_order_id"):
-        raise ValueError("Só é possível alocar O.C. em solicitação ainda pendente.")
+    if row["status"] == "CANCELADA":
+        raise ValueError("Reabra a solicitação cancelada antes de alocar pedidos.")
     balances = _order_component_balances(db, row["sku_codigo"], row["needed_at"])
     options = []
     for order_id, balance in balances.items():
-        available = _order_component_unallocated(db, order_id, row["sku_codigo"])
-        if available < Decimal(str(row["quantity"])):
+        available = _order_component_unallocated(db, order_id, row["sku_codigo"], row["id"])
+        if available <= 0:
             continue
         options.append({**balance, "available_quantity": available})
+    by_order = {item["id"]: item for item in options}
+    for link in request_snapshot(db, row)["purchase_orders"]:
+        order_id = str(link["purchase_order_id"])
+        if order_id in by_order:
+            by_order[order_id]["available_quantity"] = max(by_order[order_id]["available_quantity"], Decimal(str(link["quantity"])))
+        elif link["purchase_status"] != "CANCELADA":
+            options.append(dict(id=order_id, numero_oc=link["numero_oc"], status=link["purchase_status"],
+                fornecedor_nome=link["fornecedor_nome"], available_quantity=Decimal(str(link["quantity"])), delivery_date=None))
     options.sort(key=lambda item: (
         abs((item["delivery_date"] - row["needed_at"]).days) if item["delivery_date"] else 10**9,
         item["delivery_date"] or date.max,
         str(item["numero_oc"] or ""),
     ))
-    return {"items": [encode(item) for item in options]}
+    return {"items": [encode(item) for item in options],
+            "request": encode(request_snapshot(db, row))}
 
 def notifications(db):
     require_ready(db)
@@ -949,7 +1137,8 @@ def prepare(db, ids, user):
         raise ValueError("Há solicitações concluídas/canceladas. Atualize a tabela.")
     if any(r["request_type"] == "ANTECIPACAO" for r in rows):
         raise ValueError("Solicitações de antecipação devem ser tratadas no pedido vigente; para emitir nova O.C., converta a solicitação com justificativa primeiro.")
-    return {"items": [encode(r) for r in rows]}
+    return {"items": [encode(dict(r, quantity=max(Decimal(0),
+        Decimal(str(r["quantity"])) - allocated_quantity(db, r)))) for r in rows]}
 
 def transition(db, request_id, payload, user):
     require_ready(db)
@@ -981,6 +1170,9 @@ def transition(db, request_id, payload, user):
         edit_payload.setdefault("sector", row.get("sector") or "GERAL")
         edit_payload.setdefault("work_order_ids", current_work_order_ids(db, row["id"]))
     edit_fields = editable_request_fields(db, edit_payload, row.get("reference") or "") if action == "EDITAR" else None
+    if edit_fields and active_allocations(db, row["id"]):
+        if edit_fields["sku_codigo"] != row["sku_codigo"] or edit_fields["quantity"] < allocated_quantity(db, row):
+            raise ValueError("Há pedidos alocados: preserve o SKU e não reduza abaixo da quantidade alocada.")
     references_changed = False
     anticipated = None
     if edit_fields:
@@ -1005,20 +1197,13 @@ def transition(db, request_id, payload, user):
         anticipated = closest_active_order(db, edit_fields["sku_codigo"], edit_fields["needed_at"])
     if action == "ASSUMIR" and row["status"] == "SOLICITADA":
         status = "EM_COMPRAS"
-    elif action == "ALOCAR_PEDIDO" and row["status"] in {"SOLICITADA", "EM_COMPRAS"} and not row.get("purchase_order_id"):
-        try:
-            selected_order_id = uid(payload.get("purchase_order_id"))
-        except ValueError:
-            raise ValueError("Selecione um pedido de compra válido.")
-        order = db.execute(select(orders).where(
-            order_condition(db, orders.c.id, selected_order_id)
-        ).with_for_update()).mappings().first()
-        if not order or order["status"] not in {"EMITIDA", "PARCIALMENTE_RECEBIDA"} or not str(order["numero_oc"] or "").strip():
-            raise ValueError("Selecione uma O.C. emitida e ainda vigente.")
-        available = _order_component_unallocated(db, selected_order_id, row["sku_codigo"], row["id"])
-        if available < Decimal(str(row["quantity"])):
-            raise ValueError("A O.C. não tem saldo pendente suficiente deste SKU, considerando alocações já confirmadas.")
-        status = "CONCLUIDA"
+    elif action == "ALOCAR_PEDIDO" and (row["status"] in {"SOLICITADA", "EM_COMPRAS"} or
+            (row["status"] == "CONCLUIDA" and payload.get("replace_allocations") is True)):
+        selections = payload.get("allocations")
+        if selections is None:
+            selections = [{"purchase_order_id": payload.get("purchase_order_id"),
+                "quantity": Decimal(str(row["quantity"])) - allocated_quantity(db, row)}]
+        status = row["status"]
     elif action == "SOLICITAR_ANTECIPACAO" and row["status"] == "SOLICITADA" and row["request_type"] == "ANTECIPACAO":
         status = "EM_COMPRAS"
     elif action == "CONFIRMAR_ANTECIPACAO" and row["status"] == "EM_COMPRAS" and row["request_type"] == "ANTECIPACAO":
@@ -1031,6 +1216,8 @@ def transition(db, request_id, payload, user):
         ).with_for_update()).mappings().first() if row["anticipation_order_id"] else None
         if not order or order["status"] not in {"EMITIDA", "PARCIALMENTE_RECEBIDA"} or not str(order["numero_oc"] or "").strip():
             raise ValueError("A antecipação exige uma O.C. válida e ainda vigente.")
+        if active_allocations(db, row["id"]):
+            raise ValueError("Há alocações parciais. Distribua a quantidade restante entre os pedidos.")
         available_quantity = _order_component_unallocated(
             db, row["anticipation_order_id"], row["sku_codigo"], row["id"]
         )
@@ -1074,21 +1261,25 @@ def transition(db, request_id, payload, user):
                      resolved_by_id=user.id, resolved_by=user.username,
                      reviewed_at=now()))
     elif action == "CONFIRMAR_ANTECIPACAO":
+        allocate_orders(db, row, [{"purchase_order_id": row["anticipation_order_id"],
+            "quantity": row["quantity"]}], user)
         row.update(status="CONCLUIDA", purchase_order_id=row["anticipation_order_id"],
                    anticipation_confirmed_delivery_date=confirmed_date,
                    completed_at=now(), completed_by=user.username,
                    buyer_id=user.id, buyer=user.username)
     elif action == "ALOCAR_PEDIDO":
-        row.update(status="CONCLUIDA", request_type="ANTECIPACAO",
-                   purchase_order_id=selected_order_id, anticipation_order_id=selected_order_id,
-                   anticipation_confirmed_delivery_date=None,
-                   completed_at=now(), completed_by=user.username,
-                   buyer_id=user.id, buyer=user.username)
+        linked = allocate_orders(db, row, selections, user, replace=payload.get("replace_allocations") is True)
+        order = next(iter(linked.values()))
+        row.update(request_type="ANTECIPACAO", anticipation_order_id=str(order["id"]),
+                   anticipation_confirmed_delivery_date=None)
     elif action == "CONVERTER_NOVA_COMPRA":
         row.update(request_type="COMPRA_NOVA", anticipation_order_id=None,
                    buyer_id=user.id, buyer=user.username)
     elif action == "REABRIR":
         row.update(buyer_id=None, buyer=None)
+    if action in {"CANCELAR", "EXCLUIR"} and multi_order_ready(db):
+        db.execute(request_orders.update().where(request_orders.c.request_id == row["id"])
+            .values(status="CANCELADA"))
     db.execute(requests.update().where(requests.c.id == row["id"]).values(**row))
     after = request_snapshot(db, row)
     if action in {"CONFIRMAR_ANTECIPACAO", "ALOCAR_PEDIDO"}:
@@ -1113,7 +1304,11 @@ def confirm_order(db, order_id, request_ids, actor, updated=False):
     # Serialize order edits/cancellations with newly attached requests.
     order = db.execute(select(orders).where(order_condition(db, orders.c.id, order_id))
                        .with_for_update()).mappings().first()
-    existing = db.execute(select(requests.c.id).where(requests.c.purchase_order_id == order_id)).scalars().all()
+    linked_ids = select(request_orders.c.request_id).where(
+        order_condition(db, request_orders.c.purchase_order_id, order_id),
+        request_orders.c.status == "ATIVA") if multi_order_ready(db) else select(requests.c.id).where(False)
+    existing = db.execute(select(requests.c.id).where(or_(
+        order_condition(db, requests.c.purchase_order_id, order_id), requests.c.id.in_(linked_ids)))).scalars().all()
     ids = sorted(set(uid(i) for i in (request_ids or [])) | set(existing))
     if not ids:
         return
@@ -1129,50 +1324,79 @@ def confirm_order(db, order_id, request_ids, actor, updated=False):
     ) for row in rows]
     purchased = dict(db.execute(select(lines.c.sku_codigo, func.sum(lines.c.quantidade_pedida))
          .where(order_condition(db, lines.c.purchase_order_id, order_id)).group_by(lines.c.sku_codigo)).all())
+    # Existing orders may purchase kits but cover requests for their leaf parts.
+    component_purchased = dict(purchased)
+    for code, quantity in purchased.items():
+        sku = db.query(SKU).filter(SKU.sku == code).one_or_none()
+        factors = _bom_leaf_factors(db, sku, factor_cache) if sku else {code: Decimal(1)}
+        for component, factor in factors.items():
+            if component == code:
+                continue
+            component_purchased[component] = component_purchased.get(component, Decimal(0)) + Decimal(str(quantity)) * factor
+    purchased = component_purchased
     required = {}
     for row in rows:
-        if row["purchase_order_id"] and row["purchase_order_id"] != str(order_id):
+        links = active_allocations(db, row["id"])
+        this_link = next((link for link in links if str(link["purchase_order_id"]) == str(order_id)), None)
+        if row["purchase_order_id"] and row["purchase_order_id"] != str(order_id) and not this_link:
             raise ValueError("Solicitação já concluída em outro pedido.")
         if row["status"] == "CANCELADA":
             raise ValueError("Solicitação cancelada não pode ser convertida.")
-        if row["request_type"] == "ANTECIPACAO":
+        if row["request_type"] == "ANTECIPACAO" and not this_link:
             raise ValueError("Solicitação vinculada a antecipação precisa ser convertida em nova compra com justificativa antes de entrar em outra O.C.")
-        required[row["sku_codigo"]] = required.get(row["sku_codigo"], Decimal(0)) + row["quantity"]
+        needed = Decimal(str(this_link["quantity"])) if this_link else (
+            Decimal(str(row["quantity"])) - allocated_quantity(db, row) if not row.get("purchase_order_id") else Decimal(str(row["quantity"])))
+        required[row["sku_codigo"]] = required.get(row["sku_codigo"], Decimal(0)) + needed
     if any(Decimal(str(purchased.get(sku, 0))) < qty for sku, qty in required.items()):
         raise ValueError("O pedido não contempla o SKU e a quantidade total das solicitações vinculadas.")
     for row in rows:
-        before = dict(row)
-        replay = row["purchase_order_id"] == str(order_id)
+        before = request_snapshot(db, row)
+        replay = row["purchase_order_id"] == str(order_id) or any(
+            str(link["purchase_order_id"]) == str(order_id) for link in active_allocations(db, row["id"]))
         if replay:
             if updated:
-                snapshot = dict(row, purchase_order=encode(dict(order)), purchased_quantities=encode(purchased))
+                snapshot = dict(request_snapshot(db, row), purchase_order=encode(dict(order)), purchased_quantities=encode(purchased))
                 audit(db, snapshot, user, "PEDIDO_ATUALIZADO", before,
                       "Pedido alterado; vínculo e quantidades das solicitações preservados.")
             continue
-        row.update(status="CONCLUIDA", purchase_order_id=str(order_id), completed_at=now(),
+        allocate_orders(db, row, [{"purchase_order_id": str(order_id),
+            "quantity": Decimal(str(row["quantity"])) - allocated_quantity(db, row)}], user,
+            new_order_capacity={str(order_id): purchased.get(row["sku_codigo"], Decimal(0))})
+        row.update(status="CONCLUIDA", completed_at=now(),
                    completed_by=user.username, buyer_id=user.id, buyer=user.username,
                    updated_at=now(), version=row["version"]+1)
         db.execute(requests.update().where(requests.c.id == row["id"]).values(**row))
-        audit(db, dict(row, purchase_order=encode(dict(order)), purchased_quantities=encode(purchased)), user, "PEDIDO_CONFIRMADO", before,
+        audit(db, dict(request_snapshot(db, row), purchase_order=encode(dict(order)), purchased_quantities=encode(purchased)), user, "PEDIDO_CONFIRMADO", before,
               f"Pedido {order['numero_oc']} confirmado; conclusão de compras, não recebimento.")
 
 def reopen_cancelled_order(db, order_id, actor, reason):
     if not ready(db): return
-    rows = db.execute(select(requests).where(requests.c.purchase_order_id == order_id)
+    linked_ids = select(request_orders.c.request_id).where(
+        order_condition(db, request_orders.c.purchase_order_id, order_id),
+        request_orders.c.status == "ATIVA") if multi_order_ready(db) else select(requests.c.id).where(False)
+    rows = db.execute(select(requests).where(or_(
+        order_condition(db, requests.c.purchase_order_id, order_id), requests.c.id.in_(linked_ids)))
                       .order_by(requests.c.id).with_for_update()).mappings().all()
     if not rows: return
     user = actor_user(db, actor)
     lock_request_materials(db, [item["sku_id"] for item in rows])
     for item in rows:
-        row, before = dict(item), dict(item)
+        row = dict(item)
+        before = request_snapshot(db, row)
         require_unique_pending_reference(db, row["sku_id"], row["sku_codigo"], row["sector"],
             current_work_order_ids(db, row["id"]), exclude_request_id=row["id"])
-        row.update(status="SOLICITADA", purchase_order_id=None, completed_at=None,
+        if multi_order_ready(db):
+            db.execute(request_orders.update().where(request_orders.c.request_id == row["id"],
+                order_condition(db, request_orders.c.purchase_order_id, order_id)).values(status="CANCELADA"))
+        remaining_links = active_allocations(db, row["id"])
+        row.update(status="EM_COMPRAS" if remaining_links else "SOLICITADA", purchase_order_id=None, completed_at=None,
                    completed_by=None, buyer_id=None, buyer=None, updated_at=now(),
                    version=row["version"]+1)
+        if remaining_links:
+            row.update(buyer_id=before.get("buyer_id"), buyer=before.get("buyer"))
         if row["request_type"] == "ANTECIPACAO" and row["anticipation_order_id"] == str(order_id):
             row.update(request_type="COMPRA_NOVA", anticipation_order_id=None,
                        anticipation_confirmed_delivery_date=None)
         db.execute(requests.update().where(requests.c.id == row["id"]).values(**row))
-        audit(db, row, user, "PEDIDO_CANCELADO_REABERTURA", before, reason)
+        audit(db, request_snapshot(db, row), user, "PEDIDO_CANCELADO_REABERTURA", before, reason)
 

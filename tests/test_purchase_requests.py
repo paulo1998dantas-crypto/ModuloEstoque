@@ -366,7 +366,7 @@ class PurchaseRequestTests(unittest.TestCase):
         self.assertEqual(order["id"],event["after_data"]["purchase_order"]["id"])
 
         second=self.request(quantity="4")
-        self.assertEqual([],pr.existing_order_options(self.db,second["id"],self.buyer)["items"])
+        self.assertEqual("3.000",pr.existing_order_options(self.db,second["id"],self.buyer)["items"][0]["available_quantity"])
         with self.assertRaisesRegex(ValueError,"alocações já confirmadas"):
             pr.transition(self.db,second["id"],{
                 "action":"ALOCAR_PEDIDO","version":second["version"],
@@ -845,7 +845,7 @@ class PurchaseRequestTests(unittest.TestCase):
 
     def test_listing_filters_and_notifications(self):
         self.request(origin="PCP",user=self.pcp,needed_at="2020-01-01",sector="PRODUÇÃO")
-        self.request()
+        self.request(needed_at="2099-01-01")
         data=pr.listing(self.db,{"origin":"PCP","q":"MAT","from":"2019-01-01","to":"2021-01-01"})
         self.assertEqual(1,data["total"])
         self.assertEqual(1,data["overdue"])

@@ -69,7 +69,7 @@ class PurchaseRequestExportTests(unittest.TestCase):
         self.assertEqual([], values(book["Solicitações"]))
         self.assertEqual(len(COLUMNS), book["Solicitações"].max_column)
         self.assertEqual("D5", book["Solicitações"].freeze_panes)
-        self.assertEqual("A4:AH4", book["Solicitações"].auto_filter.ref)
+        self.assertEqual("A4:AQ4", book["Solicitações"].auto_filter.ref)
 
     def test_quantities_and_dates_are_typed_and_time_is_brasilia(self):
         row = self.request(quantity="2.375")

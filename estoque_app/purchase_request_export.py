@@ -13,7 +13,7 @@ XLSX_MIME = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 BRASILIA = ZoneInfo("America/Sao_Paulo")
 STATUS = {"SOLICITADA": "Solicitada", "EM_COMPRAS": "Em compras",
           "CONCLUIDA": "Concluído", "CANCELADA": "Cancelada"}
-# Each source request remains one row, even when it has several linked O.S.
+# Each exported row is a request/leaf component, never one row per linked O.S.
 COLUMNS = [
     ("Solicitação", "number", 20), ("Origem", "origin_label", 18),
     ("Classificação", "type_label", 20), ("SKU", "sku_codigo", 16),
@@ -39,10 +39,19 @@ COLUMNS = [
     ("Versão", "version", 12),
     ("Assumida em (Brasília)", "assumed_at", 25),
     ("Assumida por", "assumed_by", 22),
+    ("SKU solicitado", "sku_solicitado", 18),
+    ("Descrição solicitada", "descricao_solicitada", 65),
+    ("Quantidade solicitada original", "quantidade_solicitada", 25),
+    ("Consumo por unidade solicitada", "fator_bom", 25),
+    ("Composição no relatório", "composicao_exportacao", 26),
+    ("Situação do cadastro do componente", "cadastro_componente", 24),
+    ("Pedidos alocados / quantidades", "allocated_orders_display", 75),
+    ("Quantidade alocada na solicitação", "allocated_quantity", 25),
+    ("Quantidade restante na solicitação", "remaining_quantity", 25),
 ]
 DATE_FIELDS = {"needed_at", "anticipation_delivery_date", "anticipation_confirmed_delivery_date"}
 TIME_FIELDS = {"created_at", "updated_at", "completed_at", "assumed_at"}
-NUMBER_FIELDS = {"quantity", "anticipation_pending_quantity", "version"}
+NUMBER_FIELDS = {"quantity", "anticipation_pending_quantity", "version", "quantidade_solicitada", "fator_bom", "allocated_quantity", "remaining_quantity"}
 
 
 def local_time(value):
@@ -107,14 +116,18 @@ def build_workbook(data, filters=None, exported_by="", generated_at=None):
     filters = filters or {}
     filter_names = {"q": "Busca", "status": "Status", "origin": "Origem", "from": "Necessidade de", "to": "Até"}
     selected = "; ".join(f"{label}: {filters[key]}" for key, label in filter_names.items() if filters.get(key)) or "Todos"
-    pending_items = [row for row in data["items"] if row["status"] in {"SOLICITADA", "EM_COMPRAS"}]
-    metadata = f"Gerado em Brasília: {stamp}. Usuário: {exported_by}. Filtros: {selected}. Pendências: {len(pending_items)}."
+    pending_items = [row for row in data.get("component_items", data["items"]) if row["status"] in {"SOLICITADA", "EM_COMPRAS"}]
+    count = len({row["id"] for row in pending_items})
+    metadata = f"Gerado em Brasília: {stamp}. Usuário: {exported_by}. Filtros: {selected}. Pendências: {count}. Linhas de materiais: {len(pending_items)}. CJ/PP com B.O.M. explodidos; quantidades proporcionais."
     wb = Workbook()
     wb.remove(wb.active)
     sheet = _sheet(wb, "Solicitações", "Solicitações de compra pendentes",
                    [col[0] for col in COLUMNS], [col[2] for col in COLUMNS], metadata)
     for row_index, raw in enumerate(pending_items, 5):
         row = dict(raw)
+        row["allocated_orders_display"] = "\n".join(
+            f"O.C. {item.get('numero_oc', '')}: {item['quantity']} {row.get('unidade_solicitada') or row['unidade']} · {item.get('fornecedor_nome', '')} · {item.get('purchase_status', '')} · {item.get('linked_by', '')}"
+            for item in row.get("purchase_orders", []))
         row.update(number="SOL-" + row["id"][:8].upper(),
                    origin_label="Almoxarifado" if row["origin"] == "ESTOQUE" else "PCP",
                    type_label="CONCLUÍDO" if row["status"] == "CONCLUIDA" else
@@ -132,7 +145,7 @@ def build_workbook(data, filters=None, exported_by="", generated_at=None):
                 value, fmt = local_time(value), "dd/mm/yyyy hh:mm:ss"
             elif field in NUMBER_FIELDS:
                 value = Decimal(str(value)) if value is not None else None
-                fmt = "0" if field == "version" else "#,##0.###"
+                fmt = "0" if field == "version" else "#,##0.#########"
             elif field in {"work_order_ids", "reference_review_tokens"}:
                 value = " / ".join(map(str, value or []))
             else:
