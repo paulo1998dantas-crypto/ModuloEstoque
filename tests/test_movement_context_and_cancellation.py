@@ -479,6 +479,41 @@ class MovementContextAndCancellationTest(unittest.TestCase):
         )
         self.assertEqual(commitment.id, consumption.related_movement_id)
 
+    def test_consumption_closes_existing_commitment_without_reopening_finished_work_order(self):
+        register_movement(self.db, self.sku, "ENTRADA", 2, self.user.id)
+        commitment = register_movement(
+            self.db,
+            self.sku,
+            "EMPENHO",
+            2,
+            self.user.id,
+            work_order_id=self.work_order_id,
+            link_updated_by=self.user.id,
+            require_context=True,
+        )
+        self.db.execute(
+            text(
+                "update erp_work_orders "
+                "set status='FINALIZADA', technical_status='CONCLUIDA' "
+                "where id=:id"
+            ),
+            {"id": self.work_order_id},
+        )
+        self.db.commit()
+
+        consumption = register_consumption_from_commitment(
+            self.db, commitment, 2, self.user.id
+        )
+        work_order = self.db.execute(
+            text("select status,technical_status from erp_work_orders where id=:id"),
+            {"id": self.work_order_id},
+        ).mappings().one()
+
+        self.assertEqual(self.work_order_id, str(consumption.work_order_id).replace("-", ""))
+        self.assertEqual(commitment.id, consumption.related_movement_id)
+        self.assertEqual("FINALIZADA", work_order["status"])
+        self.assertEqual("CONCLUIDA", work_order["technical_status"])
+
     def test_multiple_work_order_commitment_distributes_total_and_replays(self):
         register_movement(self.db, self.sku, "ENTRADA", 10, self.user.id)
         key = "stock-commitment:multiple-work-orders"

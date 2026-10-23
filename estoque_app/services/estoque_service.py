@@ -483,6 +483,7 @@ def register_movement(
     operation_id=None,
     parent_movement_id=None,
     require_available_for_commitment=False,
+    allow_inactive_work_order_context=False,
 ):
     if sku is None:
         raise ValueError("COD nao encontrado.")
@@ -553,6 +554,7 @@ def register_movement(
             and tipo in {"EMPENHO", "BAIXA"}
             and movement_context_enabled()
         ),
+        active_work_order_only=not allow_inactive_work_order_context,
     )
     if context_kind in VALID_CONTEXT_KINDS and not any(
         (work_order_id, setor, reference_text)
@@ -1012,6 +1014,10 @@ def register_consumption_from_commitment(
         operation_id=operation_id,
         parent_movement_id=parent_movement_id,
         idempotency_key=idempotency_key,
+        # A baixa encerra um empenho já registrado. Ela conserva a O.S.
+        # original mesmo que esta tenha sido finalizada, sem reabri-la nem
+        # permitir novos empenhos para uma O.S. inativa.
+        allow_inactive_work_order_context=True,
     )
 
 
