@@ -929,6 +929,11 @@ def import_pending_commitment_consumptions(
         db.rollback()
         return result
 
+    # Cada baixa trava o saldo do SKU correspondente. Processar todos os
+    # empenhos numa ordem estável evita que duas importações concorrentes
+    # prendam os mesmos saldos em ordens opostas e causem deadlock.
+    validated.sort(key=lambda entry: (entry[1].sku_id, entry[1].id))
+
     total = to_decimal(0)
     try:
         for row, commitment, qty in validated:
