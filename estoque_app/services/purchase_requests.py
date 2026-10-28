@@ -1395,6 +1395,9 @@ def confirm_order(db, order_id, request_ids, actor, updated=False):
     for row in rows:
         links = active_allocations(db, row["id"])
         this_link = next((link for link in links if str(link["purchase_order_id"]) == str(order_id)), None)
+        if (row["status"] == "CONCLUIDA" and row.get("completion_mode") == "MANUAL"
+                and not this_link and row.get("purchase_order_id") != str(order_id)):
+            raise ValueError("Reabra a conclusão manual antes de vincular a solicitação a outro pedido.")
         if row["purchase_order_id"] and row["purchase_order_id"] != str(order_id) and not this_link:
             raise ValueError("Solicitação já concluída em outro pedido.")
         if row["status"] == "CANCELADA":

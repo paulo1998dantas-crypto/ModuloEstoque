@@ -85,6 +85,17 @@ class ManualCompletionTests(unittest.TestCase):
         self.assertTrue(events[-2]['after_data']['completion_evidence'])
         self.assertEqual('REABRIR',events[-1]['action'])
 
+    def test_order_confirmation_cannot_bypass_manual_completion(self):
+        row=self.complete(self.request(quantity='3'))
+        with self.assertRaisesRegex(ValueError,'Reabra'):
+            self.order([row['id']],qty='3')
+        self.db.rollback()
+        saved=pr.get(self.db,row['id'])
+        self.assertEqual('MANUAL',saved['completion_mode'])
+        self.assertEqual('CONCLUIDA',saved['status'])
+        self.assertIsNone(saved['purchase_order_id'])
+        self.assertEqual([],pr.active_allocations(self.db,row['id']))
+
     def test_completed_or_cancelled_request_cannot_be_manually_completed_again(self):
         row=self.complete(self.request())
         with self.assertRaises(ValueError):self.complete(row)
