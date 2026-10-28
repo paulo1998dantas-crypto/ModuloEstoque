@@ -75,6 +75,8 @@ function showDetails(row){
   ["Saldo pendente no pedido",row.anticipation_pending_quantity==null?"—":qty(row.anticipation_pending_quantity)],
   ["Previsão do pedido",date(row.anticipation_delivery_date)],["Nova data negociada",date(row.anticipation_confirmed_delivery_date)],
   ["Conclusão compras",date(row.completed_at)],["Concluída por",row.completed_by],
+  ["Forma de conclusão",row.completion_mode==="MANUAL"?"Manual · atendimento comprovado":"Pedido de compra"],
+  ["Motivo da conclusão manual",row.completion_reason,true],["Evidência do atendimento",row.completion_evidence,true],
   ["Observações",row.notes,true],["Revisão do vínculo histórico",referenceReviewLabels[row.reference_review_result]||row.reference_review_result],
   ["Referências históricas sem vínculo",(row.reference_review_tokens||[]).join(" / ")],
   ["ID da solicitação",row.id],["Versão",row.version]
@@ -154,6 +156,8 @@ function render(){
    actions.append(button("Alterar quantidade (ADMIN)",()=>openAdminRequest(row,false)));
    actions.append(button("Excluir definitivamente",()=>openAdminRequest(row,true)));
   }
+  if(pending&&(cfg.can_manage||cfg.can_admin))actions.append(button("Concluir manualmente",()=>completeManually(row)));
+  if(row.status==="CONCLUIDA"&&row.completion_mode==="MANUAL"&&(cfg.can_manage||cfg.can_admin))actions.append(button("Reabrir conclusão manual",()=>act(row,"REABRIR")));
   if(cfg.can_manage){
    if(row.status==="SOLICITADA")actions.append(button(anticipation?"Registrar solicitação ao fornecedor":"Assumir",()=>act(row,anticipation?"SOLICITAR_ANTECIPACAO":"ASSUMIR")));
    if(pending||row.status==="CONCLUIDA")actions.append(button("Gerenciar pedidos",()=>openAllocateOrder(row)));
@@ -280,6 +284,13 @@ if($("pr-admin-form")){
   finally{$("pr-admin-save").disabled=false;$("pr-admin-cancel").disabled=false;}
  };
 }
+async function completeManually(row){
+ const reason=prompt("Motivo da conclusão manual (ao menos 10 caracteres):");if(!reason)return;
+ const evidence=prompt("Evidência de atendimento: informe recebimento, estoque e/ou conferência da necessidade (ao menos 10 caracteres):");if(!evidence)return;
+ if(!confirm("Concluir SOL-"+row.id.slice(0,8).toUpperCase()+" sem criar pedido ou movimentar estoque? Motivo e evidência ficarão auditados."))return;
+ try{await api("/"+encodeURIComponent(row.id)+"/action",{action:"CONCLUIR_MANUAL",version:row.version,reason:reason.trim(),evidence:evidence.trim(),confirmation:row.id});message("Conclusão manual registrada com evidência e rastreabilidade.");await load();}
+ catch(e){message(e.message,true);}
+}
 async function excludeRequest(row){
  if(!confirm("Excluir esta solicitação? Ela será cancelada e mantida no histórico de rastreabilidade."))return;
  const reason=prompt("Informe o motivo da exclusão/cancelamento:");if(!reason||!reason.trim())return;
@@ -296,6 +307,7 @@ async function showHistory(id){
    box.append(node("strong",event.action==="NORMALIZACAO_REFERENCIAS"?"Padronização de referências históricas":event.action.replaceAll("_"," ")),node("p",event.actor+" · "+date(event.created_at)));
    const before=event.before_data||{},after=event.after_data||{};
    if(before.status!==after.status)box.append(node("p",(labels[before.status]||"Nova solicitação")+" → "+(labels[after.status]||after.status)));
+   if(event.action==="CONCLUIR_MANUAL")box.append(node("p","Evidência: "+(after.completion_evidence||"—")));
    if(event.action==="EDITAR"||event.action==="EDITAR_QUANTIDADE_ADMIN"){
     const fields={sku_codigo:"SKU",descricao:"Descrição",unidade:"Unidade",quantity:"Quantidade",needed_at:"Data de necessidade",sector:"Setor",reference:"Referência",notes:"Observações",request_type:"Classificação"};
     for(const [key,label] of Object.entries(fields))if(String(before[key]??"")!==String(after[key]??""))box.append(node("p",label+": "+(before[key]||"—")+" → "+(after[key]||"—")));

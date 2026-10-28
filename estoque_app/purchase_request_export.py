@@ -48,6 +48,9 @@ COLUMNS = [
     ("Pedidos alocados / quantidades", "allocated_orders_display", 75),
     ("Quantidade alocada na solicitação", "allocated_quantity", 25),
     ("Quantidade restante na solicitação", "remaining_quantity", 25),
+    ("Forma de conclusão", "completion_mode", 24),
+    ("Motivo da conclusão manual", "completion_reason", 65),
+    ("Evidência do atendimento", "completion_evidence", 80),
 ]
 DATE_FIELDS = {"needed_at", "anticipation_delivery_date", "anticipation_confirmed_delivery_date"}
 TIME_FIELDS = {"created_at", "updated_at", "completed_at", "assumed_at"}

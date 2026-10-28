@@ -35,6 +35,9 @@ requests = Table("erp_purchase_requests", metadata,
     Column("anticipation_confirmed_delivery_date", Date),
     Column("completed_at", DateTime(timezone=True)),
     Column("completed_by", String(80)),
+    Column("completion_mode", String(20), nullable=False, server_default="PEDIDO"),
+    Column("completion_reason", String(4000)),
+    Column("completion_evidence", String(4000)),
     Column("version", Integer, nullable=False),
     Column("idempotency_key", String(80), nullable=False),
     UniqueConstraint("requested_by_id", "idempotency_key"),
@@ -43,7 +46,11 @@ requests = Table("erp_purchase_requests", metadata,
     CheckConstraint("origin in ('ESTOQUE', 'PCP')"),
     CheckConstraint("request_type in ('COMPRA_NOVA', 'ANTECIPACAO')"),
     CheckConstraint("status in ('SOLICITADA', 'EM_COMPRAS', 'CONCLUIDA', 'CANCELADA')"),
-    CheckConstraint("(status = 'CONCLUIDA') = (purchase_order_id is not null and completed_at is not null and completed_by is not null)"),
+    CheckConstraint("completion_mode in ('PEDIDO','MANUAL')"),
+    CheckConstraint("(status = 'CONCLUIDA') = (completed_at is not null and completed_by is not null and "
+                    "((completion_mode = 'PEDIDO' and purchase_order_id is not null) or "
+                    "(completion_mode = 'MANUAL' and length(trim(coalesce(completion_reason,''))) >= 10 "
+                    "and length(trim(coalesce(completion_evidence,''))) >= 10)))"),
 )
 request_work_orders = Table("erp_purchase_request_work_orders", metadata,
     Column("request_id", String(36), primary_key=True),
@@ -480,8 +487,10 @@ def attach_purchase_orders(db, items):
                     purchase_technical_status=order["technical_status"],
                     linked_at=row.get("completed_at"), linked_by=row.get("completed_by"))]
         total = sum((Decimal(str(r["quantity"])) for r in row["purchase_orders"]), Decimal(0))
+        manual = row.get("completion_mode") == "MANUAL" and row.get("status") == "CONCLUIDA"
         row.update(allocated_quantity=total,
-                   remaining_quantity=max(Decimal(0), Decimal(str(row["quantity"])) - total))
+                   fulfilled_without_order_quantity=max(Decimal(0), Decimal(str(row["quantity"])) - total) if manual else Decimal(0),
+                   remaining_quantity=Decimal(0) if manual else max(Decimal(0), Decimal(str(row["quantity"])) - total))
     return items
 
 
@@ -560,6 +569,7 @@ def allocate_orders(db, row, selections, user, *, replace=False, new_order_capac
     complete = sum(normalized.values()) == remaining
     previous_completion = (row.get("completed_at"), row.get("completed_by")) if row.get("status") == "CONCLUIDA" else (None, None)
     row.update(status="CONCLUIDA" if complete else "EM_COMPRAS",
+               completion_mode="PEDIDO", completion_reason=None, completion_evidence=None,
                purchase_order_id=active_allocations(db, row["id"])[0]["purchase_order_id"] if complete else None,
                completed_at=(previous_completion[0] or now()) if complete else None,
                completed_by=(previous_completion[1] or user.username) if complete else None,
@@ -1190,6 +1200,8 @@ def transition(db, request_id, payload, user):
         raise ValueError("A solicitação foi alterada por outro usuário. Atualize a tabela.")
     if admin_action:
         return administer_request(db, row, payload, user)
+    if action == "ALOCAR_PEDIDO" and row["status"] == "CONCLUIDA" and row.get("completion_mode") == "MANUAL":
+        raise ValueError("Reabra a conclusão manual antes de alterar a distribuição entre pedidos.")
     row = _reclassify_stale_anticipation(db, row, user)
     reason = str(payload.get("reason") or "").strip()
     if not reason or len(reason) > 4000:
@@ -1262,7 +1274,15 @@ def transition(db, request_id, payload, user):
         status = "CANCELADA"
     elif action == "CANCELAR" and row["status"] in {"SOLICITADA", "EM_COMPRAS"}:
         status = "CANCELADA"
-    elif action == "REABRIR" and row["status"] == "CANCELADA":
+    elif action == "CONCLUIR_MANUAL" and row["status"] in {"SOLICITADA", "EM_COMPRAS"}:
+        evidence = str(payload.get("evidence") or "").strip()
+        if payload.get("confirmation") != row["id"]:
+            raise ValueError("Confirme explicitamente a conclusão manual desta solicitação.")
+        if len(reason) < 10 or not 10 <= len(evidence) <= 4000:
+            raise ValueError("Informe motivo e evidência do atendimento com ao menos 10 caracteres (máximo 4.000).")
+        status = "CONCLUIDA"
+    elif action == "REABRIR" and (row["status"] == "CANCELADA" or
+            (row["status"] == "CONCLUIDA" and row.get("completion_mode") == "MANUAL")):
         status = "SOLICITADA"
     elif action == "OBSERVACAO":
         status = row["status"]
@@ -1290,6 +1310,10 @@ def transition(db, request_id, payload, user):
                      linked_work_orders=len(edit_fields["work_order_ids"]),
                      resolved_by_id=user.id, resolved_by=user.username,
                      reviewed_at=now()))
+    elif action == "CONCLUIR_MANUAL":
+        row.update(completion_mode="MANUAL", completion_reason=reason,
+                   completion_evidence=evidence, completed_at=now(), completed_by=user.username,
+                   buyer_id=user.id, buyer=user.username)
     elif action == "CONFIRMAR_ANTECIPACAO":
         allocate_orders(db, row, [{"purchase_order_id": row["anticipation_order_id"],
             "quantity": row["quantity"]}], user)
@@ -1306,7 +1330,8 @@ def transition(db, request_id, payload, user):
         row.update(request_type="COMPRA_NOVA", anticipation_order_id=None,
                    buyer_id=user.id, buyer=user.username)
     elif action == "REABRIR":
-        row.update(buyer_id=None, buyer=None)
+        row.update(buyer_id=None, buyer=None, completion_mode="PEDIDO",
+                   completion_reason=None, completion_evidence=None, completed_at=None, completed_by=None)
     if action in {"CANCELAR", "EXCLUIR"} and multi_order_ready(db):
         db.execute(request_orders.update().where(request_orders.c.request_id == row["id"])
             .values(status="CANCELADA"))
