@@ -67,3 +67,26 @@ copiados sem divergências. As 39 solicitações conservaram o mesmo hash integr
 65 eventos e 220 pedidos preservados. RLS ativo, sem SELECT para anon/authenticated.
 Validação: 123 testes Estoque, 26 de integração Suprimentos e 23 JavaScript aprovados.
 Nenhum pedido, movimento físico, recebimento ou solicitação real criado como teste.
+
+## Correção de vigência técnica — 28/10/2026
+
+Uma O.C. só oferece saldo novo quando o status físico é EMITIDA ou
+PARCIALMENTE_RECEBIDA e a conclusão técnica não é CONCLUIDA. Isso também vale
+para a cobertura de componentes comprados dentro de CJ/PP, a identificação
+automática de antecipações, a confirmação de antecipação e a vinculação na emissão.
+
+Pedidos legados como a O.C. 2707 podem continuar EMITIDA fisicamente e estar
+tecnicamente concluídos. Não se altera o pedido nem se inventa recebimento para
+resolver essa divergência. Na atualização normal da fila, a antecipação pendente
+é reclassificada com auditoria, mesmo havendo alocação parcial; os vínculos e as
+quantidades já alocadas são preservados. Exemplo: solicitado 3, alocado 2, restante 1.
+Somente o restante fica disponível para nova compra, sem concluir a solicitação.
+
+Na redistribuição, o pedido fechado aparece apenas como vínculo histórico,
+limitado à quantidade anteriormente alocada. Novas alocações ou aumentos são
+bloqueados no backend. Solicitações concluídas e eventos anteriores não são
+reescritos. Nenhuma movimentação física ou alteração em O.S./recebimentos ocorre.
+
+Sem migração de banco. Publicar o backend do Estoque antes das interfaces;
+Suprimentos consome a mesma regra canônica via API interna. Os arquivos de
+interface identificam a conclusão técnica e têm versão de cache atualizada.

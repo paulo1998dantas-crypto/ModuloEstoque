@@ -29,7 +29,7 @@ function renderAllocationInputs(row,orders){
  $("pr-allocate-request").textContent="SOL-"+row.id.slice(0,8).toUpperCase()+" · "+row.sku_codigo+" · solicitado: "+qty(row.quantity)+" "+row.unidade+" · já alocado: "+qty(row.allocated_quantity||0)+" · restante: "+qty(remaining);
  for(const linkedOrder of row.purchase_orders||[])container.append(node("p","Já vinculado: O.C. "+linkedOrder.numero_oc+" · "+qty(linkedOrder.quantity)+" "+row.unidade));
  for(const order of orders){
-  const label=node("label","O.C. "+order.numero_oc+" · "+(order.fornecedor_nome||"—")+" · saldo "+qty(order.available_quantity)+" · entrega "+date(order.delivery_date));
+  const label=node("label","O.C. "+order.numero_oc+" · "+(order.fornecedor_nome||"—")+(order.historical_only?" · vínculo histórico; limite já alocado ":" · saldo ")+qty(order.available_quantity)+" · entrega "+date(order.delivery_date));
   const input=node("input");input.type="number";input.min="0";input.max=String(order.available_quantity);input.step="0.001";input.value=String((row.purchase_orders||[]).find(o=>o.purchase_order_id===order.id)?.quantity||0);
   input.setAttribute("aria-label","Quantidade para O.C. "+order.numero_oc);
   label.append(input);container.append(label);allocationInputs.push({order,input});
@@ -69,7 +69,7 @@ function showDetails(row){
   ["Referências / O.S.",row.reference_display||row.reference,true],["Referência original",row.reference,true],
   ["Solicitante",row.requested_by],["Solicitada em",date(row.created_at)],["Comprador",row.buyer],
   ["Assumida em",date(row.assumed_at)],["Assumida por",row.assumed_by],
-  ["Atualizada em",date(row.updated_at)],["Pedidos alocados",(row.purchase_orders||[]).map(o=>"O.C. "+o.numero_oc+" · "+qty(o.quantity)+" "+row.unidade+" · "+o.fornecedor_nome+" · "+o.purchase_status+" · "+date(o.linked_at)+" · "+o.linked_by).join("\n")||row.numero_oc||row.anticipation_numero_oc,true],
+  ["Atualizada em",date(row.updated_at)],["Pedidos alocados",(row.purchase_orders||[]).map(o=>"O.C. "+o.numero_oc+" · "+qty(o.quantity)+" "+row.unidade+" · "+o.fornecedor_nome+" · "+(o.purchase_technical_status==="CONCLUIDA"?"Tecnicamente concluída · vínculo histórico":o.purchase_status)+" · "+date(o.linked_at)+" · "+o.linked_by).join("\n")||row.numero_oc||row.anticipation_numero_oc,true],
   ["Quantidade alocada",qty(row.allocated_quantity||0)],["Quantidade restante",qty(row.remaining_quantity??row.quantity)],
   ["Fornecedor",row.fornecedor_nome||row.anticipation_fornecedor_nome],["Status do pedido",row.purchase_status||row.anticipation_purchase_status],
   ["Saldo pendente no pedido",row.anticipation_pending_quantity==null?"—":qty(row.anticipation_pending_quantity)],
@@ -136,7 +136,7 @@ function render(){
    order.replaceChildren();
    for(const linkedOrder of row.purchase_orders){
     order.append(node("strong","O.C. "+linkedOrder.numero_oc+" · "+qty(linkedOrder.quantity)+" "+row.unidade));
-    line(order,linkedOrder.fornecedor_nome);line(order,linkedOrder.purchase_status,true);
+    line(order,linkedOrder.fornecedor_nome);line(order,linkedOrder.purchase_technical_status==="CONCLUIDA"?"Tecnicamente concluída · vínculo histórico":linkedOrder.purchase_status,true);
    }
    if(pending)line(order,"Falta alocar: "+qty(row.remaining_quantity)+" "+row.unidade);
   }

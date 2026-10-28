@@ -76,7 +76,7 @@ events = Table("erp_purchase_request_events", metadata,
 orders = Table("erp_purchase_orders", MetaData(),
     Column("id", Uuid(as_uuid=False), primary_key=True),
     Column("numero_oc", String), Column("status", String), Column("fornecedor_nome", String),
-    Column("data_necessidade", Date))
+    Column("data_necessidade", Date), Column("technical_status", String))
 lines = Table("erp_purchase_order_lines", MetaData(),
     Column("purchase_order_id", Uuid(as_uuid=False)),
     Column("sku_codigo", String), Column("quantidade_pedida", Numeric(14, 3)),
@@ -96,6 +96,11 @@ reference_backfill = Table("erp_purchase_request_reference_backfill", MetaData()
     Column("reviewed_at", DateTime(timezone=True)))
 
 SECTORS = {"PRODUÇÃO", "ADMINISTRATIVO", "GERAL"}
+
+def _order_is_open(order):
+    """Physical and technical status must both allow further purchases/receipts."""
+    return bool(order and order["status"] in {"EMITIDA", "PARCIALMENTE_RECEBIDA"}
+                and order.get("technical_status") != "CONCLUIDA")
 
 def lock_request_materials(db, sku_ids):
     """Serialize reference changes for each material until commit/rollback."""
@@ -456,7 +461,8 @@ def attach_purchase_orders(db, items):
         for start in range(0, len(by_id), 500):
             ids = list(by_id)[start:start + 500]
             statement = select(request_orders, orders.c.numero_oc,
-                orders.c.fornecedor_nome, orders.c.status.label("purchase_status"))\
+                orders.c.fornecedor_nome, orders.c.status.label("purchase_status"),
+                orders.c.technical_status.label("purchase_technical_status"))\
                 .select_from(request_orders.join(orders, order_condition(
                     db, request_orders.c.purchase_order_id, orders.c.id)))\
                 .where(request_orders.c.request_id.in_(ids), request_orders.c.status == "ATIVA")\
@@ -471,6 +477,7 @@ def attach_purchase_orders(db, items):
                 row["purchase_orders"] = [dict(purchase_order_id=str(order["id"]),
                     quantity=row["quantity"], numero_oc=order["numero_oc"],
                     fornecedor_nome=order["fornecedor_nome"], purchase_status=order["status"],
+                    purchase_technical_status=order["technical_status"],
                     linked_at=row.get("completed_at"), linked_by=row.get("completed_by"))]
         total = sum((Decimal(str(r["quantity"])) for r in row["purchase_orders"]), Decimal(0))
         row.update(allocated_quantity=total,
@@ -522,8 +529,11 @@ def allocate_orders(db, row, selections, user, *, replace=False, new_order_capac
     for order_id, quantity in normalized.items():
         order = found.get(order_id)
         existing = previous.get(order_id) if replace else None
-        preserving_closed = existing and order and order["status"] == "CONCLUIDA" and quantity <= Decimal(str(existing["quantity"]))
-        if not order or (order["status"] not in {"EMITIDA", "PARCIALMENTE_RECEBIDA"} and not preserving_closed) or not str(order["numero_oc"] or "").strip():
+        preserving_closed = (existing and order and
+            order["status"] not in {"CANCELADA", "RASCUNHO"} and
+            (order["status"] in {"CONCLUIDA", "RECEBIDA"} or order["technical_status"] == "CONCLUIDA") and
+            quantity <= Decimal(str(existing["quantity"])))
+        if not order or (not _order_is_open(order) and not preserving_closed) or not str(order["numero_oc"] or "").strip():
             raise ValueError("Selecione uma O.C. emitida e ainda vigente.")
         capacity = _order_component_unallocated(db, order_id, row["sku_codigo"], row["id"] if replace else None,
             pending_quantity=(new_order_capacity or {}).get(order_id))
@@ -679,6 +689,7 @@ def _active_order_lines(db, order_id=None, exclude_order_id=None):
         orders.c.numero_oc, orders.c.status, orders.c.fornecedor_nome,
     ).select_from(lines.join(orders, order_condition(db, lines.c.purchase_order_id, orders.c.id)))\
       .where(orders.c.status.in_(["EMITIDA", "PARCIALMENTE_RECEBIDA"]),
+             func.coalesce(orders.c.technical_status, "ABERTA") != "CONCLUIDA",
              lines.c.status.notin_(["CANCELADA", "RECEBIDA"]),
              lines.c.quantidade_pedida > lines.c.quantidade_recebida)
     if order_id:
@@ -789,13 +800,15 @@ def _anticipation_state(db, row, coverage_lines=None, factor_cache=None, sku_cac
     order_id = row.get("anticipation_order_id")
     if not order_id:
         return None, Decimal(0), "O pedido vinculado não existe mais."
-    order = db.execute(select(orders.c.id, orders.c.numero_oc, orders.c.status,
+    order = db.execute(select(orders.c.id, orders.c.numero_oc, orders.c.status, orders.c.technical_status,
                               orders.c.fornecedor_nome).where(
         order_condition(db, orders.c.id, order_id)
     )).mappings().first()
     if not order:
         return None, Decimal(0), "O pedido vinculado não foi encontrado."
-    if order["status"] not in {"EMITIDA", "PARCIALMENTE_RECEBIDA"}:
+    if order["technical_status"] == "CONCLUIDA":
+        return dict(order), Decimal(0), f"O.C. {order['numero_oc']} está tecnicamente concluída."
+    if not _order_is_open(order):
         return dict(order), Decimal(0), (
             f"O.C. {order['numero_oc']} deixou de estar vigente (status {order['status']})."
         )
@@ -818,8 +831,6 @@ def _reclassify_stale_anticipation(db, row, user, reason_prefix="", coverage_lin
     """Keep pending request classification synchronized with open O.C.s and kit B.O.M.s."""
     if not _is_pending_request(row):
         return row
-    if has_allocations if has_allocations is not None else bool(active_allocations(db, row["id"])):
-        return row
     if row.get("request_type") == "ANTECIPACAO":
         order, pending, reason = _anticipation_state(
             db, row, coverage_lines, factor_cache, sku_cache
@@ -835,6 +846,10 @@ def _reclassify_stale_anticipation(db, row, user, reason_prefix="", coverage_lin
         db.execute(requests.update().where(requests.c.id == row["id"]).values(**row))
         audit(db, row, user, "ANTECIPACAO_RECLASSIFICADA", before,
               f"{reason_prefix} {reason}".strip())
+        return row
+    # Preserve partial allocations, but never let them keep a closed anticipation
+    # eligible. Only the unallocated remainder becomes a new purchase.
+    if has_allocations if has_allocations is not None else bool(active_allocations(db, row["id"])):
         return row
     if row.get("request_type") != "COMPRA_NOVA" or row.get("purchase_order_id"):
         return row
@@ -1126,6 +1141,7 @@ def existing_order_options(db, request_id, user):
             by_order[order_id]["available_quantity"] = max(by_order[order_id]["available_quantity"], Decimal(str(link["quantity"])))
         elif link["purchase_status"] != "CANCELADA":
             options.append(dict(id=order_id, numero_oc=link["numero_oc"], status=link["purchase_status"],
+                technical_status=link.get("purchase_technical_status"), historical_only=True,
                 fornecedor_nome=link["fornecedor_nome"], available_quantity=Decimal(str(link["quantity"])), delivery_date=None))
     options.sort(key=lambda item: (
         abs((item["delivery_date"] - row["needed_at"]).days) if item["delivery_date"] else 10**9,
@@ -1228,7 +1244,7 @@ def transition(db, request_id, payload, user):
         order = db.execute(select(orders).where(
             order_condition(db, orders.c.id, row["anticipation_order_id"])
         ).with_for_update()).mappings().first() if row["anticipation_order_id"] else None
-        if not order or order["status"] not in {"EMITIDA", "PARCIALMENTE_RECEBIDA"} or not str(order["numero_oc"] or "").strip():
+        if not _order_is_open(order) or not str(order["numero_oc"] or "").strip():
             raise ValueError("A antecipação exige uma O.C. válida e ainda vigente.")
         if active_allocations(db, row["id"]):
             raise ValueError("Há alocações parciais. Distribua a quantidade restante entre os pedidos.")
@@ -1329,6 +1345,8 @@ def confirm_order(db, order_id, request_ids, actor, updated=False):
     user = actor_user(db, actor)
     if not order or order["status"] in {"CANCELADA", "RASCUNHO"}:
         raise ValueError("A solicitação exige pedido confirmado.")
+    if not _order_is_open(order) and set(ids) - set(existing):
+        raise ValueError("Não é possível adicionar solicitações a uma O.C. já recebida ou tecnicamente concluída.")
     rows = [get(db, i, lock=True) for i in ids]
     coverage_lines = _active_order_lines(db, exclude_order_id=order_id)
     factor_cache, sku_cache = {}, {}

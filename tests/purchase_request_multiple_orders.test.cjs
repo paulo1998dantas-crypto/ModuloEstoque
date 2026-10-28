@@ -46,3 +46,12 @@ test('alocação parcial é aceita para continuar em compras',()=>{
  const inputs=ctx.$('pr-allocate-lines').children.filter(c=>c.tag==='label').map(c=>c.children[0]);inputs[0].value='2.125';
  assert.deepEqual(JSON.parse(JSON.stringify(ctx.readAllocationInputs(row))),[{purchase_order_id:'a',quantity:'2.125'}]);
 });
+
+test('pedido fechado é vínculo histórico limitado à quantidade previamente alocada',()=>{
+ const ctx=context();ctx.renderAllocationInputs(row,[{...orders[0],historical_only:true}]);
+ const label=ctx.$('pr-allocate-lines').children.find(c=>c.tag==='label');
+ assert.match(label.textContent,/vínculo histórico; limite já alocado 4/);
+ assert.doesNotMatch(label.textContent,/saldo 4/);
+ assert.equal(label.children[0].max,'4');
+ label.children[0].value='5';assert.equal(ctx.readAllocationInputs(row),null);
+});
