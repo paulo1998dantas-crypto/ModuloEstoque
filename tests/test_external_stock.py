@@ -152,5 +152,13 @@ class ExternalStockTest(unittest.TestCase):
         self.assertEqual(0,self.db.query(Movement).count())
         self.assertEqual(0,self.db.execute(text('select count(*) from erp_goods_receipts')).scalar_one())
 
+    def test_unrelated_insumo_bom_is_not_reinterpreted_or_blocked(self):
+        # Legacy technical-only cycles/quantities do not concern external foam.
+        self.db.add(BomComponent(item_sku_id=self.active_sku.id,
+                                 component_sku_id=self.active_sku.id,quantidade=0))
+        self.db.commit()
+        self.receive(self.active_sku,quantity=1)
+        self.assertEqual(0,self.db.execute(text('select count(*) from erp_external_stock_movements')).scalar_one())
+
 
 if __name__=='__main__':unittest.main()

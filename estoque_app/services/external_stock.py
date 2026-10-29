@@ -135,14 +135,24 @@ def _graph(db, roots):
               from cadastro_bom_componentes b join nodes n on n.code=b.parent_sku
         '''), {'roots': json.dumps(sorted(roots))}).mappings()
         for row in rows:
-            graph[row['parent_sku']].append((row['component_sku'], number(row['quantidade'])))
+            graph[row['parent_sku']].append((row['component_sku'], row['quantidade']))
     else:
         from models import BomComponent, SKU
         skus = {item.id: item.sku for item in db.query(SKU).all()}
         for edge in db.query(BomComponent).all():
             if edge.item_sku_id in skus and edge.component_sku_id in skus:
-                graph[skus[edge.item_sku_id]].append((skus[edge.component_sku_id], number(edge.quantidade)))
-    return graph
+                graph[skus[edge.item_sku_id]].append((skus[edge.component_sku_id], edge.quantidade))
+    # An unrelated technical BOM must not change receipt behavior. Only
+    # traverse branches that actually reach one of the external materials.
+    relevant = set(EXTERNAL_MATERIAL_SKUS)
+    while True:
+        parents = {parent for parent, edges in graph.items()
+                   if any(child in relevant for child, _ in edges)}
+        if parents <= relevant:
+            break
+        relevant.update(parents)
+    return {parent: [(child, factor) for child, factor in edges if child in relevant]
+            for parent, edges in graph.items() if parent in relevant}
 
 
 def external_requirements(code, quantity, graph):
@@ -155,8 +165,7 @@ def external_requirements(code, quantity, graph):
             result[current] += amount
             return
         for child, factor in graph.get(current, []):
-            if factor <= 0:
-                raise ValueError(f'Consumo inválido na B.O.M. {current} / {child}.')
+            factor = number(factor, positive=True)
             walk(child, amount * factor, (*path, current))
 
     walk(code, number(quantity, positive=True), ())
