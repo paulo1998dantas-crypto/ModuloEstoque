@@ -16,6 +16,8 @@ from services.estoque_service import (
     to_decimal,
 )
 from services.work_order_needs_service import calculate_work_order_needs
+from external_materials import is_external_material
+from services.external_stock import consume_receipt, reverse_receipt_consumption
 
 
 def _id():
@@ -291,6 +293,8 @@ def _explode_receipt_bom(db, parent_sku, received_quantity):
             if is_bom_manufacturing_sku(current_sku)
             else []
         )
+        components = [edge for edge in components
+                      if not edge.component_sku or not is_external_material(edge.component_sku.sku)]
         if not components:
             total_by_sku[current_sku.id] = total_by_sku.get(
                 current_sku.id, Decimal("0")
@@ -1897,6 +1901,7 @@ def confirm_receipt(db, data, actor, user_id):
             )
         if po_line:
             touched_purchase_lines.add(str(po_line_id))
+    consume_receipt(db, receipt_id, actor, user_id)
     for purchase_line_id in touched_purchase_lines:
         _refresh_purchase_order_line_receipt_status(db, purchase_line_id)
     if po_id:
@@ -2254,6 +2259,7 @@ def _reverse_receipt(db, receipt_id, actor, user_id, reason, *, reopen_technical
         "user_id": user_id,
         "reason": reason or "Estorno do recebimento.",
     })
+    reverse_receipt_consumption(db, receipt_id, actor, user_id, reason)
     db.execute(text("update erp_goods_receipts set status='ESTORNADO',reversed_at=now(),motivo_excecao=:reason where id=:id"),{'id':receipt_id,'reason':reason or ''})
     order_status = None
     if receipt['purchase_order_id']:

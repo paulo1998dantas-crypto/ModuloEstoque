@@ -1064,14 +1064,19 @@ def allocate_shared_commitment_to_work_order(
 
 
 def bom_components_for_sku(db, sku):
+    from external_materials import is_external_material
     if sku is None:
         return []
-    return (
+    rows = (
         db.query(BomComponent)
         .filter(BomComponent.item_sku_id == sku.id)
         .order_by(BomComponent.id)
         .all()
     )
+    # External foam belongs to the technical BOM, never to internal picking,
+    # receipt/backflush or the phantom-kit test for shared commitments.
+    return [edge for edge in rows if not edge.component_sku
+            or not is_external_material(edge.component_sku.sku)]
 
 
 def sku_group_code(sku):

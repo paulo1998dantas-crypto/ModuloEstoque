@@ -1,6 +1,7 @@
 """Read-only, recursive component projection for the pending requests export."""
 from collections import defaultdict
 from decimal import Decimal, InvalidOperation
+from external_materials import is_external_material
 
 
 def is_assembly(item, code):
@@ -87,7 +88,8 @@ def explode_requests(items, catalog, bom):
         item = catalog.get(code)
         if item is None:
             raise ValueError(f"SKU {code} não encontrado no Cadastro; composição não pode ser confirmada.")
-        edges = children.get(code, []) if is_assembly(item, code) else []
+        edges = [edge for edge in children.get(code, [])
+                 if not is_external_material(edge.get('component_sku'))] if is_assembly(item, code) else []
         if not edges:
             result = {code:Decimal(1)}
         else:

@@ -2670,6 +2670,9 @@ from purchase_request_routes import register as register_purchase_requests
 register_purchase_requests(app, db, current_user, _erp_internal_allowed,
                            _erp_actor_user, erp_feature_required, login_required)
 
+from external_stock_routes import register as register_external_stock
+register_external_stock(app, db, _erp_internal_allowed, _erp_actor_user, erp_feature_required)
+
 
 @app.route("/api/erp/internal/purchase-orders", methods=["POST"])
 @erp_feature_required

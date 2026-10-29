@@ -6,6 +6,7 @@ from decimal import Decimal, InvalidOperation
 from sqlalchemy import func, inspect, text
 
 from models import BomComponent, Movement, SKU
+from external_materials import is_external_material
 
 
 TERMINAL_WORK_ORDER_STATUSES = {
@@ -179,6 +180,8 @@ def _bom_catalog(db):
         child = sku_by_id.get(component.component_sku_id)
         if not parent or not child:
             continue
+        if is_external_material(child.sku):
+            continue
         children[_normalize_code(parent.sku)].append(
             (_normalize_code(child.sku), _decimal(component.quantidade))
         )
@@ -253,6 +256,8 @@ def _normalize_phantom_requirements(lines, children):
         if not isinstance(line, dict):
             continue
         normalized = _normalize_code(line.get("codigo"))
+        if is_external_material(normalized):
+            continue
         amount = _decimal(line.get("qtd", line.get("quantidade")))
         if normalized and amount > 0:
             raw.append((normalized, amount, line))
