@@ -33,6 +33,12 @@ interno. Uma baixa manual não deve repetir um recebimento automático.
 
 1. Publicar a proteção dos três SKUs no Estoque e Suprimentos e verificar os
    oito materiais na Baixa externa, preservando os saldos das espumas.
+   Aplicar também `20261030150000_external_material_forecast_exclusion.sql`:
+   o gatilho SQL do Cadastro recalcula o forecast independentemente do filtro
+   Python. A função exclui os SKUs de `erp_external_stock_items` da recursão
+   e da identificação de folhas. Assim, o banco que tem somente componentes
+   externos continua sendo a necessidade operacional, não suas espumas/tecidos.
+   Os demais níveis, proporções e proteções contra ciclos são preservados.
 2. Validar novamente a B.O.M. atual contra o plano de importação. Acrescentar
    somente os consumos positivos, sem excluir os componentes existentes.
 3. Conferência de 30/10/2026: 372 bancos, 561 novos vínculos; preservar 786
