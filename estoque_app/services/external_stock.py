@@ -36,6 +36,24 @@ def require_schema(db):
         raise ValueError('Aplique a migração de estoque externo antes de usar Baixa externa.')
 
 
+def provision_configured_items(db):
+    """Add known materials at startup, without altering balances or old entries.
+
+    Caller owns the transaction. Existing item/location/activation data remains
+    untouched, including all five foam SKUs provisioned in the first release.
+    This is configuration DML only; schema creation remains a migration.
+    """
+    if not schema_ready(db):
+        return 0
+    count = 0
+    for code in sorted(EXTERNAL_MATERIAL_SKUS):
+        count += db.execute(text('''
+            insert into erp_external_stock_items(sku) values(:sku)
+            on conflict(sku) do nothing
+        '''), {'sku': code}).rowcount
+    return count
+
+
 def _locked_items(db):
     # A stable lock order also serializes concurrent receipts/manual adjustments.
     suffix = ' for update' if db.get_bind().dialect.name == 'postgresql' else ''

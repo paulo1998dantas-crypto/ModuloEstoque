@@ -184,6 +184,13 @@ configure_logging()
 init_db()
 ensure_initial_data()
 
+# Explicit release configuration, not a balance initialization. No historical
+# receipt is recalculated; new external SKUs appear in the existing PCP hub.
+from services.external_stock import provision_configured_items
+with SessionLocal() as external_setup_db:
+    provision_configured_items(external_setup_db)
+    external_setup_db.commit()
+
 
 def erp_feature_enabled():
     """The new cross-module flow remains opt-in until the cutover."""

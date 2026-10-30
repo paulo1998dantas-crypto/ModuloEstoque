@@ -160,5 +160,81 @@ class ExternalStockTest(unittest.TestCase):
         self.receive(self.active_sku,quantity=1)
         self.assertEqual(0,self.db.execute(text('select count(*) from erp_external_stock_movements')).scalar_one())
 
+    def add_fabric(self, code='10220269', quantity='1.2'):
+        fabric=SKU(sku=code,descricao='TECIDO EXTERNO',unidade='m',active=True)
+        self.db.add(fabric);self.db.flush()
+        self.db.add(BomComponent(item_sku_id=self.bank.id,component_sku_id=fabric.id,quantidade=Decimal(quantity)))
+        self.db.execute(text('insert into erp_external_stock_items(sku) values(:sku)'),{'sku':code})
+        self.db.commit()
+        return fabric
+
+    def test_fabric_and_foam_consumed_together_once_with_fractional_metres(self):
+        fabric=self.add_fabric()
+        receipt,data,_=self.receive(quantity=3)
+        self.assertEqual(Decimal('-3.6'),external.balance(self.db,fabric.sku))
+        self.assertEqual(Decimal('-6'),external.balance(self.db,self.foam.sku))
+        confirm_receipt(self.db,data,self.user.username,self.user_id)
+        self.assertEqual(Decimal('-3.6'),external.balance(self.db,fabric.sku))
+        self.assertEqual(0,self.db.query(Movement).filter_by(sku_id=fabric.id).count())
+        reverse_receipt(self.db,receipt['id'],self.user.username,self.user_id,'Estorno tecido')
+        self.assertEqual(Decimal(0),external.balance(self.db,fabric.sku))
+        self.assertEqual(Decimal(0),external.balance(self.db,self.foam.sku))
+
+    def test_new_fabrics_never_consume_retroactively_when_old_receipt_is_reversed(self):
+        receipt,_,_=self.receive(quantity=2)
+        fabric=self.add_fabric()
+        reverse_receipt(self.db,receipt['id'],self.user.username,self.user_id,'Estorno histórico')
+        self.assertEqual(Decimal(0),external.balance(self.db,fabric.sku))
+        self.assertEqual(0,self.db.execute(text("select count(*) from erp_external_stock_movements where sku='10220269'")).scalar_one())
+
+    def test_provision_is_idempotent_and_preserves_foam_initial_balance(self):
+        self.move('INITIAL',10);self.db.commit()
+        self.db.execute(text("update erp_external_stock_items set location='SPANDY ORIGINAL',activated_at='2026-10-29 12:00:00' where sku='10220272'"))
+        self.db.commit()
+        self.assertEqual(7,external.provision_configured_items(self.db))
+        self.db.commit()
+        self.assertEqual(0,external.provision_configured_items(self.db))
+        self.assertEqual(8,self.db.execute(text('select count(*) from erp_external_stock_items')).scalar_one())
+        self.assertEqual(Decimal(10),external.balance(self.db,self.foam.sku))
+        self.assertEqual(1,self.db.execute(text('select count(*) from erp_external_stock_movements')).scalar_one())
+        row=self.db.execute(text("select location,activated_at from erp_external_stock_items where sku='10220272'")).one()
+        self.assertEqual(('SPANDY ORIGINAL','2026-10-29 12:00:00'),tuple(row))
+
+    def test_provision_without_schema_does_not_create_tables(self):
+        self.db.execute(text('drop table erp_external_stock_movements'))
+        self.db.commit()
+        self.assertEqual(0,external.provision_configured_items(self.db))
+        self.assertFalse(external.schema_ready(self.db))
+
+    def test_all_three_fabrics_are_consumed_recursively_without_internal_demand(self):
+        fabrics=[self.add_fabric(code,amount) for code,amount in
+                 [('10220269','1.2'),('10220270','0.6'),('10280062','1.8')]]
+        receipt,_,_=self.receive(self.kit,quantity=2)
+        for fabric,total in zip(fabrics,('7.2','3.6','10.8')):
+            self.assertEqual(-Decimal(total),external.balance(self.db,fabric.sku))
+            self.assertEqual(0,self.db.query(Movement).filter_by(sku_id=fabric.id).count())
+        from services.estoque_service import bom_components_for_sku
+        self.assertEqual([],bom_components_for_sku(self.db,self.bank))
+        _,children=_bom_catalog(self.db)
+        need,_=_normalize_phantom_requirements([{'codigo':self.kit.sku,'qtd':2}],children)
+        self.assertEqual({self.bank.sku:Decimal(6)},dict(need))
+        rows=explode_requests([{'sku_codigo':self.kit.sku,'quantity':2}],
+            {self.kit.sku:{'grupo':'30'},self.bank.sku:{'grupo':'10'}},
+            [{'parent_sku':self.kit.sku,'component_sku':self.bank.sku,'quantidade':3}]+
+            [{'parent_sku':self.bank.sku,'component_sku':f.sku,'quantidade':1} for f in fabrics])
+        self.assertEqual([(self.bank.sku,Decimal(6))],[(r['sku_codigo'],r['quantity']) for r in rows])
+        reverse_receipt(self.db,receipt['id'],self.user.username,self.user_id,'Estorno tecidos')
+        for fabric in fabrics:
+            self.assertEqual(Decimal(0),external.balance(self.db,fabric.sku))
+
+    def test_fractional_manual_fabric_adjustment_does_not_touch_internal_stock(self):
+        fabric=self.add_fabric()
+        external.manual_movement(self.db,{'sku':fabric.sku,'kind':'INITIAL','quantity':'20.5',
+            'reason':'Saldo real Spandy','idempotency_key':str(uuid4())},self.user.username,self.user_id)
+        external.manual_movement(self.db,{'sku':fabric.sku,'kind':'MANUAL','quantity':'1,2',
+            'reason':'Perda no corte','idempotency_key':str(uuid4())},self.user.username,self.user_id)
+        self.assertEqual(Decimal('19.3'),external.balance(self.db,fabric.sku))
+        self.assertEqual(0,self.db.query(Movement).count())
+
 
 if __name__=='__main__':unittest.main()
