@@ -95,15 +95,36 @@ class PurchaseReportStatusTests(unittest.TestCase):
             [sheet.cell(row, 1).value for row in range(4, 8)],
             ["ENTREGUE", "AGUARDANDO", "ENTREGUE PARCIAL", "CANCELADA"],
         )
-        self.assertEqual(sheet["N4"].value.date(), date(2026, 11, 5))
-        self.assertEqual(sheet["N6"].value.date(), date(2026, 11, 6))
-        self.assertEqual((sheet["O4"].value, sheet["P4"].value), (4, 1))
-        self.assertEqual((sheet["O6"].value, sheet["P6"].value), (5, 2))
+        self.assertEqual(sheet["G3"].value, "QTD.")
+        self.assertEqual(sheet["H3"].value, "FALTA RECEBER")
+        self.assertEqual([sheet.cell(row, 8).value for row in range(4, 8)], [0, 2, 1, 0])
+        self.assertEqual(sheet["I4"].value, "ITEM-1")
+        self.assertEqual(sheet["O4"].value.date(), date(2026, 11, 5))
+        self.assertEqual(sheet["O6"].value.date(), date(2026, 11, 6))
+        self.assertEqual((sheet["P4"].value, sheet["Q4"].value), (4, 1))
+        self.assertEqual((sheet["P6"].value, sheet["Q6"].value), (5, 2))
         for row in (5, 7):
             self.assertEqual(
-                tuple(sheet.cell(row, column).value for column in (14, 15, 16)),
+                tuple(sheet.cell(row, column).value for column in (15, 16, 17)),
                 (None, None, None),
             )
+
+    def test_export_updates_remaining_quantity_as_receipts_arrive(self):
+        for received, expected in [(0, 0.3), (0.1, 0.2), (0.3, 0), (0.4, 0)]:
+            with self.subTest(received=received):
+                row = {
+                    "numero_oc": "PC-TESTE",
+                    "sku_codigo": "ITEM-1",
+                    "quantidade_pedida": "0.300",
+                    "quantidade_recebida": received,
+                }
+                with patch("purchase_report._rows", return_value=([row], [])):
+                    output, _, _ = build_purchase_inspection_report(None)
+                sheet = load_workbook(output)["CONTROLE DE COMPRAS"]
+                self.assertEqual(sheet["G4"].value, 0.3)
+                self.assertEqual(sheet["H4"].value, expected)
+                self.assertEqual(sheet["H4"].number_format, "#,##0.000")
+                self.assertEqual(sheet.auto_filter.ref, "A3:R4")
 
 
 if __name__ == "__main__":

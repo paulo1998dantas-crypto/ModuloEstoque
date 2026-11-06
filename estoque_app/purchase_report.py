@@ -1,5 +1,6 @@
 """Relatório operacional consolidado de Compras e Inspeção."""
 from datetime import date, datetime
+from decimal import Decimal
 from io import BytesIO
 
 from openpyxl import Workbook
@@ -10,7 +11,7 @@ from sqlalchemy import text
 
 PURCHASE_HEADERS = [
     "STATUS", "TIPO", "DATA PC", "Nº PEDIDO", "FORNECEDOR", "VALOR",
-    "QTD.", "CÓDIGO", "DESCRIÇÃO", "DESTINO", "CLIENTE", "FRETE",
+    "QTD.", "FALTA RECEBER", "CÓDIGO", "DESCRIÇÃO", "DESTINO", "CLIENTE", "FRETE",
     "DATA NECESSIDADE ENTREGA", "DATA RECEBIMENTO",
     "TEMPO TOTAL (DATA P.C. x RECEBIMENTO)", "DIF. NECESS VS ENTREGA",
     "OBSERVAÇÃO",
@@ -134,8 +135,8 @@ def _style_sheet(sheet, headers, row_count, title):
     sheet.auto_filter.ref = f"A3:{get_column_letter(len(headers))}{max(row_count + 3, 4)}"
     widths = {
         "A": 20, "B": 12, "C": 13, "D": 17, "E": 25, "F": 15,
-        "G": 12, "H": 16, "I": 42, "J": 22, "K": 25, "L": 16,
-        "M": 18, "N": 18, "O": 24, "P": 22, "Q": 48,
+        "G": 12, "H": 16, "I": 16, "J": 42, "K": 22, "L": 25,
+        "M": 16, "N": 18, "O": 18, "P": 24, "Q": 22, "R": 48,
     }
     for letter, width in widths.items():
         if sheet.max_column >= ord(letter) - 64:
@@ -152,6 +153,11 @@ def build_purchase_inspection_report(db):
     for row_number, row in enumerate(purchases, start=4):
         delivered = _as_date(row.get("data_entregue"))
         need = _as_date(row.get("necessidade_linha"))
+        ordered = Decimal(str(row.get("quantidade_pedida") or 0))
+        received = Decimal(str(row.get("quantidade_recebida") or 0))
+        pending = max(ordered - received, Decimal("0"))
+        if str(row.get("line_status") or "").upper() == "CANCELADA":
+            pending = Decimal("0")
         values = [
             _purchase_status(
                 row.get("line_status"),
@@ -165,6 +171,7 @@ def build_purchase_inspection_report(db):
             float(row.get("quantidade_pedida") or 0)
             * float(row.get("valor_unitario_pedido") or 0),
             float(row.get("quantidade_pedida") or 0),
+            float(pending),
             row.get("sku_codigo") or "",
             row.get("descricao_original") or "",
             row.get("destino") or "",
@@ -184,13 +191,14 @@ def build_purchase_inspection_report(db):
         len(purchases),
         "CONTROLE DE COMPRAS — GERAL E BANCOS",
     )
-    for column in ("C", "M", "N"):
+    for column in ("C", "N", "O"):
         for cell in purchase_sheet[column][3:]:
             cell.number_format = "dd/mm/yyyy"
     for cell in purchase_sheet["F"][3:]:
         cell.number_format = 'R$ #,##0.00'
-    for cell in purchase_sheet["G"][3:]:
-        cell.number_format = "#,##0.000"
+    for column in ("G", "H"):
+        for cell in purchase_sheet[column][3:]:
+            cell.number_format = "#,##0.000"
 
     inspection_sheet = workbook.create_sheet("INSPEÇÃO DE RECEBIMENTO")
     for column, header in enumerate(INSPECTION_HEADERS, start=1):
