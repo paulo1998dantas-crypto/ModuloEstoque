@@ -17,7 +17,7 @@ PURCHASE_HEADERS = [
 ]
 INSPECTION_HEADERS = [
     "Data entregue", "Fornecedor", "N° PC / Invoice / proforma",
-    "Descrição", "Quant. entregue", "N° NF", "Valor Total",
+    "Código", "Descrição", "Quant. entregue", "N° NF", "Valor Total",
     "Responsável", "A", "AC", "D", "Observações",
 ]
 
@@ -91,6 +91,7 @@ def _rows(db):
         dict(row._mapping) for row in db.execute(text("""
             select r.data_recebimento,r.fornecedor_nome,r.numero_nf,r.operador,
                    r.observacoes receipt_notes,o.numero_oc,
+                   coalesce(nullif(rl.sku_codigo,''),component.sku,l.sku_codigo,'') sku_codigo,
                    coalesce(component.descricao,l.descricao_original,rl.sku_codigo,'ITEM SEM DESCRIÇÃO') descricao,
                    rl.quantidade_fisica,rl.valor_unitario_real,
                    l.valor_unitario_pedido,rl.resultado_inspecao,
@@ -206,6 +207,7 @@ def build_purchase_inspection_report(db):
             _as_date(row.get("data_recebimento")),
             row.get("fornecedor_nome") or "",
             row.get("numero_oc") or "ENTRADA MANUAL",
+            row.get("sku_codigo") or "",
             row.get("descricao") or "",
             float(row.get("quantidade_fisica") or 0),
             row.get("numero_nf") or "",
@@ -237,22 +239,23 @@ def build_purchase_inspection_report(db):
     for column in ("A",):
         for cell in inspection_sheet[column][3:]:
             cell.number_format = "dd/mm/yyyy"
-    for cell in inspection_sheet["E"][3:]:
+    for cell in inspection_sheet["F"][3:]:
         cell.number_format = "#,##0.000"
-    for cell in inspection_sheet["G"][3:]:
+    for cell in inspection_sheet["H"][3:]:
         cell.number_format = 'R$ #,##0.00'
     inspection_sheet.column_dimensions["A"].width = 16
     inspection_sheet.column_dimensions["B"].width = 28
     inspection_sheet.column_dimensions["C"].width = 24
-    inspection_sheet.column_dimensions["D"].width = 42
-    inspection_sheet.column_dimensions["E"].width = 16
-    inspection_sheet.column_dimensions["F"].width = 18
-    inspection_sheet.column_dimensions["G"].width = 16
-    inspection_sheet.column_dimensions["H"].width = 20
-    inspection_sheet.column_dimensions["I"].width = 8
+    inspection_sheet.column_dimensions["D"].width = 16
+    inspection_sheet.column_dimensions["E"].width = 42
+    inspection_sheet.column_dimensions["F"].width = 16
+    inspection_sheet.column_dimensions["G"].width = 18
+    inspection_sheet.column_dimensions["H"].width = 16
+    inspection_sheet.column_dimensions["I"].width = 20
     inspection_sheet.column_dimensions["J"].width = 8
     inspection_sheet.column_dimensions["K"].width = 8
-    inspection_sheet.column_dimensions["L"].width = 48
+    inspection_sheet.column_dimensions["L"].width = 8
+    inspection_sheet.column_dimensions["M"].width = 48
 
     output = BytesIO()
     workbook.save(output)
