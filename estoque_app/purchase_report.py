@@ -36,23 +36,19 @@ def _days(start, end):
 
 
 def _purchase_status(
-    order_status,
+    line_status,
     ordered_quantity,
     received_quantity,
-    technical_status=None,
 ):
-    normalized_status = str(order_status or "").upper()
-    normalized_technical_status = str(technical_status or "").upper()
+    normalized_status = str(line_status or "").upper()
     if normalized_status == "CANCELADA":
         return "CANCELADA"
-    if (
-        normalized_technical_status == "CONCLUIDA"
-        or normalized_status in {"CONCLUIDA", "CONCLUIDO"}
-    ):
+    if normalized_status in {"CONCLUIDA", "CONCLUIDO"}:
         return "CONCLUÍDO"
     # Component-level inspections can make a commercial conjunto partially
     # received before its parent quantity is fully covered. The operational
-    # order status is therefore the authoritative state for the report.
+    # line status is therefore the authoritative state for the report. Closing
+    # the order administratively does not mean its individual items arrived.
     if normalized_status == "PARCIALMENTE_RECEBIDA":
         return "ENTREGUE PARCIAL"
     if normalized_status == "RECEBIDA":
@@ -69,14 +65,11 @@ def _purchase_status(
 def _rows(db):
     purchases = [
         dict(row._mapping) for row in db.execute(text("""
-            select o.numero_oc,o.categoria,o.status as order_status,
-                   o.technical_status,
+            select o.numero_oc,o.categoria,l.status as line_status,
                    o.fornecedor_nome,o.data_emissao,o.destino,o.frete,
                    o.data_necessidade,o.observacoes,
                    l.numero_linha,l.sku_codigo,l.descricao_original,l.cliente_id,
-                   l.quantidade_pedida,l.valor_unitario_pedido,
-                   sum(l.quantidade_pedida) over (partition by o.id) quantidade_pedido,
-                   sum(l.quantidade_recebida) over (partition by o.id) quantidade_recebida,
+                   l.quantidade_pedida,l.quantidade_recebida,l.valor_unitario_pedido,
                    coalesce(l.data_necessidade,o.data_necessidade) necessidade_linha,
                    delivered.data_entregue
               from erp_purchase_orders o
@@ -85,9 +78,7 @@ def _rows(db):
                   select max(r.data_recebimento) data_entregue
                     from erp_goods_receipt_lines rl
                     join erp_goods_receipts r on r.id=rl.goods_receipt_id
-                    join erp_purchase_order_lines receipt_line
-                      on receipt_line.id=rl.purchase_order_line_id
-                   where receipt_line.purchase_order_id=o.id
+                   where rl.purchase_order_line_id=l.id
                      and r.status='CONFIRMADO'
                      and coalesce(rl.quantidade_aprovada,0)
                        + coalesce(rl.quantidade_condicional,0) > 0
@@ -162,10 +153,9 @@ def build_purchase_inspection_report(db):
         need = _as_date(row.get("necessidade_linha"))
         values = [
             _purchase_status(
-                row.get("order_status"),
-                row.get("quantidade_pedido"),
+                row.get("line_status"),
+                row.get("quantidade_pedida"),
                 row.get("quantidade_recebida"),
-                row.get("technical_status"),
             ),
             row.get("categoria") or "GERAL",
             _as_date(row.get("data_emissao")),
