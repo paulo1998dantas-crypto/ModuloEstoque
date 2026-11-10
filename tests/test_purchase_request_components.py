@@ -29,7 +29,7 @@ class ComponentProjectionTests(unittest.TestCase):
     def setUp(self):
         self.catalog = {code:dict(sku=code,descricao=code,unidade=unit,grupo=group,active=True)
             for code,group,unit in [("CJ","30","CJ"),("PP","20","PC"),
-                                    ("MAT","10","M"),("KIT","30","CJ"),("OTHER","10","PC")]}
+                                    ("MAT","10","M"),("KIT","10","PC"),("OTHER","10","PC")]}
         self.row = dict(id="id-1",sku_codigo="CJ",descricao="Original",unidade="CJ",
             quantity="3",status="SOLICITADA",needed_at="2026-10-29",work_order_ids=["os-1","os-2"],
             anticipation_pending_quantity="5")
@@ -53,8 +53,10 @@ class ComponentProjectionTests(unittest.TestCase):
             self.assertEqual(original["work_order_ids"],item["work_order_ids"])
         self.assertEqual(original,self.row)
 
-    def test_no_bom_keeps_own_code_and_insumo_with_bom_does_not_explode(self):
-        for code in ("KIT","PP","MAT"):
+    def test_phantom_without_bom_blocks_export_and_insumo_keeps_own_code(self):
+        with self.assertRaisesRegex(ValueError, 'sem composição'):
+            explode_requests([dict(self.row, sku_codigo='PP')], self.catalog, [])
+        for code in ("KIT","MAT"):
             row=dict(self.row,sku_codigo=code)
             output=explode_requests([row],self.catalog,[dict(parent_sku="MAT",component_sku="OTHER",quantidade=2)])
             self.assertEqual(code,output[0]["sku_codigo"])
@@ -74,10 +76,10 @@ class ComponentProjectionTests(unittest.TestCase):
             with self.subTest(bom=bom),self.assertRaises(ValueError):
                 explode_requests([self.row],self.catalog,bom)
 
-    def test_inactive_component_is_visible_and_flagged_not_silently_dropped(self):
+    def test_inactive_component_blocks_export_instead_of_silently_dropping_it(self):
         self.catalog["MAT"]["active"]=False
-        output=explode_requests([self.row],self.catalog,self.bom)
-        self.assertEqual("INATIVO",output[0]["cadastro_componente"])
+        with self.assertRaisesRegex(ValueError, 'inativo'):
+            explode_requests([self.row],self.catalog,self.bom)
 
     def test_online_load_reads_only_reachable_without_writes(self):
         from services import cadastro_supabase_service as source
@@ -120,6 +122,17 @@ class ComponentExportIntegrationTests(unittest.TestCase):
     tearDown=fixtures.PurchaseRequestTests.tearDown
     request=fixtures.PurchaseRequestTests.request
     order=fixtures.PurchaseRequestTests.order
+
+    def test_missing_phantom_bom_blocks_download_without_changing_request(self):
+        kit = SKU(sku='30240037', descricao='ACESSORIO CJ PME', unidade='CJ', grupo='30', active=True)
+        self.db.add(kit)
+        self.db.commit()
+        row = self.request(sku_codigo=kit.sku, quantity='1')
+        before = pr.history(self.db, row['id'])
+        with patch('services.cadastro_supabase_service.enabled', return_value=False):
+            with self.assertRaisesRegex(ValueError, '30240037 sem composição'):
+                pr.export_data(self.db, {}, self.user)
+        self.assertEqual(before, pr.history(self.db, row['id']))
 
     def test_export_projects_bom_without_changing_requests_or_audit(self):
         kit=SKU(sku="30000001",descricao="Kit",unidade="CJ",grupo="30 - CONJUNTO",active=True)

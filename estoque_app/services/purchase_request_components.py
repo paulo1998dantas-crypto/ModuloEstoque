@@ -1,24 +1,14 @@
 """Read-only, recursive component projection for the pending requests export."""
-from collections import defaultdict
-from decimal import Decimal, InvalidOperation
-from external_materials import is_external_material, is_supplied_bank
+import os
+from material_export_bom import MaterialBom, assembly, number
 
 
 def is_assembly(item, code):
-    if is_supplied_bank(item):
-        return False
-    group = str((item or {}).get("grupo") or "").split("-", 1)[0].strip()
-    return (group or (code[:2] if len(code) == 8 and code.isdigit() else "")) in {"20", "30"}
+    return assembly(item, code)
 
 
 def positive(value, label):
-    try:
-        number = Decimal(str(value))
-        if not number.is_finite() or number <= 0:
-            raise InvalidOperation()
-        return number
-    except (InvalidOperation, ValueError, TypeError):
-        raise ValueError(f"Quantidade inválida na composição: {label}.")
+    return number(value, label, positive=True)
 
 
 def load_graph(db, roots):
@@ -28,6 +18,8 @@ def load_graph(db, roots):
     catalog, bom = {}, []
     pending, seen = set(roots), set()
     online = cadastro.enabled()
+    if not online and (os.environ.get('RENDER') or db is None or db.get_bind().dialect.name != 'sqlite'):
+        raise ValueError('Cadastro online indisponível; exportação de solicitações interrompida.')
     try:
         while pending:
             codes = sorted(pending - seen)
@@ -75,40 +67,12 @@ def load_graph(db, roots):
 
 def explode_requests(items, catalog, bom):
     """One row per request/leaf; never merge different requests or duplicate parents."""
-    children = defaultdict(list)
-    for edge in bom:
-        children[str(edge["parent_sku"])].append(edge)
-    memo = {}
-
-    def leaves(code, ancestors=()):
-        if code in ancestors:
-            raise ValueError("B.O.M. cíclica: "+" > ".join((*ancestors,code)))
-        if len(ancestors) >= 64:
-            raise ValueError(f"B.O.M. excede 64 níveis para {code}.")
-        if code in memo:
-            return memo[code]
-        item = catalog.get(code)
-        if item is None:
-            raise ValueError(f"SKU {code} não encontrado no Cadastro; composição não pode ser confirmada.")
-        edges = [edge for edge in children.get(code, [])
-                 if not is_external_material(edge.get('component_sku'))] if is_assembly(item, code) else []
-        if not edges:
-            result = {code:Decimal(1)}
-        else:
-            result = {}
-            for edge in edges:
-                child = str(edge.get("component_sku") or "").strip()
-                factor = positive(edge.get("quantidade"), code+" / "+child)
-                for leaf, amount in leaves(child, (*ancestors,code)).items():
-                    result[leaf] = result.get(leaf, Decimal(0)) + factor*amount
-        memo[code] = result
-        return result
+    projection = MaterialBom(catalog, bom)
 
     output = []
     for original in items:
-        code = str(original["sku_codigo"])
-        # Plain historical SKUs without a registration still remain traceable.
-        factors = leaves(code) if code in catalog or is_assembly(None,code) else {code:Decimal(1)}
+        code = str(original["sku_codigo"]).strip()
+        factors = projection.factors(code)
         quantity = positive(original["quantity"], code)
         exploded = code not in factors
         for leaf, factor in factors.items():
@@ -118,14 +82,14 @@ def explode_requests(items, catalog, bom):
                 unidade_solicitada=original.get("unidade"),
                 quantidade_solicitada=quantity, fator_bom=factor,
                 composicao_exportacao="COMPONENTE B.O.M." if exploded else
-                    "CJ/PP SEM B.O.M." if is_assembly(item,code) else "ITEM DIRETO",
+                    "ITEM DIRETO",
                 cadastro_componente="INATIVO" if item.get("active") is False else
                     "ATIVO" if item else "SEM CADASTRO")
             if exploded:
                 row.update(sku_codigo=leaf, descricao=item.get("descricao") or leaf,
                            unidade=item.get("unidade") or "UN", quantity=quantity*factor)
                 if row.get("anticipation_pending_quantity") is not None:
-                    row["anticipation_pending_quantity"] = Decimal(str(row["anticipation_pending_quantity"]))*factor
+                    row["anticipation_pending_quantity"] = number(row["anticipation_pending_quantity"], code + ' / antecipação')*factor
             output.append(row)
     return output
 

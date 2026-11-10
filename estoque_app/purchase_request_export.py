@@ -121,7 +121,7 @@ def build_workbook(data, filters=None, exported_by="", generated_at=None):
     selected = "; ".join(f"{label}: {filters[key]}" for key, label in filter_names.items() if filters.get(key)) or "Todos"
     pending_items = [row for row in data.get("component_items", data["items"]) if row["status"] in {"SOLICITADA", "EM_COMPRAS"}]
     count = len({row["id"] for row in pending_items})
-    metadata = f"Gerado em Brasília: {stamp}. Usuário: {exported_by}. Filtros: {selected}. Pendências: {count}. Linhas de materiais: {len(pending_items)}. CJ/PP com B.O.M. explodidos; quantidades proporcionais."
+    metadata = f"Gerado em Brasília: {stamp}. Usuário: {exported_by}. Filtros: {selected}. Pendências: {count}. Linhas de materiais: {len(pending_items)}. CJ/PP explodidos em peças; bancos fornecidos mantidos como unidades; quantidades proporcionais."
     wb = Workbook()
     wb.remove(wb.active)
     sheet = _sheet(wb, "Solicitações", "Solicitações de compra pendentes",
