@@ -45,12 +45,10 @@ class MaterialBom:
             raise ValueError(f'Componente {code} inativo no Cadastro; revise a B.O.M. antes de exportar.')
         if code in self.memo:
             return self.memo[code]
-        if not assembly(item, code):
+        edges = self.children.get(code) or []
+        if not assembly(item, code) or not edges:
             result = {code: Decimal(1)}
         else:
-            edges = self.children.get(code) or []
-            if not edges:
-                raise ValueError(f'CJ/PP {code} sem composição cadastrada; exportação interrompida.')
             result = {}
             for edge in edges:
                 child = str(edge.get('component_sku') or '').strip()

@@ -21,7 +21,11 @@ recebida e pendente são multiplicadas pelo fator acumulado da composição.
 Peças repetidas se somam somente dentro da mesma linha de origem. Não se
 fundem pedidos/remessas; o número de linha continua referenciando a O.C.
 
-Falha de consulta, SKU ausente, descrição/unidade ausente, CJ/PP sem BOM,
+Um item cadastrado sem composição mantém seu próprio SKU e quantidade
+(fator 1), mesmo se for CJ/PP. Nas solicitações, aparece como CJ/PP SEM B.O.M.
+Não se inventa uma composição nem se bloqueia o download por ausência de BOM.
+
+Falha de consulta, SKU ausente, descrição/unidade ausente,
 ciclo, quantidade inválida, componente inativo ou pendência inconsistente
 interrompem o download com erro explícito. Um item direto histórico inativo
 pode continuar na fila; não se inventa composição nem se omite a linha.

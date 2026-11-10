@@ -82,7 +82,7 @@ def explode_requests(items, catalog, bom):
                 unidade_solicitada=original.get("unidade"),
                 quantidade_solicitada=quantity, fator_bom=factor,
                 composicao_exportacao="COMPONENTE B.O.M." if exploded else
-                    "ITEM DIRETO",
+                    "CJ/PP SEM B.O.M." if is_assembly(item,code) else "ITEM DIRETO",
                 cadastro_componente="INATIVO" if item.get("active") is False else
                     "ATIVO" if item else "SEM CADASTRO")
             if exploded:

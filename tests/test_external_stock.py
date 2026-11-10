@@ -58,6 +58,38 @@ class ExternalStockTest(unittest.TestCase):
         self.assertEqual({'10220272':Decimal(6)}, {k:Decimal(v) for k,v in json.loads(snapshot).items()})
         self.assertEqual(2,self.db.execute(text('select count(*) from erp_external_stock_movements')).scalar_one())
 
+    def test_bank_in_assembly_group_has_direct_inspection_and_only_bank_stock_entry(self):
+        from services.erp_service import pending_receipt_orders
+        self.bank.grupo = '30 - CONJUNTO / KIT'
+        frame = SKU(sku='10220324', descricao='Estrutura externa', unidade='pc', active=True)
+        self.db.add(frame)
+        self.db.flush()
+        self.db.add(BomComponent(item_sku_id=self.bank.id, component_sku_id=frame.id, quantidade=1))
+        fabrics = [self.add_fabric(code, amount) for code, amount in
+                   [('10220269', '1.2'), ('10220270', '0.6'), ('10280062', '1.8')]]
+        self.db.commit()
+        order = create_purchase_order(self.db, self._payload(str(uuid4()), self.bank.sku, 3), 'PCP')
+        pending = next(r for r in pending_receipt_orders(self.db) if r['id'] == order['id'])
+        self.assertEqual('DIRECT', pending['receipt_mode'])
+        self.assertEqual([], pending['bom_components'])
+        self.assertEqual('', pending['bom_error'])
+        receipt, _, _ = self.receive(quantity=3, order=order)
+        lines = list(self.db.execute(text('select sku_codigo,quantidade_aprovada from erp_goods_receipt_lines where goods_receipt_id=:id'), {'id': receipt['id']}).mappings())
+        self.assertEqual([(self.bank.sku, 3)], [(r['sku_codigo'], r['quantidade_aprovada']) for r in lines])
+        self.assertEqual({self.bank.id}, {m.sku_id for m in self.db.query(Movement).all()})
+        self.assertEqual(Decimal(3), self.db.query(StockBalance).filter_by(sku_id=self.bank.id).one().saldo_atual)
+        self.assertEqual(Decimal(-6), external.balance(self.db, self.foam.sku))
+        for fabric, amount in zip(fabrics, ('-3.6', '-1.8', '-5.4')):
+            self.assertEqual(Decimal(amount), external.balance(self.db, fabric.sku))
+
+    def test_manual_bank_entry_does_not_offer_backflush_or_create_component_stock(self):
+        from services.estoque_service import build_backflush_preview, register_movement
+        self.bank.grupo = '30 - CONJUNTO / KIT'
+        self.db.commit()
+        self.assertEqual([], build_backflush_preview(self.db, self.bank, 2))
+        register_movement(self.db, self.bank, 'ENTRADA', 2, self.user_id)
+        self.assertEqual({self.bank.id}, {m.sku_id for m in self.db.query(Movement).all()})
+
     def test_repeated_receipt_does_not_consume_twice(self):
         first, data, _ = self.receive()
         again = confirm_receipt(self.db,data,self.user.username,self.user_id)

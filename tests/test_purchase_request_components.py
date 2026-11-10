@@ -53,9 +53,10 @@ class ComponentProjectionTests(unittest.TestCase):
             self.assertEqual(original["work_order_ids"],item["work_order_ids"])
         self.assertEqual(original,self.row)
 
-    def test_phantom_without_bom_blocks_export_and_insumo_keeps_own_code(self):
-        with self.assertRaisesRegex(ValueError, 'sem composição'):
-            explode_requests([dict(self.row, sku_codigo='PP')], self.catalog, [])
+    def test_item_without_bom_and_insumo_keep_own_code(self):
+        pp = explode_requests([dict(self.row, sku_codigo='PP')], self.catalog, [])[0]
+        self.assertEqual(('PP', '3', 'CJ/PP SEM B.O.M.'),
+                         (pp['sku_codigo'], pp['quantity'], pp['composicao_exportacao']))
         for code in ("KIT","MAT"):
             row=dict(self.row,sku_codigo=code)
             output=explode_requests([row],self.catalog,[dict(parent_sku="MAT",component_sku="OTHER",quantidade=2)])
@@ -123,15 +124,16 @@ class ComponentExportIntegrationTests(unittest.TestCase):
     request=fixtures.PurchaseRequestTests.request
     order=fixtures.PurchaseRequestTests.order
 
-    def test_missing_phantom_bom_blocks_download_without_changing_request(self):
+    def test_no_bom_exports_original_item_without_changing_request(self):
         kit = SKU(sku='30009999', descricao='CJ sem composição', unidade='CJ', grupo='30', active=True)
         self.db.add(kit)
         self.db.commit()
         row = self.request(sku_codigo=kit.sku, quantity='1')
         before = pr.history(self.db, row['id'])
         with patch('services.cadastro_supabase_service.enabled', return_value=False):
-            with self.assertRaisesRegex(ValueError, '30009999 sem composição'):
-                pr.export_data(self.db, {}, self.user)
+            data = pr.export_data(self.db, {}, self.user)
+        self.assertEqual('30009999', data['component_items'][0]['sku_codigo'])
+        self.assertEqual(Decimal('1'), Decimal(data['component_items'][0]['quantity']))
         self.assertEqual(before, pr.history(self.db, row['id']))
 
     def test_export_projects_bom_without_changing_requests_or_audit(self):

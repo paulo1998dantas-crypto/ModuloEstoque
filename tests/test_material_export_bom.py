@@ -44,16 +44,16 @@ class MaterialExportBomTests(unittest.TestCase):
                 with self.subTest(code=code, edges=edges):
                     self.assertEqual({code: Decimal(1)}, MaterialBom(self.catalog, edges).factors(code))
         self.catalog['30260013'] = dict(descricao='CJ LUZ CORTESIA PME', unidade='cj', grupo='30')
-        with self.assertRaisesRegex(ValueError, 'sem composição'):
-            MaterialBom(self.catalog, []).factors('30260013')
+        self.assertEqual({'MAT': Decimal(2)}, MaterialBom(self.catalog, [
+            dict(parent_sku='30260013', component_sku='MAT', quantidade=2),
+        ]).factors('30260013'))
 
     def test_insumo_bom_does_not_turn_supplied_item_into_phantom(self):
         self.edges.append(dict(parent_sku='MAT', component_sku='BANK', quantidade=4))
         self.assertEqual({'MAT': Decimal(1)}, MaterialBom(self.catalog, self.edges).factors('MAT'))
 
-    def test_missing_phantom_composition_is_an_actionable_error(self):
-        with self.assertRaisesRegex(ValueError, 'PP sem composição'):
-            MaterialBom(self.catalog, []).factors('PP')
+    def test_item_without_composition_keeps_own_sku_and_unit_factor(self):
+        self.assertEqual({'PP': Decimal(1)}, MaterialBom(self.catalog, []).factors('PP'))
 
     def test_missing_registration_description_and_unit_are_errors(self):
         for item in (None, dict(descricao='', unidade='pc'), dict(descricao='Peça', unidade='')):
