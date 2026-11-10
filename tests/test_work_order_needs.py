@@ -89,6 +89,44 @@ class WorkOrderNeedsTest(unittest.TestCase):
     def _by_code(self, result):
         return {row["codigo"]: row for row in result["lines"]}
 
+    def _seat_composition(self):
+        bank = SKU(sku='10200041', descricao='BCO MC RECLINAVEL', unidade='PC', grupo='20 - BANCOS', active=True)
+        frame = SKU(sku='10220324', descricao='Estrutura externa', unidade='PC', active=True)
+        self.db.add_all([bank, frame])
+        self.db.flush()
+        self.db.add_all([
+            BomComponent(item_sku_id=self.parent.id, component_sku_id=bank.id, quantidade=2),
+            BomComponent(item_sku_id=bank.id, component_sku_id=frame.id, quantidade=1),
+        ])
+        composition = [
+            {'codigo': self.parent.sku, 'qtd': 1},
+            {'codigo': bank.sku, 'qtd': 2, 'item': self.parent.sku},
+            {'codigo': frame.sku, 'qtd': 2, 'item': bank.sku},
+        ]
+        self.db.execute(text('update suprimentos_documentos set composicao=:value'), {'value': json.dumps(composition)})
+        self.db.commit()
+        return bank, frame, composition
+
+    def test_supplied_bank_remains_demand_and_direct_commitment_covers_it(self):
+        bank, frame, _ = self._seat_composition()
+        register_movement(self.db, bank, 'ENTRADA', 2, self.user.id)
+        register_movement(self.db, bank, 'EMPENHO', 1, self.user.id, work_order_id=self.work_order_id)
+        rows = self._by_code(calculate_work_order_needs(self.db, self.work_order_id))
+        self.assertEqual(Decimal('2'), rows[bank.sku]['quantidade_necessaria'])
+        self.assertEqual(Decimal('1'), rows[bank.sku]['quantidade_pendente'])
+        self.assertNotIn(frame.sku, rows)
+        self.assertEqual(Decimal('6'), rows[self.leaf.sku]['quantidade_necessaria'])
+
+    def test_bank_kit_commitment_covers_banks_and_independent_material_survives(self):
+        bank, frame, composition = self._seat_composition()
+        composition.append({'codigo': frame.sku, 'qtd': 3, 'item': 'INDEPENDENT'})
+        self.db.execute(text('update suprimentos_documentos set composicao=:value'), {'value': json.dumps(composition)})
+        self.db.commit()
+        register_movement(self.db, self.parent, 'EMPENHO', 1, self.user.id, work_order_id=self.work_order_id)
+        rows = self._by_code(calculate_work_order_needs(self.db, self.work_order_id))
+        self.assertEqual(Decimal('0'), rows[bank.sku]['quantidade_pendente'])
+        self.assertEqual(Decimal('3'), rows[frame.sku]['quantidade_pendente'])
+
     def test_parent_commitment_covers_parent_and_recursive_bom(self):
         register_movement(
             self.db,

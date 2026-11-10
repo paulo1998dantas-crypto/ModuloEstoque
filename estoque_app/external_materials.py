@@ -12,3 +12,12 @@ EXTERNAL_MATERIAL_SKUS = EXTERNAL_FOAM_SKUS | EXTERNAL_FABRIC_SKUS
 
 def is_external_material(code):
     return str(code or '').strip().upper() in EXTERNAL_MATERIAL_SKUS
+
+
+def is_supplied_bank(item):
+    """A supplied seat is stocked as a unit; CJ seat kits still expand."""
+    if isinstance(item, dict):
+        description = item.get('descricao') or item.get('descricao_primaria') or ''
+    else:
+        description = getattr(item, 'descricao', '')
+    return str(description or '').strip().upper().startswith(('BCO ', 'BANCO '))

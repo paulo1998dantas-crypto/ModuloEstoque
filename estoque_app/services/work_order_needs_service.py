@@ -6,7 +6,7 @@ from decimal import Decimal, InvalidOperation
 from sqlalchemy import func, inspect, text
 
 from models import BomComponent, Movement, SKU
-from external_materials import is_external_material
+from external_materials import is_external_material, is_supplied_bank
 
 
 TERMINAL_WORK_ORDER_STATUSES = {
@@ -170,7 +170,7 @@ def _work_order_documents(db, work_order_id=None):
     return list(selected.values())
 
 
-def _bom_catalog(db):
+def _bom_catalog(db, include_bank_bom=False):
     skus = db.query(SKU).all()
     sku_by_id = {sku.id: sku for sku in skus}
     sku_by_code = {_normalize_code(sku.sku): sku for sku in skus}
@@ -180,12 +180,32 @@ def _bom_catalog(db):
         child = sku_by_id.get(component.component_sku_id)
         if not parent or not child:
             continue
+        if is_supplied_bank(parent) and not include_bank_bom:
+            continue
         if is_external_material(child.sku):
             continue
         children[_normalize_code(parent.sku)].append(
             (_normalize_code(child.sku), _decimal(component.quantidade))
         )
     return sku_by_code, children
+
+
+def _bank_material_composition(lines, children, bank_codes):
+    """Remove rendered seat internals while preserving independent materials."""
+    lines = [row for row in lines if isinstance(row, dict)]
+    sources = {_normalize_code(row.get('codigo')) for row in lines}
+    banks = sources & bank_codes
+    for source in sources - bank_codes:
+        banks.update(bank_codes & _explode_coverage(source, Decimal('1'), children).keys())
+    descendants = set()
+    for bank in banks:
+        descendants.update(_explode_coverage(bank, Decimal('1'), children).keys() - {bank})
+    return [row for row in lines if (
+        _normalize_code(row.get('codigo')) in bank_codes
+        or _normalize_code(row.get('codigo')) not in descendants
+        or (_normalize_code(row.get('item'))
+            and _normalize_code(row.get('item')) not in banks | descendants)
+    )]
 
 
 def _explode_coverage(code, quantity, children):
@@ -438,7 +458,9 @@ def calculate_work_order_needs(db, work_order_id=None, pending_only=False):
             "summary": {"work_orders": 0, "need_items": 0, "covered_items": 0, "pending_items": 0},
         }
 
-    sku_by_code, children = _bom_catalog(db)
+    sku_by_code, technical_children = _bom_catalog(db, include_bank_bom=True)
+    bank_codes = {code for code, sku in sku_by_code.items() if is_supplied_bank(sku)}
+    children = {code: parts for code, parts in technical_children.items() if code not in bank_codes}
     equivalent_by_sku, ambiguous_equivalent_skus = _equivalence_by_sku(db)
     work_order_ids = {_uuid_key(row["work_order_id"]) for row in documents}
     movements = (
@@ -472,7 +494,9 @@ def calculate_work_order_needs(db, work_order_id=None, pending_only=False):
     all_lines = []
     for document in documents:
         required, metadata = _normalize_phantom_requirements(
-            _json_list(document.get("composicao")),
+            _bank_material_composition(
+                _json_list(document.get("composicao")), technical_children, bank_codes,
+            ),
             children,
         )
 

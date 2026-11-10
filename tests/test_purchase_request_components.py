@@ -10,6 +10,22 @@ from openpyxl import load_workbook
 
 
 class ComponentProjectionTests(unittest.TestCase):
+    def test_seat_kit_stops_at_supplied_banks_in_export_and_po_coverage(self):
+        from types import SimpleNamespace
+        catalog = {
+            'KIT': dict(descricao='CJ BANCOS', grupo='30', unidade='CJ'),
+            'BANK': dict(descricao='BCO MC RECLINAVEL', grupo='30', unidade='PC'),
+            'FRAME': dict(descricao='Estrutura externa', grupo='10', unidade='PC'),
+        }
+        bom = [dict(parent_sku='KIT', component_sku='BANK', quantidade=2),
+               dict(parent_sku='BANK', component_sku='FRAME', quantidade=1)]
+        row = dict(sku_codigo='KIT', quantity='3')
+        result = explode_requests([row], catalog, bom)
+        self.assertEqual(['BANK'], [r['sku_codigo'] for r in result])
+        self.assertEqual(Decimal('6'), result[0]['quantity'])
+        bank = SimpleNamespace(id='bank-id', sku='BANK', descricao='BCO MC RECLINAVEL', grupo='30')
+        self.assertEqual({'BANK': Decimal('1')}, pr._bom_leaf_factors(None, bank, {}))
+
     def setUp(self):
         self.catalog = {code:dict(sku=code,descricao=code,unidade=unit,grupo=group,active=True)
             for code,group,unit in [("CJ","30","CJ"),("PP","20","PC"),
