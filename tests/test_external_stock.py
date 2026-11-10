@@ -126,7 +126,8 @@ class ExternalStockTest(unittest.TestCase):
 
     def test_purchase_projection_excludes_external_component_but_keeps_bank(self):
         rows=explode_requests([{'sku_codigo':self.kit.sku,'quantity':2}],
-            {self.kit.sku:{'grupo':'30'},self.bank.sku:{'grupo':'10'},self.foam.sku:{}},
+            {self.kit.sku:{'grupo':'30','descricao':self.kit.descricao,'unidade':self.kit.unidade},
+             self.bank.sku:{'grupo':'10','descricao':self.bank.descricao,'unidade':self.bank.unidade},self.foam.sku:{}},
             [{'parent_sku':self.kit.sku,'component_sku':self.bank.sku,'quantidade':3},
              {'parent_sku':self.bank.sku,'component_sku':self.foam.sku,'quantidade':2}])
         self.assertEqual([(self.bank.sku,Decimal(6))],[(r['sku_codigo'],r['quantity']) for r in rows])
@@ -219,7 +220,8 @@ class ExternalStockTest(unittest.TestCase):
         need,_=_normalize_phantom_requirements([{'codigo':self.kit.sku,'qtd':2}],children)
         self.assertEqual({self.bank.sku:Decimal(6)},dict(need))
         rows=explode_requests([{'sku_codigo':self.kit.sku,'quantity':2}],
-            {self.kit.sku:{'grupo':'30'},self.bank.sku:{'grupo':'10'}},
+            {self.kit.sku:{'grupo':'30','descricao':self.kit.descricao,'unidade':self.kit.unidade},
+             self.bank.sku:{'grupo':'10','descricao':self.bank.descricao,'unidade':self.bank.unidade}},
             [{'parent_sku':self.kit.sku,'component_sku':self.bank.sku,'quantidade':3}]+
             [{'parent_sku':self.bank.sku,'component_sku':f.sku,'quantidade':1} for f in fabrics])
         self.assertEqual([(self.bank.sku,Decimal(6))],[(r['sku_codigo'],r['quantity']) for r in rows])

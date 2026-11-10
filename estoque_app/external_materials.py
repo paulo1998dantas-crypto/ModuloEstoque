@@ -23,7 +23,8 @@ def is_supplied_bank(item):
         description = item.get('descricao') or item.get('descricao_primaria') or ''
     else:
         description = getattr(item, 'descricao', '')
-    return str(description or '').strip().upper().startswith(('BCO ', 'BANCO '))
+    words = str(description or '').strip().upper().split()
+    return bool(words) and words[0] in {'BCO', 'BANCO'}
 
 
 def is_supplied_unit(item, code=None):

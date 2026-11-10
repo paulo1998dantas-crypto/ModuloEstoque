@@ -32,7 +32,10 @@ class MaterialExportBomTests(unittest.TestCase):
         self.assertEqual(before, (self.catalog, self.edges))
 
     def test_direct_bank_is_atomic_even_with_external_only_bom(self):
-        self.assertEqual({'BANK': Decimal(1)}, MaterialBom(self.catalog, self.edges).factors('BANK'))
+        for description in ('BCO MC', 'BANCO', 'BCO', ' BCO\tMC ', 'Banco reclinável'):
+            self.catalog['BANK']['descricao'] = description
+            with self.subTest(description=description):
+                self.assertEqual({'BANK': Decimal(1)}, MaterialBom(self.catalog, self.edges).factors('BANK'))
 
     def test_complete_pme_units_stay_atomic_with_or_without_technical_bom(self):
         for code in ('30240037', '30240038', '30240039', '30240103'):
