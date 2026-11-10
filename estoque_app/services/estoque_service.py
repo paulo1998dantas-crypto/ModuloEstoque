@@ -1088,8 +1088,8 @@ def sku_group_code(sku):
 
 def is_bom_manufacturing_sku(sku):
     """Only manufactured PP (20) and kit/set (30) SKUs use BOM backflush."""
-    from external_materials import is_supplied_bank
-    return not is_supplied_bank(sku) and sku_group_code(sku) in {"20", "30"}
+    from external_materials import is_supplied_unit
+    return not is_supplied_unit(sku) and sku_group_code(sku) in {"20", "30"}
 
 
 def build_backflush_preview(db, sku, entry_qty):

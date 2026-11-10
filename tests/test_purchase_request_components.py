@@ -124,13 +124,13 @@ class ComponentExportIntegrationTests(unittest.TestCase):
     order=fixtures.PurchaseRequestTests.order
 
     def test_missing_phantom_bom_blocks_download_without_changing_request(self):
-        kit = SKU(sku='30240037', descricao='ACESSORIO CJ PME', unidade='CJ', grupo='30', active=True)
+        kit = SKU(sku='30009999', descricao='CJ sem composição', unidade='CJ', grupo='30', active=True)
         self.db.add(kit)
         self.db.commit()
         row = self.request(sku_codigo=kit.sku, quantity='1')
         before = pr.history(self.db, row['id'])
         with patch('services.cadastro_supabase_service.enabled', return_value=False):
-            with self.assertRaisesRegex(ValueError, '30240037 sem composição'):
+            with self.assertRaisesRegex(ValueError, '30009999 sem composição'):
                 pr.export_data(self.db, {}, self.user)
         self.assertEqual(before, pr.history(self.db, row['id']))
 

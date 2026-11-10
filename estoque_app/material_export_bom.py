@@ -2,11 +2,11 @@
 from collections import defaultdict
 from decimal import Decimal, InvalidOperation
 
-from external_materials import is_external_material, is_supplied_bank
+from external_materials import is_external_material, is_supplied_unit
 
 
 def assembly(item, code):
-    if is_supplied_bank(item):
+    if is_supplied_unit(item, code):
         return False
     group = str((item or {}).get('grupo') or '').split('-', 1)[0].strip()
     return (group or (code[:2] if len(code) == 8 and code.isdigit() else '')) in {'20', '30'}

@@ -6,7 +6,7 @@ from decimal import Decimal, InvalidOperation
 from sqlalchemy import func, inspect, text
 
 from models import BomComponent, Movement, SKU
-from external_materials import is_external_material, is_supplied_bank
+from external_materials import is_external_material, is_supplied_unit
 
 
 TERMINAL_WORK_ORDER_STATUSES = {
@@ -180,7 +180,7 @@ def _bom_catalog(db, include_bank_bom=False):
         child = sku_by_id.get(component.component_sku_id)
         if not parent or not child:
             continue
-        if is_supplied_bank(parent) and not include_bank_bom:
+        if is_supplied_unit(parent) and not include_bank_bom:
             continue
         if is_external_material(child.sku):
             continue
@@ -459,7 +459,7 @@ def calculate_work_order_needs(db, work_order_id=None, pending_only=False):
         }
 
     sku_by_code, technical_children = _bom_catalog(db, include_bank_bom=True)
-    bank_codes = {code for code, sku in sku_by_code.items() if is_supplied_bank(sku)}
+    bank_codes = {code for code, sku in sku_by_code.items() if is_supplied_unit(sku)}
     children = {code: parts for code, parts in technical_children.items() if code not in bank_codes}
     equivalent_by_sku, ambiguous_equivalent_skus = _equivalence_by_sku(db)
     work_order_ids = {_uuid_key(row["work_order_id"]) for row in documents}

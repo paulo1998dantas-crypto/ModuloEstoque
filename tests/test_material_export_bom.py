@@ -34,6 +34,16 @@ class MaterialExportBomTests(unittest.TestCase):
     def test_direct_bank_is_atomic_even_with_external_only_bom(self):
         self.assertEqual({'BANK': Decimal(1)}, MaterialBom(self.catalog, self.edges).factors('BANK'))
 
+    def test_complete_pme_units_stay_atomic_with_or_without_technical_bom(self):
+        for code in ('30240037', '30240038', '30240039', '30240103'):
+            self.catalog[code] = dict(descricao='CJ PME PORTA MALAS ELEVADO', unidade='cj', grupo='30')
+            for edges in ([], [dict(parent_sku=code, component_sku='MAT', quantidade=5)]):
+                with self.subTest(code=code, edges=edges):
+                    self.assertEqual({code: Decimal(1)}, MaterialBom(self.catalog, edges).factors(code))
+        self.catalog['30260013'] = dict(descricao='CJ LUZ CORTESIA PME', unidade='cj', grupo='30')
+        with self.assertRaisesRegex(ValueError, 'sem composição'):
+            MaterialBom(self.catalog, []).factors('30260013')
+
     def test_insumo_bom_does_not_turn_supplied_item_into_phantom(self):
         self.edges.append(dict(parent_sku='MAT', component_sku='BANK', quantidade=4))
         self.assertEqual({'MAT': Decimal(1)}, MaterialBom(self.catalog, self.edges).factors('MAT'))

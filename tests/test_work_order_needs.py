@@ -89,8 +89,8 @@ class WorkOrderNeedsTest(unittest.TestCase):
     def _by_code(self, result):
         return {row["codigo"]: row for row in result["lines"]}
 
-    def _seat_composition(self):
-        bank = SKU(sku='10200041', descricao='BCO MC RECLINAVEL', unidade='PC', grupo='20 - BANCOS', active=True)
+    def _seat_composition(self, code='10200041', description='BCO MC RECLINAVEL'):
+        bank = SKU(sku=code, descricao=description, unidade='PC', grupo='20 - BANCOS', active=True)
         frame = SKU(sku='10220324', descricao='Estrutura externa', unidade='PC', active=True)
         self.db.add_all([bank, frame])
         self.db.flush()
@@ -116,6 +116,14 @@ class WorkOrderNeedsTest(unittest.TestCase):
         self.assertEqual(Decimal('1'), rows[bank.sku]['quantidade_pendente'])
         self.assertNotIn(frame.sku, rows)
         self.assertEqual(Decimal('6'), rows[self.leaf.sku]['quantidade_necessaria'])
+
+    def test_complete_pme_is_kept_in_needs_and_covered_by_parent_commitment(self):
+        pme, frame, _ = self._seat_composition('30240038', 'ACESSORIO CJ PME PORTA MALAS ELEVADO 2 ANDARES')
+        register_movement(self.db, self.parent, 'EMPENHO', 1, self.user.id, work_order_id=self.work_order_id)
+        rows = self._by_code(calculate_work_order_needs(self.db, self.work_order_id))
+        self.assertEqual(Decimal('2'), rows[pme.sku]['quantidade_necessaria'])
+        self.assertEqual(Decimal('0'), rows[pme.sku]['quantidade_pendente'])
+        self.assertNotIn(frame.sku, rows)
 
     def test_bank_kit_commitment_covers_banks_and_independent_material_survives(self):
         bank, frame, composition = self._seat_composition()

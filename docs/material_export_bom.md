@@ -10,6 +10,11 @@ até materiais finais. Descrições iniciadas por BCO/BANCO identificam bancos
 fornecidos como unidade, inclusive se o grupo estiver 20/30. CJ BANCOS abre
 em bancos, sem abrir a fabricação externa dos bancos.
 
+Exceção operacional confirmada para porta-malas elevados PME completos:
+30240037 (1 andar), 30240038 (2 andares), 30240039 (3 andares) e 30240103
+(variante 2 andares). Mantêm o SKU de conjunto, inclusive quando há BOM
+técnica. A exceção não se aplica a luzes, bancos CJ ou peças com PME no nome.
+
 O trânsito mantém uma aba e as 14 colunas originais. Cada peça herda O.C.,
 linha, fornecedor da O.C., remessa, destino e status. Quantidades pedida,
 recebida e pendente são multiplicadas pelo fator acumulado da composição.
